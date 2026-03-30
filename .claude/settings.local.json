@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.php$\")",
+      "Bash(find c:projectwwwyamecent-adminappHttp -name Requests -o -name Request*)",
+      "Bash(grep -ao \"jQuery UI\\\\|jQuery Easing\\\\|moment\\\\.js\\\\|bootstrap\\\\|popper\\\\|select2\\\\|Chart\\\\.js\\\\|perfect-scrollbar\" /c/project/www/yamecent-admin/public/assets/vendors/js/*.js)",
+      "Bash(find c:projectwwwyamecent-admindatabasemigrations -type f -name *.php)",
+      "Bash(composer require:*)",
+      "Bash(docker exec:*)",
+      "Bash(ls c:/project/www/yamecent-admin/storage/framework/schedule-*)"
+    ]
+  }
+}
