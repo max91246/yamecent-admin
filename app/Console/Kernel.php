@@ -32,7 +32,7 @@ class Kernel extends ConsoleKernel
 
         // 每 5 分鐘獲取布蘭特原油最新價格並推送 Telegram
         $schedule->command('fetch:oil-price')
-                 ->everyFiveMinutes()
+                 ->cron('*/5 * * * *')
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/oil-price.log'));
     }
