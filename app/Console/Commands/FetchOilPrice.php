@@ -556,8 +556,8 @@ class FetchOilPrice extends Command
     // ────────────────────────────────────────────────────────────
     private function pushTelegram(string $text): void
     {
-        $token  = env('TG_BOT_TOKEN');
-        $chatId = env('TG_CHAT_ID');
+        $token  = config('services.telegram.bot_token');
+        $chatId = config('services.telegram.chat_id');
 
         if (!$token || !$chatId) {
             $this->warn('TG_BOT_TOKEN 或 TG_CHAT_ID 未設定，跳過推送。');

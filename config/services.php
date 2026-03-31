@@ -35,4 +35,9 @@ return [
         'secret' => env('STRIPE_SECRET'),
     ],
 
+    'telegram' => [
+        'bot_token' => env('TG_BOT_TOKEN'),
+        'chat_id'   => env('TG_CHAT_ID'),
+    ],
+
 ];
