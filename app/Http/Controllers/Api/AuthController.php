@@ -31,8 +31,8 @@ class AuthController extends Controller
             return response()->json(['code' => 403, 'msg' => '帳號已停用'], 403);
         }
 
-        $ttl    = (int) env('JWT_TTL', 604800);
-        $secret = env('JWT_SECRET');
+        $ttl    = (int) config('services.jwt.ttl', 604800);
+        $secret = config('services.jwt.secret');
         $jti    = uniqid('jwt_', true);
         $now    = time();
 

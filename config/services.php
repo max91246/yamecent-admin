@@ -40,4 +40,9 @@ return [
         'chat_id'   => env('TG_CHAT_ID'),
     ],
 
+    'jwt' => [
+        'secret' => env('JWT_SECRET'),
+        'ttl'    => env('JWT_TTL', 604800),
+    ],
+
 ];

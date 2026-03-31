@@ -22,7 +22,7 @@ class ApiAuth
         $token = substr($authorization, 7);
 
         try {
-            $decoded = JWT::decode($token, new Key(env('JWT_SECRET'), 'HS256'));
+            $decoded = JWT::decode($token, new Key(config('services.jwt.secret'), 'HS256'));
         } catch (ExpiredException $e) {
             return response()->json(['code' => 401, 'msg' => 'Token 已過期'], 401);
         } catch (\Exception $e) {
