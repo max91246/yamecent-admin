@@ -8,6 +8,11 @@ class MemberSubmenuSeeder extends Seeder
 {
     public function run()
     {
+        if (AdminMenu::where('name', '會員列表')->exists()) {
+            echo "MemberSubmenuSeeder 已執行過，跳過。" . PHP_EOL;
+            return;
+        }
+
         // 1. 找到現有「會員管理」父選單，改為下拉（url='#'）
         $parent = AdminMenu::where('name', '會員管理')->firstOrFail();
         $parent->url = '#';

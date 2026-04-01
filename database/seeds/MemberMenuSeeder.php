@@ -8,6 +8,11 @@ class MemberMenuSeeder extends Seeder
 {
     public function run()
     {
+        if (AdminMenu::where('name', '會員管理')->exists()) {
+            echo "MemberMenuSeeder 已執行過，跳過。" . PHP_EOL;
+            return;
+        }
+
         $menu = new AdminMenu();
         $menu->fill([
             'pid'  => 0,

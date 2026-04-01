@@ -17,7 +17,11 @@ class RbacSeeder extends Seeder
      */
     public function run()
     {
-        //
+        if (AdminUser::where('account', 'admin')->exists()) {
+            echo "RbacSeeder 已執行過，跳過。" . PHP_EOL;
+            return;
+        }
+
         $adminUser = new AdminUser();
         $adminUser->fill([
             'avatar'   => '/uploads/avatar/20181031/5bd90252493d1.jpg',

@@ -90,6 +90,10 @@
                                                 修改
                                                 <i class="mdi mdi-file-check btn-icon-append"></i>
                                             </button>
+                                            <button type="button" class="btn btn-sm btn-gradient-info btn-icon-text" onclick="setWebhook({{ $item->id }})">
+                                                <i class="mdi mdi-link btn-icon-prepend"></i>
+                                                設定 Webhook
+                                            </button>
                                             <button type="button" class="btn btn-sm btn-gradient-danger btn-icon-text" onclick="del({{ $item->id }})">
                                                 <i class="mdi mdi-delete btn-icon-prepend"></i>
                                                 刪除
@@ -118,6 +122,20 @@
                 shade: 0.8,
                 area: ['60%', '80%'],
                 content: '/admin/tg-bot/update/' + id
+            });
+        }
+
+        function setWebhook(id) {
+            layer.msg('設定中...', {icon: 16, shade: 0.3, time: 0});
+            myRequest('/admin/tg-bot/set-webhook/' + id, 'post', {}, function (res) {
+                layer.closeAll();
+                if (res.success) {
+                    layer.msg(res.msg, {icon: 1, time: 3000}, function () {
+                        window.location.reload();
+                    });
+                } else {
+                    layer.msg('設定失敗：' + res.msg, {icon: 2, time: 5000});
+                }
             });
         }
 

@@ -9,6 +9,11 @@ class ArticleMenuSeeder extends Seeder
 {
     public function run()
     {
+        if (AdminMenu::where('name', '文章管理')->exists()) {
+            echo "ArticleMenuSeeder 已執行過，跳過。" . PHP_EOL;
+            return;
+        }
+
         // 新增文章管理選單
         $menu = new AdminMenu();
         $menu->fill([

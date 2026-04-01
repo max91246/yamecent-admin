@@ -113,6 +113,39 @@ class TgBotController extends Controller
         return $this->json(200, '刪除成功');
     }
 
+    public function tgBotSetWebhook($id)
+    {
+        $bot = TgBot::findOrFail($id);
+        $webhookUrl = rtrim(config('app.url'), '/') . '/api/tg/webhook/' . $bot->id;
+
+        try {
+            $response = Http::timeout(10)->post(
+                "https://api.telegram.org/bot{$bot->token}/setWebhook",
+                ['url' => $webhookUrl]
+            );
+
+            $body = $response->json();
+
+            if ($response->successful() && ($body['ok'] ?? false) === true) {
+                $bot->update(['webhook_set_at' => now()]);
+                return response()->json([
+                    'success' => true,
+                    'msg'     => 'Webhook 設定成功：' . $webhookUrl,
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'msg'     => 'TG 回應失敗：' . ($body['description'] ?? json_encode($body)),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'msg'     => '請求異常：' . $e->getMessage(),
+            ]);
+        }
+    }
+
     private function setWebhook(TgBot $bot): bool
     {
         $webhookUrl = rtrim(config('app.url'), '/') . '/api/tg/webhook/' . $bot->id;

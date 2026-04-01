@@ -12,7 +12,11 @@ class AdminConfigsTableSeeder extends Seeder
      */
     public function run()
     {
-        //
+        if (AdminConfig::where('config_key', 'admin_logo')->exists()) {
+            echo "AdminConfigsTableSeeder 已執行過，跳過。" . PHP_EOL;
+            return;
+        }
+
         $adminConfig = new AdminConfig();
         $adminConfig->fill([
             'name'         => '后台管理LOGO',

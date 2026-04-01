@@ -99,6 +99,7 @@ Route::group([
         $route->get('tg-bot/update/{id}',    'Admin\TgBotController@tgBotUpdate');
         $route->post('tg-bot/update/{id}',   'Admin\TgBotController@tgBotUpdatePost');
         $route->post('tg-bot/del/{id}',      'Admin\TgBotController@tgBotDel');
+        $route->post('tg-bot/set-webhook/{id}', 'Admin\TgBotController@tgBotSetWebhook');
 
         // TG 訊息記錄
         $route->get('tg-message/list',       'Admin\TgMessageController@tgMessageList');
