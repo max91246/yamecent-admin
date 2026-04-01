@@ -91,6 +91,17 @@ Route::group([
         $route->post('comment/del/{id}',      'Admin\CommentController@commentDel');
         $route->post('comment/toggle/{id}',   'Admin\CommentController@commentToggle');
         $route->post('comment/reply/{id}',    'Admin\CommentController@commentReply');
+
+        // TG 機器人管理
+        $route->get('tg-bot/list',           'Admin\TgBotController@tgBotList');
+        $route->get('tg-bot/add',            'Admin\TgBotController@tgBotAdd');
+        $route->post('tg-bot/add',           'Admin\TgBotController@tgBotAddPost');
+        $route->get('tg-bot/update/{id}',    'Admin\TgBotController@tgBotUpdate');
+        $route->post('tg-bot/update/{id}',   'Admin\TgBotController@tgBotUpdatePost');
+        $route->post('tg-bot/del/{id}',      'Admin\TgBotController@tgBotDel');
+
+        // TG 訊息記錄
+        $route->get('tg-message/list',       'Admin\TgMessageController@tgMessageList');
     });
 
 });

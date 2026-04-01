@@ -14,6 +14,11 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RbacSeeder::class,
             AdminConfigsTableSeeder::class,
+            ArticleMenuSeeder::class,
+            MemberMenuSeeder::class,
+            MemberSubmenuSeeder::class,
+            CommentMenuSeeder::class,
+            TgBotMenuSeeder::class,
         ]);
     }
 }

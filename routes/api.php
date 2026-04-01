@@ -2,6 +2,9 @@
 
 $router->post('/set_callback_url', 'Admin\VideoController@setCallbackUrl');
 
+// TG Webhook（TG 伺服器呼叫，無 JWT）
+$router->post('/tg/webhook/{botId}', 'Api\TgWebhookController@handle');
+
 // 公開路由（不需要 Token）
 $router->post('/auth/login',       'Api\AuthController@login');
 $router->post('/members/register', 'Api\MemberController@register');

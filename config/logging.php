@@ -76,6 +76,13 @@ return [
             'driver' => 'errorlog',
             'level' => 'debug',
         ],
+
+        'tg_webhook' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/tg-webhook.log'),
+            'level'  => 'debug',
+            'days'   => 14,
+        ],
     ],
 
 ];
