@@ -21,11 +21,13 @@ class FetchOilPrice extends Command
     const TG_API         = 'https://api.telegram.org/bot%s/sendMessage';
     const TICKER         = 'QA';
     const TW_TICKER      = 'WTX';
+    const VIX_TICKER     = 'VIX';
     const TW_INDEX_URL   = 'https://tw.stock.yahoo.com/_td-stock/api/resource/FinanceChartService.ApacLibraCharts;symbols=%5B%22WTX%26%22%5D;type=tick';
+    const VIX_URL        = 'https://query2.finance.yahoo.com/v8/finance/chart/%5EVIX';
 
     // 告警閾值
-    const ALERT_5M_PCT  = 0.5;   // 當前+前一根 K 棒合併振幅超過 0.5% 告警
-    const ALERT_1H_PCT  = 2.0;   // 小時區間振幅超過 2% 告警
+    const ALERT_5M_PCT        = 1.0;   // 原油：當前+前一根 K 棒合併振幅超過 1% 告警
+    const ALERT_WTX_5M_POINTS = 50;    // 台指：5分鐘漲跌超過 50 點告警
 
     public function handle()
     {
@@ -55,6 +57,12 @@ class FetchOilPrice extends Command
         $newCount = $this->saveAllCandles($allCandles);
         $this->line("  [DB] 本次新寫入 {$newCount} 根 K 棒");
 
+        // ── 無新資料 = 休市或資料未更新，略過後續所有處理 ──────
+        if ($newCount === 0) {
+            $this->line('  [跳過] 無新 K 棒寫入，視為休市或資料未更新，略過告警');
+            return 0;
+        }
+
         // ── 2. 抓取台指現價並存 DB ──────────────────────────────
         [$twPrice, $twRefreshedAt] = $this->fetchTwIndex();
         if ($twPrice !== null) {
@@ -64,7 +72,16 @@ class FetchOilPrice extends Command
             $this->line('  [台指] 取得失敗，略過');
         }
 
-        // ── 3. 測試強制推送 ───────────────────────────────────────
+        // ── 3. 抓取 VIX 恐慌指數並存 DB ─────────────────────────
+        [$vixPrice, $vixTime] = $this->fetchVix();
+        if ($vixPrice !== null) {
+            $this->saveVixPrice($vixPrice, $vixTime);
+            $this->line("  [VIX] 當前：{$vixPrice}（更新：{$vixTime}）");
+        } else {
+            $this->line('  [VIX] 取得失敗，略過');
+        }
+
+        // ── 4. 測試強制推送 ───────────────────────────────────────
         if ($this->option('force-alert')) {
             $msg = "🔔 <b>測試推送</b>\n"
                  . "💰 當前布蘭特原油：<b>{$price}</b>\n"
@@ -78,33 +95,43 @@ class FetchOilPrice extends Command
             return 0;
         }
 
-        // ── 4. 計算兩項告警，合併成一則推送 ──────────────────────
-        $alert5m = $this->calc5mAlert($candleAt);
-        $alert1h = $this->calc1hAlert($candleAt);
+        // ── 5. 計算各項告警，合併成一則推送 ──────────────────────
+        $alert5m    = $this->calc5mAlert($candleAt);
+        $alertWtx5m = ($twPrice !== null) ? $this->calc5mAlertWtx() : null;
 
-        if ($alert5m !== null || $alert1h !== null) {
-            $msg = "🚨 <b>布蘭特原油告警</b>　💰 當前：<b>{$price}</b>（{$candleAt}）\n";
+        if ($alert5m !== null || $alertWtx5m !== null) {
+            $msg = "🚨 <b>市場告警</b>\n";
 
+            // 原油告警
             if ($alert5m !== null) {
-                $this->warn('  [5分告警] 觸發！' . $alert5m['arrow'] . $alert5m['direction'] . ' 振幅 ' . $alert5m['pctFmt']);
-                $msg .= "\n━━ 📊 5分K震盪 ━━\n"
+                $this->warn('  [原油5分告警] 觸發！' . $alert5m['arrow'] . $alert5m['direction'] . ' 振幅 ' . $alert5m['pctFmt']);
+                $msg .= "\n━━ 🛢 布蘭特原油 5分震盪 ━━\n"
+                      . "💰 當前：<b>{$price}</b>（{$candleAt}）\n"
                       . "{$alert5m['arrow']} <b>方向：{$alert5m['direction']}</b>　收盤 {$alert5m['prevClose']} → <b>{$alert5m['currClose']}</b>（<b>{$alert5m['closePctFmt']}</b> / {$alert5m['closeDiffFmt']}）\n"
                       . "🕐 區間：<b>{$alert5m['fromTime']} – {$alert5m['currTime']}</b>\n"
                       . "🔺 區間最高：<b>{$alert5m['maxHigh']}</b>　🔻 區間最低：<b>{$alert5m['minLow']}</b>\n"
                       . "📊 振幅：<b>{$alert5m['pctFmt']}</b>（{$alert5m['diffFmt']}）　⚠️ 閾值 " . self::ALERT_5M_PCT . "%";
             }
 
-            if ($alert1h !== null) {
-                $this->warn('  [小時告警] 觸發！' . $alert1h['arrow'] . $alert1h['direction'] . ' 振幅 ' . $alert1h['pctFmt']);
-                $msg .= "\n\n━━ 🕐 小時震盪 ━━\n"
-                      . "{$alert1h['arrow']} <b>方向：{$alert1h['direction']}</b>　收盤 {$alert1h['firstClose']} → <b>{$alert1h['lastClose']}</b>（<b>{$alert1h['closePctFmt']}</b> / {$alert1h['closeDiffFmt']}）\n"
-                      . "🕐 區間：<b>{$alert1h['fromTime']} – {$alert1h['currTime']}</b>\n"
-                      . "🔺 區間最高：<b>{$alert1h['maxHigh']}</b>　🔻 區間最低：<b>{$alert1h['minLow']}</b>\n"
-                      . "📊 振幅：<b>{$alert1h['pctFmt']}</b>（{$alert1h['diffFmt']}）　⚠️ 閾值 " . self::ALERT_1H_PCT . "%";
+            // 台指告警
+            if ($alertWtx5m !== null) {
+                $this->warn('  [台指5分告警] 觸發！' . $alertWtx5m['arrow'] . $alertWtx5m['direction'] . ' ' . $alertWtx5m['pointsFmt'] . '點');
+                $msg .= "\n\n━━ 📈 台指期貨 5分震盪 ━━\n"
+                      . "💹 當前：<b>" . number_format($twPrice, 0) . "</b>（{$alertWtx5m['currTime']}）\n"
+                      . "{$alertWtx5m['arrow']} <b>方向：{$alertWtx5m['direction']}</b>　{$alertWtx5m['prevClose']} → <b>{$alertWtx5m['currClose']}</b>（<b>{$alertWtx5m['pointsFmt']}點</b> / <b>{$alertWtx5m['pctFmt']}</b>）\n"
+                      . "⚠️ 閾值 " . self::ALERT_WTX_5M_POINTS . " 點";
             }
 
-            // ── 台指現況（附帶在油價告警內）──────────────────────
-            if ($twPrice !== null) {
+            // VIX 附帶資訊（不告警，僅顯示）
+            if ($vixPrice !== null) {
+                $vixBlock = $this->buildVixBlock($vixPrice);
+                if ($vixBlock !== '') {
+                    $msg .= "\n\n" . $vixBlock;
+                }
+            }
+
+            // 台指現況（若無台指告警則顯示現況）
+            if ($alertWtx5m === null && $twPrice !== null) {
                 $twBlock = $this->buildTwIndexBlock($twPrice);
                 if ($twBlock !== '') {
                     $msg .= "\n\n" . $twBlock;
@@ -116,6 +143,144 @@ class FetchOilPrice extends Command
         }
 
         return 0;
+    }
+
+    // ────────────────────────────────────────────────────────────
+    //  抓取 VIX 恐慌指數（Yahoo Finance）
+    //  回傳 [price, refreshedAt(台北時間字串)] 或 [null, null]
+    // ────────────────────────────────────────────────────────────
+    private function fetchVix(): array
+    {
+        $client = new Client(['timeout' => 10]);
+        try {
+            $res = $client->get(self::VIX_URL, [
+                'query' => [
+                    'interval'       => '5m',
+                    'range'          => '1d',
+                    'includePrePost' => 'true',
+                    'lang'           => 'zh-Hant-HK',
+                    'region'         => 'HK',
+                ],
+                'headers' => [
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'Accept'     => 'application/json, text/plain, */*',
+                ],
+            ]);
+        } catch (\Exception $e) {
+            $this->line('[ERROR] VIX HTTP 失敗：' . $e->getMessage());
+            return [null, null];
+        }
+
+        $data  = json_decode((string) $res->getBody(), true);
+        $meta  = $data['chart']['result'][0]['meta'] ?? null;
+
+        if (!$meta || !isset($meta['regularMarketPrice'])) {
+            return [null, null];
+        }
+
+        $price = (float) $meta['regularMarketPrice'];
+
+        // regularMarketTime 是 UTC Unix timestamp
+        $ts          = $meta['regularMarketTime'] ?? time();
+        $refreshedAt = date('Y-m-d H:i:s', $ts + 8 * 3600);
+
+        return [$price, $refreshedAt];
+    }
+
+    // ────────────────────────────────────────────────────────────
+    //  儲存 VIX 現價（對齊 5 分鐘窗口）
+    // ────────────────────────────────────────────────────────────
+    private function saveVixPrice(float $price, ?string $refreshedAt): void
+    {
+        if ($refreshedAt !== null) {
+            $ts       = strtotime($refreshedAt);
+            $candleAt = date('Y-m-d H:i:s', (int) (floor($ts / 300) * 300));
+        } else {
+            $candleAt = date('Y-m-d H:i:s', (int) (floor(time() / 300) * 300));
+        }
+
+        OilPrice::updateOrCreate(
+            ['ticker' => self::VIX_TICKER, 'candle_at' => $candleAt],
+            ['timeframe' => 'i5', 'close' => $price]
+        );
+    }
+
+    // ────────────────────────────────────────────────────────────
+    //  VIX 資訊區塊（不告警，附帶顯示）
+    // ────────────────────────────────────────────────────────────
+    private function buildVixBlock(float $currentPrice): string
+    {
+        $last2 = OilPrice::where('ticker', self::VIX_TICKER)
+            ->whereNotNull('close')
+            ->orderBy('candle_at', 'desc')
+            ->limit(2)
+            ->get();
+
+        $change5m    = null;
+        $changePct5m = null;
+        if ($last2->count() >= 2) {
+            $prevClose   = (float) $last2->last()->close;
+            $change5m    = $currentPrice - $prevClose;
+            $changePct5m = $prevClose > 0 ? ($change5m / $prevClose * 100) : null;
+        }
+
+        $arrow = ($change5m !== null && $change5m >= 0) ? '📈' : '📉';
+        $sign  = ($change5m !== null && $change5m >= 0) ? '+' : '';
+
+        $block = "━━ 😨 VIX 恐慌指數 ━━\n"
+               . "📊 當前：<b>" . number_format($currentPrice, 2) . "</b>";
+
+        if ($change5m !== null) {
+            $block .= "　{$arrow} 5分：<b>{$sign}" . number_format($change5m, 2) . "</b>"
+                    . "（" . sprintf('%s%.2f%%', $sign, $changePct5m) . "）";
+        }
+
+        return $block;
+    }
+
+    // ────────────────────────────────────────────────────────────
+    //  台指 5 分鐘告警：漲跌超過 ALERT_WTX_5M_POINTS 點
+    //  未觸發回傳 null，觸發回傳資料陣列
+    // ────────────────────────────────────────────────────────────
+    private function calc5mAlertWtx(): ?array
+    {
+        $last2 = OilPrice::where('ticker', self::TW_TICKER)
+            ->whereNotNull('close')
+            ->orderBy('candle_at', 'desc')
+            ->limit(2)
+            ->get();
+
+        if ($last2->count() < 2) {
+            $this->line('  [台指5分告警] 資料不足，略過');
+            return null;
+        }
+
+        $currClose = (float) $last2->first()->close;
+        $prevClose = (float) $last2->last()->close;
+        $diff      = $currClose - $prevClose;
+        $absDiff   = abs($diff);
+        $pct       = $prevClose > 0 ? ($diff / $prevClose * 100) : 0;
+
+        $this->line(sprintf('  [台指5分告警] 前 %.0f → 現 %.0f = %.0f 點', $prevClose, $currClose, $diff));
+
+        if ($absDiff < self::ALERT_WTX_5M_POINTS) {
+            return null;
+        }
+
+        $up        = $diff >= 0;
+        $arrow     = $up ? '📈' : '📉';
+        $direction = $up ? '上漲' : '下跌';
+        $sign      = $up ? '+' : '';
+
+        return [
+            'arrow'      => $arrow,
+            'direction'  => $direction,
+            'prevClose'  => number_format($prevClose, 0),
+            'currClose'  => number_format($currClose, 0),
+            'pointsFmt'  => sprintf('%s%.0f', $sign, $diff),
+            'pctFmt'     => sprintf('%s%.2f%%', $sign, $pct),
+            'currTime'   => $last2->first()->candle_at->format('H:i'),
+        ];
     }
 
     // ────────────────────────────────────────────────────────────
@@ -324,85 +489,6 @@ class FetchOilPrice extends Command
             'direction'   => $direction,
             'prevClose'   => $prevClose,
             'currClose'   => $currClose,
-            'closeDiffFmt'=> sprintf('%s%.4f', $sign, $closeDiff),
-            'closePctFmt' => sprintf('%s%.2f%%', $sign, $closePct),
-        ];
-    }
-
-    // ────────────────────────────────────────────────────────────
-    //  小時：上個整點 00 分 → 當前，區間高低振幅
-    //  ★ 同時納入錨點（窗口前最後一根收盤），捕捉跨交易時段跳空缺口
-    //  未觸發回傳 null，觸發回傳資料陣列
-    // ────────────────────────────────────────────────────────────
-    private function calc1hAlert(string $candleAt): ?array
-    {
-        $prevHourStart = date('Y-m-d H:00:00', strtotime($candleAt) - 3600);
-
-        $rows = OilPrice::where('ticker', self::TICKER)
-            ->whereBetween('candle_at', [$prevHourStart, $candleAt])
-            ->whereNotNull('high')
-            ->whereNotNull('low')
-            ->orderBy('candle_at', 'asc')
-            ->get(['candle_at', 'high', 'low', 'close']);
-
-        if ($rows->isEmpty()) {
-            $this->line('  [小時告警] 無資料，略過');
-            return null;
-        }
-
-        $maxHigh   = (float) $rows->max('high');
-        $minLow    = (float) $rows->min('low');
-        $lastClose = (float) $rows->last()->close;
-
-        // ── 錨點：窗口開始前的最後一根 K 棒收盤 ──────────────
-        // 用途：讓跨交易時段跳空（例如週五收盤→週一開盤）也能被計算進振幅
-        $anchor = OilPrice::where('ticker', self::TICKER)
-            ->where('candle_at', '<', $prevHourStart)
-            ->whereNotNull('close')
-            ->orderBy('candle_at', 'desc')
-            ->first();
-
-        $anchorClose = $anchor ? (float) $anchor->close : null;
-        $fromTime    = $anchor
-            ? $anchor->candle_at->format('H:i')
-            : substr($prevHourStart, 11, 5);
-
-        if ($anchorClose !== null) {
-            $maxHigh = max($maxHigh, $anchorClose);
-            $minLow  = min($minLow,  $anchorClose);
-        }
-
-        $firstClose = $anchorClose ?? (float) $rows->first()->close;
-        $pct        = $minLow > 0 ? (($maxHigh - $minLow) / $minLow * 100) : 0;
-        $closeDiff  = $lastClose - $firstClose;
-        $closePct   = $firstClose > 0 ? ($closeDiff / $firstClose * 100) : 0;
-
-        $this->line(sprintf(
-            '  [小時告警] 振幅 高%.4f 低%.4f = %.4f%%（錨點收盤 %s）',
-            $maxHigh, $minLow, $pct,
-            $anchorClose !== null ? number_format($anchorClose, 4) : 'N/A'
-        ));
-
-        if ($pct < self::ALERT_1H_PCT) {
-            return null;
-        }
-
-        $up        = $closeDiff >= 0;
-        $arrow     = $up ? '📈' : '📉';
-        $direction = $up ? '上漲' : '下跌';
-        $sign      = $up ? '+' : '';
-
-        return [
-            'maxHigh'     => $maxHigh,
-            'minLow'      => $minLow,
-            'pctFmt'      => sprintf('%.2f%%', $pct),
-            'diffFmt'     => sprintf('%.4f', $maxHigh - $minLow),
-            'fromTime'    => $fromTime,
-            'currTime'    => substr($candleAt, 11, 5),
-            'arrow'       => $arrow,
-            'direction'   => $direction,
-            'firstClose'  => $firstClose,
-            'lastClose'   => $lastClose,
             'closeDiffFmt'=> sprintf('%s%.4f', $sign, $closeDiff),
             'closePctFmt' => sprintf('%s%.2f%%', $sign, $closePct),
         ];

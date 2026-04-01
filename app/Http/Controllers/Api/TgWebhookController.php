@@ -74,13 +74,13 @@ class TgWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        // 處理一般訊息（/start 或任何文字）→ 回傳 inline keyboard
+        // 處理一般訊息
         if (isset($update['message'])) {
             $msg      = $update['message'];
             $chatId   = $msg['chat']['id'];
             $userId   = (string) $msg['from']['id'];
             $username = $msg['from']['username'] ?? null;
-            $text     = $msg['text'] ?? '';
+            $text     = trim($msg['text'] ?? '');
 
             // 記錄收到的訊息
             TgMessage::create([
@@ -93,15 +93,31 @@ class TgWebhookController extends Controller
                 'message_type' => 'text',
             ]);
 
-            // 回傳 inline keyboard
-            $keyboard = [
-                'inline_keyboard' => [[
-                    ['text' => '🛢 布蘭特原油', 'callback_data' => 'oil'],
-                    ['text' => '📈 台指期貨',   'callback_data' => 'wtx'],
-                ]],
-            ];
-            $replyText = '請選擇要查詢的指數：';
-            $this->sendMessage($bot->token, $chatId, $replyText, $keyboard);
+            // 按下「布蘭特原油」按鈕
+            if (str_contains($text, '布蘭特原油')) {
+                $replyText = $this->buildOilReply();
+                $this->sendMessage($bot->token, $chatId, $replyText);
+
+            // 按下「台指期貨」按鈕
+            } elseif (str_contains($text, '台指期貨')) {
+                $replyText = $this->buildWtxReply();
+                $this->sendMessage($bot->token, $chatId, $replyText);
+
+            // 其他訊息（/start 或任意文字）→ 顯示固定鍵盤
+            } else {
+                $keyboard = [
+                    'keyboard' => [
+                        [
+                            ['text' => '🛢 布蘭特原油'],
+                            ['text' => '📈 台指期貨'],
+                        ],
+                    ],
+                    'resize_keyboard' => true,
+                    'persistent'      => true,
+                ];
+                $replyText = '請選擇要查詢的指數：';
+                $this->sendMessage($bot->token, $chatId, $replyText, $keyboard);
+            }
 
             // 記錄 bot 回覆
             TgMessage::create([
@@ -109,7 +125,7 @@ class TgWebhookController extends Controller
                 'tg_user_id'   => $userId,
                 'tg_username'  => $username,
                 'tg_chat_id'   => $chatId,
-                'content'      => $replyText . ' [inline keyboard]',
+                'content'      => $replyText,
                 'direction'    => 2,
                 'message_type' => 'reply',
             ]);
@@ -129,7 +145,25 @@ class TgWebhookController extends Controller
             return '暫無油價資料';
         }
 
-        return "🛢 布蘭特原油\n最新價：{$latest->close}\n時間：{$latest->candle_at}";
+        $prev = OilPrice::where('ticker', 'QA')
+            ->whereNotNull('close')
+            ->where('candle_at', '<', $latest->candle_at)
+            ->orderBy('candle_at', 'desc')
+            ->first();
+
+        $changeStr = '';
+        if ($prev) {
+            $diff = (float) $latest->close - (float) $prev->close;
+            $pct  = (float) $prev->close > 0 ? ($diff / (float) $prev->close * 100) : 0;
+            $sign = $diff >= 0 ? '+' : '';
+            $arrow = $diff >= 0 ? '📈' : '📉';
+            $changeStr = "\n{$arrow} 5分變化：{$sign}" . number_format($diff, 4) . "（{$sign}" . number_format($pct, 2) . "%）";
+        }
+
+        $vix = OilPrice::where('ticker', 'VIX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
+        $vixStr = $vix ? "\n😨 VIX 恐慌指數：" . number_format((float) $vix->close, 2) : '';
+
+        return "🛢 布蘭特原油\n最新價：{$latest->close}{$changeStr}\n🕐 時間：{$latest->candle_at}{$vixStr}";
     }
 
     private function buildWtxReply(): string
@@ -143,7 +177,25 @@ class TgWebhookController extends Controller
             return '暫無台指資料';
         }
 
-        return "📈 台指期貨\n最新價：{$latest->close}\n時間：{$latest->candle_at}";
+        $prev = OilPrice::where('ticker', 'WTX')
+            ->whereNotNull('close')
+            ->where('candle_at', '<', $latest->candle_at)
+            ->orderBy('candle_at', 'desc')
+            ->first();
+
+        $changeStr = '';
+        if ($prev) {
+            $diff = (float) $latest->close - (float) $prev->close;
+            $pct  = (float) $prev->close > 0 ? ($diff / (float) $prev->close * 100) : 0;
+            $sign = $diff >= 0 ? '+' : '';
+            $arrow = $diff >= 0 ? '📈' : '📉';
+            $changeStr = "\n{$arrow} 5分變化：{$sign}" . number_format($diff, 0) . "點（{$sign}" . number_format($pct, 2) . "%）";
+        }
+
+        $vix = OilPrice::where('ticker', 'VIX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
+        $vixStr = $vix ? "\n😨 VIX 恐慌指數：" . number_format((float) $vix->close, 2) : '';
+
+        return "📈 台指期貨\n最新價：" . number_format((float) $latest->close, 0) . "{$changeStr}\n🕐 時間：{$latest->candle_at}{$vixStr}";
     }
 
     private function sendMessage(string $token, $chatId, string $text, array $replyMarkup = null): void
