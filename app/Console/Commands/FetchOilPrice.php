@@ -180,9 +180,9 @@ class FetchOilPrice extends Command
 
         $price = (float) $meta['regularMarketPrice'];
 
-        // regularMarketTime 是 UTC Unix timestamp
+        // regularMarketTime 是 UTC Unix timestamp，date() 已依 app timezone (Asia/Taipei) 自動轉換
         $ts          = $meta['regularMarketTime'] ?? time();
-        $refreshedAt = date('Y-m-d H:i:s', $ts + 8 * 3600);
+        $refreshedAt = date('Y-m-d H:i:s', $ts);
 
         return [$price, $refreshedAt];
     }
@@ -318,11 +318,11 @@ class FetchOilPrice extends Command
             return [null, null];
         }
 
-        // refreshedTs 是 UTC（ISO8601），轉換成台北時間（UTC+8）
+        // refreshedTs 是 UTC，date() 已依 app timezone (Asia/Taipei) 自動轉換
         $refreshedAt = null;
         if (!empty($quote['refreshedTs'])) {
             $ts          = strtotime($quote['refreshedTs']);
-            $refreshedAt = date('Y-m-d H:i:s', $ts + 8 * 3600);
+            $refreshedAt = date('Y-m-d H:i:s', $ts);
         }
 
         return [(float) $price, $refreshedAt];
