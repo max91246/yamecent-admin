@@ -225,23 +225,28 @@ class TgWebhookController extends Controller
         $stateData['is_margin'] = ($data === 'margin_yes') ? 1 : 0;
         $this->setState($bot->id, $chatId, 'holding_step4', $stateData);
 
-        $marginHint = $stateData['is_margin']
-            ? "（融資自備約 4 成，例如買進市值 250,000 則自備約 100,000）"
-            : "（例如：150000）";
+        $name   = $stateData['name']   ?? '';
+        $shares = $stateData['shares'] ?? 0;
 
-        return ["請輸入持有總成本（台幣金額）：\n{$marginHint}\n\n輸入「取消」可返回", null];
+        return ["請輸入當時買進的每股價格（元）：\n例如：{$name} 買 {$shares} 張，每股 53.5 就輸入 53.5\n\n輸入「取消」可返回", null];
     }
 
-    // ─── 持股添加：step4 輸入成本 ─────────────────────────────────
+    // ─── 持股添加：step4 輸入買進價格，自動計算成本 ─────────────────
     private function handleHoldingStep4(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj): array
     {
-        $cost = (float) str_replace([',', '，'], '', $text);
+        $buyPrice = (float) str_replace([',', '，'], '', $text);
 
-        if ($cost <= 0) {
-            return ['❌ 請輸入有效的台幣金額（例如：150000）：', null];
+        if ($buyPrice <= 0) {
+            return ['❌ 請輸入有效的每股買進價格（例如：53.5）：', null];
         }
 
-        $data = $stateObj->state_data ?? [];
+        $data      = $stateObj->state_data ?? [];
+        $shares    = (int) ($data['shares'] ?? 0);
+        $isMargin  = (int) ($data['is_margin'] ?? 0);
+        $marketVal = $buyPrice * $shares * 1000;
+
+        // 現股：全額；融資：自備約 4 成
+        $cost = $isMargin ? $marketVal * 0.4 : $marketVal;
 
         TgHolding::create([
             'bot_id'     => $bot->id,
@@ -249,18 +254,20 @@ class TgWebhookController extends Controller
             'tg_user_id' => $userId,
             'stock_code' => $data['code'],
             'stock_name' => $data['name'],
-            'shares'     => $data['shares'],
-            'is_margin'  => $data['is_margin'] ?? 0,
+            'shares'     => $shares,
+            'is_margin'  => $isMargin,
             'total_cost' => $cost,
         ]);
 
         $this->clearState($bot->id, $chatId);
 
-        $marginTag = ($data['is_margin'] ?? 0) ? '融資' : '現股';
+        $marginTag = $isMargin ? '融資' : '現股';
         $reply     = "✅ 已添加持股：\n"
                    . "📌 {$data['name']}（{$data['code']}）\n"
-                   . "📦 {$data['shares']} 張 · {$marginTag}\n"
-                   . "💰 成本：NT$" . number_format($cost, 0);
+                   . "📦 {$shares} 張 · {$marginTag}\n"
+                   . "💵 買進價：NT$" . $buyPrice . "　市值：NT$" . number_format($marketVal, 0) . "\n"
+                   . "💰 持有成本：NT$" . number_format($cost, 0)
+                   . ($isMargin ? "（自備 40%）" : '');
 
         return [$reply, null];
     }
@@ -377,7 +384,7 @@ class TgWebhookController extends Controller
         }
 
         $volumeStr = $quote['volume'] !== null
-            ? "\n📦 成交量：" . number_format((int) $quote['volume']) . " 股"
+            ? "\n📦 成交張數：" . number_format((int) round((float) $quote['volume'] / 1000)) . " 張"
             : '';
 
         $reply = "📊 {$name}（{$code}.TW）\n💰 成交價：{$price}{$changeStr}{$volumeStr}";
@@ -385,19 +392,28 @@ class TgWebhookController extends Controller
         // 三大法人
         $inst = $this->fetchInstitutional($code);
         if ($inst) {
-            $reply .= "\n\n━━ 近3日三大法人買賣超 ━━";
-            foreach (array_slice($inst, 0, 3) as $row) {
+            $rows    = array_slice($inst, 0, 10);
+            $sumForeign = 0;
+            $sumTrust   = 0;
+            $sumDealer  = 0;
+
+            $reply .= "\n\n━━ 近10日三大法人買賣超 ━━";
+            foreach ($rows as $row) {
                 $reply .= "\n📅 {$row['date']}";
-                if (array_key_exists('foreign', $row)) {
-                    $reply .= "  外資：" . $this->fmtInstShares($row['foreign']);
-                }
-                if (array_key_exists('trust', $row)) {
-                    $reply .= "  投信：" . $this->fmtInstShares($row['trust']);
-                }
-                if (array_key_exists('dealer', $row)) {
-                    $reply .= "  自營：" . $this->fmtInstShares($row['dealer']);
-                }
+                $reply .= "  外資：" . $this->fmtInstShares($row['foreign'] ?? null);
+                $reply .= "  投信：" . $this->fmtInstShares($row['trust']   ?? null);
+                $reply .= "  自營：" . $this->fmtInstShares($row['dealer']  ?? null);
+
+                $sumForeign += (int) ($row['foreign'] ?? 0);
+                $sumTrust   += (int) ($row['trust']   ?? 0);
+                $sumDealer  += (int) ($row['dealer']  ?? 0);
             }
+
+            $reply .= "\n─────────────────────";
+            $reply .= "\n📊 10日合計";
+            $reply .= "  外資：" . $this->fmtInstShares($sumForeign);
+            $reply .= "  投信：" . $this->fmtInstShares($sumTrust);
+            $reply .= "  自營：" . $this->fmtInstShares($sumDealer);
         }
 
         return $reply;
@@ -544,7 +560,7 @@ class TgWebhookController extends Controller
     private function fetchInstitutional(string $code): ?array
     {
         $symbol = $code . '.TW';
-        $url    = "https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.tradesWithQuoteStats;limit=5;period=day;symbol={$symbol}";
+        $url    = "https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.tradesWithQuoteStats;limit=10;period=day;symbol={$symbol}";
 
         try {
             $client = new Client(['timeout' => 10]);
