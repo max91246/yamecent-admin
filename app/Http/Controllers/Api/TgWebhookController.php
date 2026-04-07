@@ -525,41 +525,57 @@ class TgWebhookController extends Controller
         // 三大法人
         $inst = $this->fetchInstitutional($code);
         if ($inst) {
-            $rows    = array_slice($inst, 0, 10);
-            $sumForeign = 0;
-            $sumTrust   = 0;
-            $sumDealer  = 0;
+            $rows       = array_slice($inst, 0, 10);
+            $sumForeign = array_sum(array_column($rows, 'foreign'));
+            $sumTrust   = array_sum(array_column($rows, 'trust'));
+            $sumDealer  = array_sum(array_column($rows, 'dealer'));
+
+            // 橫條圖：以三者絕對值最大作為基準
+            $maxAbs = max(abs($sumForeign), abs($sumTrust), abs($sumDealer), 1);
 
             $reply .= "\n\n━━ 近10日三大法人買賣超 ━━";
+            $reply .= "\n" . $this->buildInstBar('外資', $sumForeign, $maxAbs);
+            $reply .= "\n" . $this->buildInstBar('投信', $sumTrust,   $maxAbs);
+            $reply .= "\n" . $this->buildInstBar('自營', $sumDealer,  $maxAbs);
+
+            // 每日明細（緊湊格式）
+            $reply .= "\n\n📅 每日明細";
             foreach ($rows as $row) {
-                $reply .= "\n📅 {$row['date']}";
-                $reply .= "  外資：" . $this->fmtInstShares($row['foreign'] ?? null);
-                $reply .= "  投信：" . $this->fmtInstShares($row['trust']   ?? null);
-                $reply .= "  自營：" . $this->fmtInstShares($row['dealer']  ?? null);
-
-                $sumForeign += (int) ($row['foreign'] ?? 0);
-                $sumTrust   += (int) ($row['trust']   ?? 0);
-                $sumDealer  += (int) ($row['dealer']  ?? 0);
+                $date = substr($row['date'], 5); // 取 MM/DD
+                $f    = $this->fmtInstCompact($row['foreign'] ?? null);
+                $t    = $this->fmtInstCompact($row['trust']   ?? null);
+                $d    = $this->fmtInstCompact($row['dealer']  ?? null);
+                $reply .= "\n{$date}  外{$f}  信{$t}  營{$d}";
             }
-
-            $reply .= "\n─────────────────────";
-            $reply .= "\n📊 10日合計";
-            $reply .= "  外資：" . $this->fmtInstShares($sumForeign);
-            $reply .= "  投信：" . $this->fmtInstShares($sumTrust);
-            $reply .= "  自營：" . $this->fmtInstShares($sumDealer);
         }
 
         return $reply;
     }
 
-    private function fmtInstShares($val): string
+    // 橫條圖：外資 [████████░░░░] ▼9,206張
+    private function buildInstBar(string $label, int $val, int $maxAbs): string
     {
-        if ($val === null) {
-            return '-';
-        }
-        $v    = (int) $val;
-        $sign = $v >= 0 ? '+' : '';
-        return "{$sign}" . number_format($v) . "張";
+        $barLen  = 12;
+        $filled  = (int) round(abs($val) / $maxAbs * $barLen);
+        $filled  = max(0, min($barLen, $filled));
+        $empty   = $barLen - $filled;
+
+        $bar     = str_repeat('█', $filled) . str_repeat('░', $empty);
+        $up      = $val >= 0;
+        $arrow   = $up ? '▲' : '▼';
+        $color   = $up ? '🟢' : '🔴';
+        $sign    = $up ? '+' : '';
+
+        return "{$color} {$label} [{$bar}] {$arrow}" . number_format(abs($val)) . "張（{$sign}" . number_format($val) . "）";
+    }
+
+    // 每日明細緊湊格式：▲1,234 或 ▼567
+    private function fmtInstCompact($val): string
+    {
+        if ($val === null) return '-';
+        $v     = (int) $val;
+        $arrow = $v >= 0 ? '▲' : '▼';
+        return $arrow . number_format(abs($v));
     }
 
     // ─── 回覆組建：我的持股 ───────────────────────────────────────
