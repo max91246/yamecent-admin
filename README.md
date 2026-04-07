@@ -1,185 +1,418 @@
-# 欢迎使用yamecent-admin后台管理
-![LOGO](http://upload-images.jianshu.io/upload_images/9160823-5ca4487bc91ab57a.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+# Yamecent Admin
 
-[![Latest Stable Version](https://poser.pugx.org/woann/yamecent-admin/v/stable.svg)](https://packagist.org/packages/woann/yamecent-admin)
-[![Total Downloads](https://poser.pugx.org/woann/yamecent-admin/downloads.svg)](https://packagist.org/packages/woann/yamecent-admin)
-[![License](https://poser.pugx.org/woann/yamecent-admin/license.svg)](https://github.com/woann/yamecent-admin/blob/master/LICENSE)
-[![Php Version](https://img.shields.io/badge/php-%3E=7.2-brightgreen.svg?maxAge=2592000)](https://secure.php.net/)
-[![Laravel Version](https://img.shields.io/badge/laravel-%3E=5.7-brightgreen.svg?maxAge=2592000)](https://laravel.com/)
+一套基於 Laravel 7 的後台管理系統，整合 REST API、Telegram 機器人互動、股票持倉追蹤與市場告警功能。
 
-## 项目简介
-yamecent-admin是一款基于laravel框架进行封装的后台管理系统,其中包含：
+---
 
-* rbac权限管理模块
-* 完整的[UI组件](http://demo.cssmoban.com/cssthemes5/twts_141_PurpleAdmin/pages/ui-features/buttons.html)
-* 自定义配置管理
-* 图片上传,网络请求等常用的js公共函数
-* 项目弹出层引用了layer,可直接使用layer
-* 持续维护中...
+## 技術棧
 
+| 項目 | 版本/說明 |
+|------|-----------|
+| 後端框架 | Laravel 7 |
+| 前端 SPA | Vue 3 |
+| 認證 | JWT（7 天有效） |
+| 部署環境 | Docker（Laradock）|
+| 資料庫 | MySQL 8 |
+| 快取 | Redis |
+| Web Server | Nginx |
+| HTTPS | Let's Encrypt（Certbot）|
 
-## 安装教程 （原版）
-* 执行安装命令 `composer create-project woann/yamecent-admin` 或者`git clone https://github.com/woann/yamecent-admin.git` 
-* 配置域名(按laravel项目正常配置即可,解析到public目录)
-* 如发现权限相关问题 执行 chown -R 用户名:用户组 项目目录
-* 访问域名,登录即可进入管理系统
-* 首次访问域名时会跳转至安装页面![安装页面.jpg](https://upload-images.jianshu.io/upload_images/14769055-a5c3bae19726a891.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
-* 填写完数据表配置之后，点击安装即可（有点小慢，喝口水）
-* 安装完之后就可以使用刚刚提交的管理员账号密码登录了（如果您想重新安装，要将/app/install/install.lock 文件删掉，重新访问网址即可）
+---
 
-## 安装教程 （改进版本）
-* 克隆代码库`git clone https://github.com/tksmai/yamecent-admin.git` 
-* 执行命令 `composer install && composer run-script post-root-package-install && composer run-script post-create-project-cmd` 安装 laravel 框架，依赖库，并做配置文件初始化
-* 配置域名(按laravel项目正常配置即可,解析到public目录)
-* 如发现权限相关问题 执行 chown -R 用户名:用户组 项目目录
-* 访问域名,登录即可进入管理系统
-* 首次访问域名时会跳转至安装页面![安装页面.jpg](https://upload-images.jianshu.io/upload_images/14769055-a5c3bae19726a891.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
-* 填写完数据表配置之后，点击安装
-* 安装完之后就可以使用刚刚提交的管理员账号密码登录了（如果您想重新安装，要将 `<应用目录>/storage/app/install.lock` 文件删掉，重新访问网址即可）
+## 後台管理功能
 
+### 系統管理
 
-## 请求(不想用这个请求方法可以自行用ajax)
-```javascript
-var data = {id:1};//参数
-myRequest("/admin/config/add","post",data,function(res){
-    //请求成功回调
-    layer.msg("提示信息");//弹出提示
-    //15秒后刷新父页面
-    setTimeout(function(){
-        parent.location.reload();
-    },1500)
-});
+| 功能 | 路由 |
+|------|------|
+| 控制台 | `GET /console` |
+| 管理員管理 | `/admin/administrator/*` |
+| 角色管理 | `/admin/role/*` |
+| 權限管理 | `/admin/permission/*` |
+| 選單管理 | `/admin/menu/*` |
+| 系統設定 | `/admin/config/*` |
+
+### 內容管理
+
+| 功能 | 路由 |
+|------|------|
+| 文章管理（CRUD） | `/admin/article/*` |
+| 留言管理（審核/回覆/刪除） | `/admin/comment/*` |
+
+### 會員管理
+
+| 功能 | 路由 |
+|------|------|
+| 會員列表/新增/編輯 | `/admin/member/*` |
+| 會籍啟用 | `POST /admin/member/membership/{id}/activate` |
+| 會籍撤銷 | `POST /admin/member/membership/{id}/revoke` |
+| 餘額記錄 | `/admin/member/balance/list` |
+
+### TG 機器人管理
+
+| 功能 | 路由 |
+|------|------|
+| 機器人列表/新增/編輯/刪除 | `/admin/tg-bot/*` |
+| 手動設定 Webhook | `POST /admin/tg-bot/set-webhook/{id}` |
+| 訊息記錄查詢 | `GET /admin/tg-message/list` |
+| 用戶持股查詢 | `GET /admin/tg-holding/list` |
+| 交易歷史查詢（含損益） | `GET /admin/tg-holding/trade-list` |
+
+---
+
+## REST API 文件
+
+所有 API 路徑前綴為 `/api`。需認證的路由請在 Header 帶入：
 ```
->请求失败回调默认封装了取消loading层的操作，如果想自定义请求失败的回调的话，自行修改public/assets/js/common.js文件中的myRequest方法
-
-## 表单不为空验证
-input添加`require`class
-```
- <div class="form-group" id="string">
-    <label >* 测试</label>
-    <input type="text" name="test" class="form-control require"  placeholder="">
-</div>
+Authorization: Bearer {token}
 ```
 
-```
-check = checkForm();//验证表单，如果带有require的input为空，则边框变为红色并弹出提示
-if(!check){
-    return false;
+### 認證
+
+| Method | 路由 | 說明 | 需認證 |
+|--------|------|------|:------:|
+| POST | `/api/auth/login` | 登入，回傳 JWT token | 否 |
+| POST | `/api/auth/logout` | 登出 | 是 |
+
+**登入請求範例：**
+```json
+POST /api/auth/login
+{
+  "account": "admin",
+  "password": "123456"
 }
 ```
 
-## 富文本
- * html
- ```html
-    <div class="form-group ">
-        <label >富文本</label>
-        <textarea  placeholder="请在此处编辑内容"  id="editor" style="height:400px;max-height:400px;overflow: hidden"></textarea >   
-    </div>
- ```
- * javascript
- ```javascript
-    var editor = new wangEditor('editor');
-    editor.config.uploadImgUrl = "/admin/wangeditor/upload";
-    // 隐藏掉插入网络图片功能。该配置，只有在你正确配置了图片上传功能之后才可用。
-    editor.config.hideLinkImg = false;
-    //关闭导航栏浮动
-    editor.config.menuFixed = false;
-    editor.create();
- ```
- * 示例
-![富文本编辑器](http://upload-images.jianshu.io/upload_images/14769055-b42c1b3b4f4ab979.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
-
-## 时间选择器
-* yamecent-admin的时间选择器是引入flatpickr插件，支持多语言，各种格式的时间选择。[查看文档](https://flatpickr.js.org)
-* html
- ```html
-    <div class="form-group">
-       <label >*生效时间</label>
-       <input type="text"  class="form-control required calendar" name="time" placeholder="请选择时间">
-    </div>
- ```
- * javascript
- ```javascript
-     $(".calendar").flatpickr({
-            dateFormat:"Y-m-d H:i:S",
-            enableTime:true,
-            enableSeconds:true
-            //更多配置百度搜索flatpickr即可找到
-        });
- ```
-  * 示例
-
-![时间选择器](https://upload-images.jianshu.io/upload_images/9160823-ee7dedaeb832a49c.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
-
-
-## 列表批量操作
-* html
- ```html
-    <!--按钮-->
-    <button type="button" class="btn btn-sm btn-gradient-danger btn-icon-text" onclick="batch('/admin/user/del/')">
-       <i class="mdi mdi-delete btn-icon-prepend"></i>批量删除
-    </button>
+**回應：**
+```json
+{
+  "code": 200,
+  "token": "eyJ0eXAiOiJKV1Qi..."
+}
 ```
-```html
-    <!--全选复选框-->
-    <tr>
-        <th width="3%">
-            <div class="form-check">
-                <label class="form-check-label">
-                    <input type="checkbox" class="form-check-input batch-all">
-                </label>
-            </div>
-         </th>
-        ...
-    </tr>
+
+---
+
+### 會員
+
+| Method | 路由 | 說明 | 需認證 |
+|--------|------|------|:------:|
+| POST | `/api/members/register` | 會員註冊 | 否 |
+| GET | `/api/members/{id}` | 取得會員資料 | 是 |
+| POST | `/api/members/{id}/profile` | 更新個人資料 | 是 |
+| GET | `/api/members/{id}/transactions` | 交易記錄 | 是 |
+| POST | `/api/members/{id}/membership/apply` | 申請會籍升級 | 是 |
+
+---
+
+### 文章
+
+| Method | 路由 | 說明 | 需認證 |
+|--------|------|------|:------:|
+| GET | `/api/articles` | 文章列表（支援分頁） | 否 |
+| GET | `/api/articles/{id}` | 文章詳情 | 否 |
+| GET | `/api/articles/{id}/comments` | 取得文章留言 | 否 |
+| POST | `/api/articles/{id}/comments` | 新增留言 | 是 |
+
+---
+
+### Telegram Webhook
+
+| Method | 路由 | 說明 |
+|--------|------|------|
+| POST | `/api/tg/webhook/{botId}` | Telegram 伺服器回調入口（公開，無需認證） |
+
+---
+
+## Telegram 機器人互動
+
+### 鍵盤按鈕佈局
+
 ```
-```html
-    <!--列表复选框-->
-    <tr>
-        <td>
-            <div class="form-check">
-               <label class="form-check-label">
-                   <input type="checkbox" class="form-check-input td-check" value="{{ $v->id }}">
-               </label>
-            </div>
-        </td>
-        ...
-    </tr>
- ```
+┌──────────────────┬──────────────────┐
+│  🛢 布蘭特原油   │   📈 台指期貨    │
+├──────────────────┼──────────────────┤
+│  😨 VIX恐慌指數  │   📊 台股查詢    │
+├──────────────────┴──────────────────┤
+│           💼 我的持股               │
+└─────────────────────────────────────┘
+```
 
- * 示例
-![批量操作](http://upload-images.jianshu.io/upload_images/14769055-62ba575064933680.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+---
 
-[1]: https://www.woann.cn
-[2]: http://xjj.woann.cn
-[3]: http://demo.woann.cn
+### 🛢 布蘭特原油
 
-## 部分截图
-* 数据统计
+顯示最新 5 分 K 資料：
+- 當前收盤價
+- 5 分鐘漲跌（價差 / 百分比）
+- 資料更新時間
+- VIX 恐慌指數附帶顯示
 
-![数据统计](https://upload-images.jianshu.io/upload_images/9160823-33fd684515b11c2f.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+---
 
-* 自定义配置（字符串，图片，富文本多种数据格式,可通过getConfig("key")的方式获取配置值）
+### 📈 台指期貨
 
-![自定义配置](https://upload-images.jianshu.io/upload_images/9160823-bc9b710eaecf7ef7.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+顯示台指期最新資料：
+- 當前報價
+- 5 分鐘漲跌（點數 / 百分比）
+- 資料更新時間
+- VIX 恐慌指數附帶顯示
 
-* 权限管理
+---
 
-![权限管理](https://upload-images.jianshu.io/upload_images/9160823-48859283e45b6fd2.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+### 😨 VIX 恐慌指數
 
-* 菜单管理
+- 當前 VIX 數值
+- 5 分鐘變化（價差 / 百分比）
+- 資料更新時間
 
-![菜单管理](https://upload-images.jianshu.io/upload_images/9160823-07eed87c32fc721c.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+---
 
-* 管理员
+### 📊 台股查詢（互動式）
 
-![管理员](https://upload-images.jianshu.io/upload_images/9160823-4b14ee0d83ab20da.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+**流程：**
+1. 按下按鈕後，機器人提示輸入股票代號
+2. 輸入代號（例如：`2317`）
+3. 機器人回覆：
+   - 股票名稱、成交價、漲跌幅、成交張數
+   - 近 10 日三大法人買賣超橫條圖
+   - 每日明細（外資 / 投信 / 自營商）
+   - 10 日合計
 
-* 角色
+**範例輸出：**
+```
+📊 鴻海（2317.TW）
+💰 成交價：192.0
+📈 漲跌：+1.50（+0.41%）
+📦 成交張數：23,021 張
 
-![角色](https://upload-images.jianshu.io/upload_images/9160823-f75c5aa058bf7e77.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+━━ 近10日三大法人買賣超 ━━
+🔴 外資 [████████░░░░] ▼9,206張
+🟢 投信 [█░░░░░░░░░░░] ▲629張
+🔴 自營 [██░░░░░░░░░░] ▼1,897張
 
+📅 每日明細
+04/02  外▼4,392  信▲78   營▼327
+...
 
-作者 [@woann][1]  [@xjj][2]   
-2018 年 10月 30日    
-# yamecent-admin
+📊 10日合計  外▼9,206  信▲629  營▼1,897
+```
+
+> 查詢結果快取：盤中 5 分鐘，盤後至下一交易日 09:00
+
+---
+
+### 💼 我的持股
+
+顯示用戶個人持倉總覽：
+
+```
+💼 我的持股
+
+📌 威剛（3260）2張·融資　買進：NT$366.5
+   現值：NT$726,000
+   稅費：NT$3,120（買費+賣費+稅）　淨損益：-NT$5,620
+
+📌 台玻（1802）15張·融資　買進：NT$54.5
+   現值：NT$805,500
+   稅費：NT$xx,xxx　淨損益：-NT$xx,xxx
+
+📊 自備成本：NT$1,232,200　原始市值：NT$2,162,500
+📈 現值合計：NT$2,122,500
+💸 預估稅費：NT$xx,xxx
+💹 淨損益：-NT$xx,xxx　自備報酬：-3.25%
+```
+
+**Inline 按鈕：**
+- `➕ 添加持股`
+- `💰 賣出 XXXX`（每檔各一個）
+
+---
+
+#### 添加持股（多步驟對話）
+
+| 步驟 | 說明 |
+|------|------|
+| Step 1 | 輸入股票代號（自動查詢驗證，取得股票名稱） |
+| Step 2 | 輸入持有張數（整數） |
+| Step 3 | 選擇是否融資（Inline 按鈕：是/否） |
+| Step 4 | 輸入買進每股價格 |
+| 完成 | 系統計算成本（現股=全額，融資=40%），存入 DB，顯示最新持股列表 |
+
+---
+
+#### 賣出持股
+
+| 步驟 | 說明 |
+|------|------|
+| Step 1 | 點擊「💰 賣出 XXXX」按鈕 |
+| Step 2 | 輸入賣出張數 |
+| Step 3 | 輸入賣出每股價格 |
+| 完成 | 計算損益並記錄，更新剩餘持股，顯示最新持股列表 |
+
+**損益計算公式：**
+```
+損益 = 賣出價值 - 買進價值 - 買進手續費(0.1425%) - 賣出手續費(0.1425%) - 證券交易稅(0.3%)
+```
+
+---
+
+#### 通用操作
+
+任何對話步驟輸入「取消」，立即返回主選單。
+
+---
+
+### 市場告警（排程自動推送）
+
+排程每 5 分鐘執行，以下條件觸發推送：
+
+| 標的 | 觸發條件 |
+|------|----------|
+| 布蘭特原油 | 5 分鐘合併振幅 ≥ 1% |
+| 台指期貨 | 5 分鐘漲跌 ≥ 50 點 |
+| VIX 恐慌指數 | 不觸發告警，僅附帶顯示 |
+
+告警訊息包含：
+- 當前價格與漲跌方向
+- 區間高低點
+- 相關新聞（Google News RSS，近 1 小時）
+
+> 若無新 K 棒寫入（休市或資料未更新），自動跳過全部處理。
+
+---
+
+## 資料庫結構
+
+| 表名 | 說明 |
+|------|------|
+| `admin_users` | 後台管理員帳號 |
+| `admin_roles` | 角色 |
+| `admin_permissions` | 權限（對應路由） |
+| `admin_menus` | 後台側邊欄選單 |
+| `admin_configs` | 系統設定鍵值 |
+| `members` | 前台會員資料 |
+| `member_balance_logs` | 會員餘額變動記錄 |
+| `articles` | 文章 |
+| `article_comments` | 文章留言 |
+| `oil_prices` | 5分K棒（ticker: `QA`=原油 / `WTX`=台指 / `VIX`=恐慌指數）|
+| `tg_bots` | TG 機器人設定（token、webhook 狀態）|
+| `tg_messages` | TG 對話記錄（收/發）|
+| `tg_states` | TG 多步驟對話狀態機（含暫存資料）|
+| `tg_holdings` | 用戶持股記錄 |
+| `tg_holding_trades` | 歷史交易記錄（含損益）|
+
+---
+
+## 部署說明（GCP + Docker）
+
+### 環境需求
+
+- GCP Compute Engine（Debian）
+- Docker + Docker Compose
+- Laradock
+
+### 首次部署
+
+```bash
+# 1. Clone 專案
+git clone <repo-url> /var/www/yamecent-admin
+
+# 2. 啟動 Docker 服務
+cd ~/laradock
+docker compose up -d nginx mysql redis workspace php-fpm
+
+# 3. 進入 workspace
+docker compose exec -it workspace bash
+
+# 4. 安裝依賴
+cd /var/www/yamecent-admin
+composer install --ignore-platform-reqs
+
+# 5. 環境設定
+cp .env.example .env
+# 編輯 .env：設定 DB、Redis、JWT、APP_URL、TG 等
+
+# 6. 初始化
+php artisan key:generate
+php artisan migrate
+php artisan db:seed
+php artisan config:cache
+```
+
+### 升級部署
+
+```bash
+cd /var/www/yamecent-admin
+git pull
+php artisan migrate
+php artisan db:seed
+php artisan config:cache
+```
+
+> `db:seed` 所有 Seeder 均有冪等保護，重複執行安全。
+
+### HTTPS 設定（Let's Encrypt）
+
+```bash
+# 停止 nginx 釋放 80 port
+docker compose stop nginx
+
+# 申請憑證
+sudo certbot certonly --standalone -d yourdomain.com
+
+# 掛載憑證至 nginx（docker-compose.yml nginx volumes 加入）
+- /etc/letsencrypt:/etc/letsencrypt:ro
+
+# 重啟
+docker compose up -d nginx
+```
+
+### .env 重要設定
+
+```env
+APP_URL=https://yourdomain.com
+CACHE_DRIVER=redis
+REDIS_HOST=redis
+REDIS_PASSWORD=your_redis_password
+
+TG_BOT_TOKEN=       # 告警推送用的 Bot Token
+TG_CHAT_ID=         # 告警推送的 Chat ID
+```
+
+### 排程設定（Crontab）
+
+```bash
+# 主機 crontab
+* * * * * docker exec laradock-workspace-1 php /var/www/yamecent-admin/artisan schedule:run >> /dev/null 2>&1
+```
+
+`app/Console/Kernel.php` 中已設定每 5 分鐘執行 `fetch:oil-price`。
+
+---
+
+## 專案結構
+
+```
+app/
+├── Console/Commands/
+│   └── FetchOilPrice.php          # 油價/台指/VIX 抓取與告警
+├── Http/Controllers/
+│   ├── Admin/                     # 後台控制器
+│   │   ├── TgBotController.php
+│   │   ├── TgMessageController.php
+│   │   └── TgHoldingController.php
+│   └── Api/
+│       └── TgWebhookController.php # TG Webhook 主控制器
+├── TgBot.php
+├── TgMessage.php
+├── TgState.php
+├── TgHolding.php
+└── TgHoldingTrade.php
+database/
+├── migrations/
+└── seeds/
+routes/
+├── web.php                        # 後台路由
+└── api.php                        # API 路由
+```
