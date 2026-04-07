@@ -596,9 +596,13 @@ class TgWebhookController extends Controller
             ];
         }
 
-        $totalSelfCost   = 0;  // 自備款合計（現股=全額，融資=40%）
-        $totalOriginVal  = 0;  // 買進時原始市值合計
+        $feeRate = 0.001425;
+        $taxRate = 0.003;
+
+        $totalSelfCost   = 0;  // 自備款合計
+        $totalOriginVal  = 0;  // 買進原始市值合計
         $totalCurrentVal = 0;  // 當前市值合計
+        $totalTxCost     = 0;  // 預估交易成本合計（買進手續費 + 賣出手續費+稅）
         $lines           = [];
         $delButtons      = [];
 
@@ -610,8 +614,15 @@ class TgWebhookController extends Controller
             $originValue = $buyPrice > 0 ? $buyPrice * $h->shares * 1000 : (float) $h->total_cost;
             $selfCost    = (float) $h->total_cost;
 
+            // 預估交易成本：買進手續費 + 賣出手續費 + 賣出交易稅
+            $buyFee   = $buyPrice > 0 ? (int) ceil($originValue * $feeRate) : 0;
+            $sellFee  = $curValue  !== null ? (int) ceil($curValue * $feeRate) : 0;
+            $sellTax  = $curValue  !== null ? (int) ceil($curValue * $taxRate)  : 0;
+            $txCost   = $buyFee + $sellFee + $sellTax;
+
             $totalSelfCost   += $selfCost;
             $totalOriginVal  += $originValue;
+            $totalTxCost     += $txCost;
             if ($curValue !== null) {
                 $totalCurrentVal += $curValue;
             }
@@ -619,12 +630,13 @@ class TgWebhookController extends Controller
             $marginTag   = $h->is_margin ? '融資' : '現股';
             $curValueStr = $curValue !== null ? 'NT$' . number_format($curValue, 0) : '查詢失敗';
 
-            // 個股損益 = 現值 - 原始市值
-            $stockProfit    = $curValue !== null ? $curValue - $originValue : null;
+            // 個股淨損益 = 現值 - 原始市值 - 交易成本
+            $stockProfit    = $curValue !== null ? $curValue - $originValue - $txCost : null;
             $stockProfitStr = '';
             if ($stockProfit !== null) {
                 $sign           = $stockProfit >= 0 ? '+' : '';
-                $stockProfitStr = "　損益：{$sign}NT$" . number_format($stockProfit, 0);
+                $txCostStr      = 'NT$' . number_format($txCost, 0);
+                $stockProfitStr = "\n   稅費：{$txCostStr}（買費+賣費+稅）　淨損益：{$sign}NT$" . number_format($stockProfit, 0);
             }
 
             $buyStr  = $buyPrice > 0 ? "　買進：NT$" . $buyPrice : '';
@@ -634,15 +646,16 @@ class TgWebhookController extends Controller
             $delButtons[] = ['text' => "💰 賣出 {$h->stock_code}", 'callback_data' => 'holding_sell_' . $h->id];
         }
 
-        // 損益摘要：損益 = 現值合計 - 原始市值合計，報酬率 = 損益 / 自備款
+        // 損益摘要
         $profitStr = "\n\n📊 自備成本：NT$" . number_format($totalSelfCost, 0)
                    . "　原始市值：NT$" . number_format($totalOriginVal, 0);
         if ($totalCurrentVal > 0) {
-            $profit    = $totalCurrentVal - $totalOriginVal;
-            $roi       = $totalSelfCost > 0 ? ($profit / $totalSelfCost * 100) : 0;
-            $sign      = $profit >= 0 ? '+' : '';
+            $netProfit = $totalCurrentVal - $totalOriginVal - $totalTxCost;
+            $roi       = $totalSelfCost > 0 ? ($netProfit / $totalSelfCost * 100) : 0;
+            $sign      = $netProfit >= 0 ? '+' : '';
             $profitStr .= "\n📈 現值合計：NT$" . number_format($totalCurrentVal, 0)
-                        . "\n💹 損益：{$sign}NT$" . number_format($profit, 0)
+                        . "\n💸 預估稅費：NT$" . number_format($totalTxCost, 0)
+                        . "\n💹 淨損益：{$sign}NT$" . number_format($netProfit, 0)
                         . "　自備報酬：{$sign}" . number_format($roi, 2) . "%";
         }
 
