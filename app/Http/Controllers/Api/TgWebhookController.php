@@ -600,6 +600,47 @@ class TgWebhookController extends Controller
             }
         }
 
+        // 月營收
+        $revenues = $this->fetchRevenue($code);
+        if ($revenues) {
+            $reply .= "\n\n━━ 近月營收（仟元）━━";
+            foreach ($revenues as $r) {
+                // 日期格式 "2026-02-01T..."  → "26/02"
+                $d       = explode('-', substr($r['date'], 0, 7));
+                $label   = substr($d[0], 2) . '/' . $d[1];
+                $revK    = (int) round((float) ($r['revenue'] ?? 0) / 1000);
+                $mom     = (float) ($r['revenueMoM'] ?? 0);
+                $yoy     = (float) ($r['revenueYoY'] ?? 0);
+                $momArrow = $mom >= 0 ? '▲' : '▼';
+                $yoyArrow = $yoy >= 0 ? '▲' : '▼';
+                $lastRevK = isset($r['lastYear']['revenue'])
+                    ? (int) round((float) $r['lastYear']['revenue'] / 1000)
+                    : null;
+                $lastStr = $lastRevK !== null ? "　去年 " . number_format($lastRevK) : '';
+                $reply .= "\n{$label}  " . number_format($revK)
+                        . "　月{$momArrow}" . number_format(abs($mom), 1) . "%"
+                        . "　年{$yoyArrow}" . number_format(abs($yoy), 1) . "%"
+                        . $lastStr;
+            }
+
+            // 最新月份的累計資訊
+            $latest   = $revenues[0];
+            $accK     = (int) round((float) ($latest['revenueAcc'] ?? 0) / 1000);
+            $lastAccK = isset($latest['lastYear']['revenueAcc'])
+                ? (int) round((float) $latest['lastYear']['revenueAcc'] / 1000)
+                : null;
+            $accYoY   = (float) ($latest['revenueYoYAcc'] ?? 0);
+            $dParts   = explode('-', substr($latest['date'], 0, 7));
+            $accLabel = substr($dParts[0], 2) . '/' . $dParts[1];
+            $accArrow = $accYoY >= 0 ? '▲' : '▼';
+
+            $reply .= "\n\n📊 累計（至{$accLabel}）：" . number_format($accK) . "仟";
+            if ($lastAccK !== null) {
+                $reply .= "\n   去年同期：" . number_format($lastAccK) . "仟"
+                        . "　年增{$accArrow}" . number_format(abs($accYoY), 1) . "%";
+            }
+        }
+
         return $reply;
     }
 
@@ -891,6 +932,43 @@ class TgWebhookController extends Controller
             return $result ?: null;
         } catch (\Exception $e) {
             Log::channel('tg_webhook')->warning('[TG Webhook] fetchInstitutional 失敗', [
+                'code'  => $code,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    // ─── Yahoo Finance：月營收 ───────────────────────────────────
+    private function fetchRevenue(string $code): ?array
+    {
+        $symbol  = $code . '.TW';
+        $baseUrl = getConfig('yahoo_revenue_base')
+            ?: 'https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.revenues';
+        $url = rtrim($baseUrl, '/') . ";period=month;symbol={$symbol}";
+
+        try {
+            $client = new Client(['timeout' => 10]);
+            $res    = $client->get($url, [
+                'query' => [
+                    'intl'   => 'tw',
+                    'lang'   => 'zh-Hant-TW',
+                    'region' => 'TW',
+                    'site'   => 'finance',
+                ],
+                'headers' => [
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'Referer'    => "https://tw.stock.yahoo.com/quote/{$symbol}",
+                    'Accept'     => 'application/json, text/plain, */*',
+                ],
+            ]);
+
+            $data     = json_decode((string) $res->getBody(), true);
+            $revenues = $data['data']['result']['revenues'] ?? [];
+
+            return !empty($revenues) ? array_slice($revenues, 0, 6) : null;
+        } catch (\Exception $e) {
+            Log::channel('tg_webhook')->warning('[TG Webhook] fetchRevenue 失敗', [
                 'code'  => $code,
                 'error' => $e->getMessage(),
             ]);
