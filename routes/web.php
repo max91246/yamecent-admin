@@ -103,6 +103,10 @@ Route::group([
 
         // TG 訊息記錄
         $route->get('tg-message/list',       'Admin\TgMessageController@tgMessageList');
+
+        // TG 持股管理
+        $route->get('tg-holding/list',       'Admin\TgHoldingController@holdingList');
+        $route->get('tg-holding/trade-list', 'Admin\TgHoldingController@tradeList');
     });
 
 });

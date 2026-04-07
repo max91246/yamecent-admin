@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\OilPrice;
 use App\TgBot;
 use App\TgHolding;
+use App\TgHoldingTrade;
 use App\TgMessage;
 use App\TgState;
 use App\Http\Controllers\Controller;
@@ -57,14 +58,21 @@ class TgWebhookController extends Controller
                 $this->setState($bot->id, $chatId, 'holding_step1');
                 $replyText = "➕ 請輸入要添加的股票代號\n（例如：2317）\n\n輸入「取消」可返回主選單";
 
-            // 刪除持股
-            } elseif (str_starts_with($data, 'holding_del_')) {
-                $holdingId = (int) substr($data, strlen('holding_del_'));
-                TgHolding::where('id', $holdingId)
+            // 賣出持股 — 進入賣出流程
+            } elseif (str_starts_with($data, 'holding_sell_')) {
+                $holdingId = (int) substr($data, strlen('holding_sell_'));
+                $holding   = TgHolding::where('id', $holdingId)
                     ->where('bot_id', $bot->id)
                     ->where('tg_chat_id', $chatId)
-                    ->delete();
-                [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
+                    ->first();
+                if ($holding) {
+                    $this->setState($bot->id, $chatId, 'sell_step1', ['holding_id' => $holdingId]);
+                    $replyText = "💰 賣出 {$holding->stock_name}（{$holding->stock_code}）\n"
+                               . "持有：{$holding->shares} 張\n\n"
+                               . "請輸入賣出張數（最多 {$holding->shares} 張）：\n\n輸入「取消」可返回";
+                } else {
+                    [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
+                }
             }
 
             if ($replyText !== null) {
@@ -159,6 +167,10 @@ class TgWebhookController extends Controller
                 return ["請點選上方按鈕選擇是否融資：\n\n輸入「取消」可返回主選單", null];
             case 'holding_step4':
                 return $this->handleHoldingStep4($bot, $chatId, $userId, $text, $stateObj);
+            case 'sell_step1':
+                return $this->handleSellStep1($bot, $chatId, $userId, $text, $stateObj);
+            case 'sell_step2':
+                return $this->handleSellStep2($bot, $chatId, $userId, $text, $stateObj);
             default:
                 $this->clearState($bot->id, $chatId);
                 return ['請選擇查詢項目：', $this->getMainKeyboard()];
@@ -278,6 +290,103 @@ class TgWebhookController extends Controller
                    . ($isMargin ? "（自備 40%）" : '');
 
         // 先送確認訊息，再回傳持股列表
+        $this->sendMessage($bot->token, $chatId, $confirm);
+
+        return $this->buildPortfolioReply($bot->id, $chatId);
+    }
+
+    // ─── 賣出：step1 輸入賣出張數 ────────────────────────────────
+    private function handleSellStep1(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj): array
+    {
+        if (!ctype_digit($text) || (int) $text <= 0) {
+            return ['❌ 請輸入有效的賣出張數（正整數）：', null];
+        }
+
+        $data      = $stateObj->state_data ?? [];
+        $holding   = TgHolding::where('id', $data['holding_id'])
+            ->where('bot_id', $bot->id)
+            ->where('tg_chat_id', $chatId)
+            ->first();
+
+        if (!$holding) {
+            $this->clearState($bot->id, $chatId);
+            return $this->buildPortfolioReply($bot->id, $chatId);
+        }
+
+        $sellShares = (int) $text;
+        if ($sellShares > $holding->shares) {
+            return ["❌ 持有只有 {$holding->shares} 張，請重新輸入：", null];
+        }
+
+        $data['sell_shares'] = $sellShares;
+        $this->setState($bot->id, $chatId, 'sell_step2', $data);
+
+        return [
+            "請輸入每股賣出價格（元）：\n"
+            . "例如：每股 55 就輸入 55\n\n輸入「取消」可返回",
+            null,
+        ];
+    }
+
+    // ─── 賣出：step2 輸入賣出價格，計算盈虧 ──────────────────────
+    private function handleSellStep2(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj): array
+    {
+        $sellPrice = (float) str_replace([',', '，'], '', $text);
+        if ($sellPrice <= 0) {
+            return ['❌ 請輸入有效的每股賣出價格（例如：55）：', null];
+        }
+
+        $data    = $stateObj->state_data ?? [];
+        $holding = TgHolding::where('id', $data['holding_id'])
+            ->where('bot_id', $bot->id)
+            ->where('tg_chat_id', $chatId)
+            ->first();
+
+        if (!$holding) {
+            $this->clearState($bot->id, $chatId);
+            return $this->buildPortfolioReply($bot->id, $chatId);
+        }
+
+        $sellShares  = (int) $data['sell_shares'];
+        $buyPrice    = (float) $holding->buy_price;
+        $isMargin    = (int) $holding->is_margin;
+
+        // 損益 = （賣出價 - 買進價）× 賣出張數 × 1000
+        $profit = ($sellPrice - $buyPrice) * $sellShares * 1000;
+
+        // 記錄交易
+        TgHoldingTrade::create([
+            'bot_id'      => $bot->id,
+            'tg_chat_id'  => $chatId,
+            'tg_user_id'  => $userId,
+            'stock_code'  => $holding->stock_code,
+            'stock_name'  => $holding->stock_name,
+            'sell_shares' => $sellShares,
+            'buy_price'   => $buyPrice,
+            'sell_price'  => $sellPrice,
+            'is_margin'   => $isMargin,
+            'profit'      => $profit,
+        ]);
+
+        // 更新或刪除持股
+        if ($sellShares >= $holding->shares) {
+            $holding->delete();
+        } else {
+            // 剩餘持股：成本按比例扣除
+            $remainShares = $holding->shares - $sellShares;
+            $newCost      = (float) $holding->total_cost * ($remainShares / $holding->shares);
+            $holding->update(['shares' => $remainShares, 'total_cost' => $newCost]);
+        }
+
+        $this->clearState($bot->id, $chatId);
+
+        $sign      = $profit >= 0 ? '+' : '';
+        $profitTag = $profit >= 0 ? '✅ 獲利' : '❌ 虧損';
+        $confirm   = "📤 賣出完成：\n"
+                   . "📌 {$holding->stock_name}（{$holding->stock_code}）{$sellShares} 張\n"
+                   . "💵 買進：NT$" . $buyPrice . "　賣出：NT$" . $sellPrice . "\n"
+                   . "{$profitTag}：{$sign}NT$" . number_format($profit, 0);
+
         $this->sendMessage($bot->token, $chatId, $confirm);
 
         return $this->buildPortfolioReply($bot->id, $chatId);
@@ -491,7 +600,7 @@ class TgWebhookController extends Controller
             $lines[] = "📌 {$h->stock_name}（{$h->stock_code}）{$h->shares}張·{$marginTag}{$buyStr}"
                      . "\n   現值：{$curValueStr}{$stockProfitStr}";
 
-            $delButtons[] = ['text' => "🗑 {$h->stock_code}", 'callback_data' => 'holding_del_' . $h->id];
+            $delButtons[] = ['text' => "💰 賣出 {$h->stock_code}", 'callback_data' => 'holding_sell_' . $h->id];
         }
 
         // 損益摘要：損益 = 現值合計 - 原始市值合計，報酬率 = 損益 / 自備款
@@ -557,7 +666,8 @@ class TgWebhookController extends Controller
             }
 
             // 股票名稱：優先使用 meta，其次 quote
-            $name = $meta['longName']
+            $name = $meta['name']
+                ?? $meta['longName']
                 ?? $meta['shortName']
                 ?? $quote['shortName']
                 ?? $quote['name']

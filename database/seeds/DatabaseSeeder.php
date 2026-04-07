@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             MemberSubmenuSeeder::class,
             CommentMenuSeeder::class,
             TgBotMenuSeeder::class,
+            TgHoldingMenuSeeder::class,
         ]);
     }
 }
