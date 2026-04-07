@@ -8,6 +8,7 @@ use App\TgHolding;
 use App\TgHoldingTrade;
 use App\TgMessage;
 use App\TgState;
+use App\TgWallet;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
@@ -75,6 +76,11 @@ class TgWebhookController extends Controller
                 } else {
                     [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
                 }
+
+            // 設定資金
+            } elseif ($data === 'set_capital') {
+                $this->setState($bot->id, $chatId, 'set_capital');
+                $replyText = "💰 設定資金總額\n請輸入您的資金總額（台幣整數，例如：1500000）：\n\n輸入「取消」可返回";
             }
 
             if ($replyText !== null) {
@@ -173,6 +179,8 @@ class TgWebhookController extends Controller
                 return $this->handleSellStep1($bot, $chatId, $userId, $text, $stateObj);
             case 'sell_step2':
                 return $this->handleSellStep2($bot, $chatId, $userId, $text, $stateObj);
+            case 'set_capital':
+                return $this->handleSetCapital($bot, $chatId, $userId, $text);
             default:
                 $this->clearState($bot->id, $chatId);
                 return ['請選擇查詢項目：', $this->getMainKeyboard()];
@@ -281,6 +289,15 @@ class TgWebhookController extends Controller
             'buy_price'  => $buyPrice,
         ]);
 
+        // 扣除帳戶資金（若已設定）
+        $walletRow = TgWallet::where('bot_id', $bot->id)
+            ->where('tg_chat_id', $chatId)
+            ->where('tg_user_id', $userId)
+            ->first();
+        if ($walletRow) {
+            $walletRow->decrement('capital', $cost);
+        }
+
         $this->clearState($bot->id, $chatId);
 
         $marginTag = $isMargin ? '融資' : '現股';
@@ -381,6 +398,10 @@ class TgWebhookController extends Controller
             'profit'      => $profit,
         ]);
 
+        // 計算回款（在更新持股前讀取原始張數與成本）
+        $proportionalCost = (float) $holding->total_cost * ($sellShares / $holding->shares);
+        $walletAdd        = $proportionalCost + $profit;
+
         // 更新或刪除持股
         if ($sellShares >= $holding->shares) {
             $holding->delete();
@@ -389,6 +410,15 @@ class TgWebhookController extends Controller
             $remainShares = $holding->shares - $sellShares;
             $newCost      = (float) $holding->total_cost * ($remainShares / $holding->shares);
             $holding->update(['shares' => $remainShares, 'total_cost' => $newCost]);
+        }
+
+        // 回款至帳戶資金（若已設定）
+        $walletRow = TgWallet::where('bot_id', $bot->id)
+            ->where('tg_chat_id', $chatId)
+            ->where('tg_user_id', $userId)
+            ->first();
+        if ($walletRow) {
+            $walletRow->increment('capital', $walletAdd);
         }
 
         $this->clearState($bot->id, $chatId);
@@ -403,6 +433,25 @@ class TgWebhookController extends Controller
                    . "{$profitTag}：{$sign}NT$" . number_format($profit, 0);
 
         $this->sendMessage($bot->token, $chatId, $confirm);
+
+        return $this->buildPortfolioReply($bot->id, $chatId);
+    }
+
+    // ─── 設定資金總額 ────────────────────────────────────────────
+    private function handleSetCapital(TgBot $bot, int $chatId, string $userId, string $text): array
+    {
+        $amount = (float) str_replace([',', '，', '$', 'NT$', ' '], '', $text);
+        if ($amount <= 0) {
+            return ['❌ 請輸入有效金額（正整數，例如：1500000）：', null];
+        }
+
+        TgWallet::updateOrCreate(
+            ['bot_id' => $bot->id, 'tg_chat_id' => $chatId, 'tg_user_id' => $userId],
+            ['capital' => $amount]
+        );
+
+        $this->clearState($bot->id, $chatId);
+        $this->sendMessage($bot->token, $chatId, '✅ 資金總額已設定為 NT$' . number_format($amount, 0));
 
         return $this->buildPortfolioReply($bot->id, $chatId);
     }
@@ -587,17 +636,21 @@ class TgWebhookController extends Controller
             ->where('tg_chat_id', $chatId)
             ->get();
 
-        $addButton = [['text' => '➕ 添加持股', 'callback_data' => 'holding_add']];
+        $addButton  = [['text' => '➕ 添加持股', 'callback_data' => 'holding_add']];
+        $capitalBtn = [['text' => '⚙️ 設定資金', 'callback_data' => 'set_capital']];
 
         if ($holdings->isEmpty()) {
             return [
                 "💼 我的持股\n\n目前沒有持股記錄。",
-                ['inline_keyboard' => [$addButton]],
+                ['inline_keyboard' => [$addButton, $capitalBtn]],
             ];
         }
 
         $feeRate = 0.001425;
         $taxRate = 0.003;
+
+        $wallet          = TgWallet::where('bot_id', $botId)->where('tg_chat_id', $chatId)->first();
+        $capital         = $wallet ? (float) $wallet->capital : null;
 
         $totalSelfCost   = 0;  // 自備款合計
         $totalOriginVal  = 0;  // 買進原始市值合計
@@ -659,10 +712,21 @@ class TgWebhookController extends Controller
                         . "　自備報酬：{$sign}" . number_format($roi, 2) . "%";
         }
 
+        // 帳戶資金區塊
+        if ($capital !== null) {
+            $available    = $capital - $totalSelfCost;
+            $warning      = $available < 0 ? ' ⚠️' : '';
+            $profitStr   .= "\n\n💰 帳戶資金：NT$" . number_format($capital, 0)
+                          . "\n   ├ 持股占用：NT$" . number_format($totalSelfCost, 0)
+                          . "\n   └ 剩餘可用：NT$" . number_format($available, 0) . $warning;
+        } else {
+            $profitStr .= "\n\n💰 帳戶資金：未設定（點擊⚙️設定資金）";
+        }
+
         $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr;
 
-        // Inline keyboard：添加 + 刪除（每排最多2個）
-        $inlineRows   = [$addButton];
+        // Inline keyboard：添加 + 設定資金 + 賣出（每排最多2個）
+        $inlineRows = [$addButton, $capitalBtn];
         foreach (array_chunk($delButtons, 2) as $row) {
             $inlineRows[] = $row;
         }
