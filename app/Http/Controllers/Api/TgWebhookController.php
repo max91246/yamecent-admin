@@ -264,6 +264,7 @@ class TgWebhookController extends Controller
             'shares'     => $shares,
             'is_margin'  => $isMargin,
             'total_cost' => $cost,
+            'buy_price'  => $buyPrice,
         ]);
 
         $this->clearState($bot->id, $chatId);
@@ -452,42 +453,54 @@ class TgWebhookController extends Controller
             ];
         }
 
-        $totalCost  = 0;
-        $totalValue = 0;
-        $lines      = [];
-        $delButtons = [];
+        $totalSelfCost   = 0;  // 自備款合計（現股=全額，融資=40%）
+        $totalOriginVal  = 0;  // 買進時原始市值合計
+        $totalCurrentVal = 0;  // 當前市值合計
+        $lines           = [];
+        $delButtons      = [];
 
         foreach ($holdings as $h) {
-            $quote = $this->fetchStockQuote($h->stock_code);
-            $price = $quote ? (float) $quote['price'] : null;
-            $value = $price !== null ? $price * $h->shares * 1000 : null;
+            $quote       = $this->fetchStockQuote($h->stock_code);
+            $curPrice    = $quote ? (float) $quote['price'] : null;
+            $curValue    = $curPrice !== null ? $curPrice * $h->shares * 1000 : null;
+            $buyPrice    = (float) $h->buy_price;
+            $originValue = $buyPrice > 0 ? $buyPrice * $h->shares * 1000 : (float) $h->total_cost;
+            $selfCost    = (float) $h->total_cost;
 
-            $totalCost += (float) $h->total_cost;
-            if ($value !== null) {
-                $totalValue += $value;
+            $totalSelfCost   += $selfCost;
+            $totalOriginVal  += $originValue;
+            if ($curValue !== null) {
+                $totalCurrentVal += $curValue;
             }
 
-            $marginTag = $h->is_margin ? '融資' : '現股';
-            $valueStr  = $value !== null
-                ? 'NT$' . number_format($value, 0)
-                : '查詢失敗';
+            $marginTag   = $h->is_margin ? '融資' : '現股';
+            $curValueStr = $curValue !== null ? 'NT$' . number_format($curValue, 0) : '查詢失敗';
 
-            $costStr = 'NT$' . number_format((float) $h->total_cost, 0);
-            $lines[] = "📌 {$h->stock_name}（{$h->stock_code}）{$h->shares}張·{$marginTag}"
-                     . "\n   成本：{$costStr}　現值：{$valueStr}";
+            // 個股損益 = 現值 - 原始市值
+            $stockProfit    = $curValue !== null ? $curValue - $originValue : null;
+            $stockProfitStr = '';
+            if ($stockProfit !== null) {
+                $sign           = $stockProfit >= 0 ? '+' : '';
+                $stockProfitStr = "　損益：{$sign}NT$" . number_format($stockProfit, 0);
+            }
+
+            $buyStr  = $buyPrice > 0 ? "　買進：NT$" . $buyPrice : '';
+            $lines[] = "📌 {$h->stock_name}（{$h->stock_code}）{$h->shares}張·{$marginTag}{$buyStr}"
+                     . "\n   現值：{$curValueStr}{$stockProfitStr}";
 
             $delButtons[] = ['text' => "🗑 {$h->stock_code}", 'callback_data' => 'holding_del_' . $h->id];
         }
 
-        // 損益摘要
-        $profitStr = "\n\n📊 總成本：NT$" . number_format($totalCost, 0);
-        if ($totalValue > 0) {
-            $profit    = $totalValue - $totalCost;
-            $profitPct = $totalCost > 0 ? ($profit / $totalCost * 100) : 0;
+        // 損益摘要：損益 = 現值合計 - 原始市值合計，報酬率 = 損益 / 自備款
+        $profitStr = "\n\n📊 自備成本：NT$" . number_format($totalSelfCost, 0)
+                   . "　原始市值：NT$" . number_format($totalOriginVal, 0);
+        if ($totalCurrentVal > 0) {
+            $profit    = $totalCurrentVal - $totalOriginVal;
+            $roi       = $totalSelfCost > 0 ? ($profit / $totalSelfCost * 100) : 0;
             $sign      = $profit >= 0 ? '+' : '';
-            $profitStr .= "\n📈 現值合計：NT$" . number_format($totalValue, 0)
+            $profitStr .= "\n📈 現值合計：NT$" . number_format($totalCurrentVal, 0)
                         . "\n💹 損益：{$sign}NT$" . number_format($profit, 0)
-                        . "（{$sign}" . number_format($profitPct, 2) . "%）";
+                        . "　自備報酬：{$sign}" . number_format($roi, 2) . "%";
         }
 
         $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr;

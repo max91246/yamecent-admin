@@ -17,5 +17,6 @@ class TgHolding extends Model
         'shares',
         'is_margin',
         'total_cost',
+        'buy_price',
     ];
 }
