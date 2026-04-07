@@ -9,8 +9,10 @@ use App\TgHoldingTrade;
 use App\TgMessage;
 use App\TgState;
 use App\Http\Controllers\Controller;
+use Carbon\Carbon;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -656,8 +658,49 @@ class TgWebhookController extends Controller
     }
 
     // ─── Yahoo Finance：股票現價 ──────────────────────────────────
+    // ─── 股價快取 TTL 計算 ────────────────────────────────────────
+    // 台股交易時間：週一～五 09:00～13:30
+    // 盤中：快取 5 分鐘
+    // 盤後/假日：快取到下一個交易日 09:00
+    private function stockCacheTtl(): int
+    {
+        $now = Carbon::now('Asia/Taipei');
+
+        $isWeekday    = $now->isWeekday();                          // 週一～五
+        $afterOpen    = $now->format('H:i') >= '09:00';
+        $beforeClose  = $now->format('H:i') <  '13:30';
+        $inTradingHrs = $isWeekday && $afterOpen && $beforeClose;
+
+        if ($inTradingHrs) {
+            return 300; // 盤中 5 分鐘
+        }
+
+        // 找下一個交易日 09:00
+        $next = $now->copy()->setTimeFromTimeString('09:00:00');
+
+        // 若今天是交易日但還沒開盤（早於 09:00），就是今天
+        if ($isWeekday && !$afterOpen) {
+            // $next 已是今天 09:00，無需調整
+        } else {
+            // 已過盤後或今天是假日 → 往後找
+            $next->addDay();
+            while (!$next->isWeekday()) {
+                $next->addDay();
+            }
+        }
+
+        $seconds = max(60, (int) $now->diffInSeconds($next));
+        return $seconds;
+    }
+
     private function fetchStockQuote(string $code): ?array
     {
+        $cacheKey    = 'tw-' . strtoupper($code);
+        $cachedData  = Cache::get($cacheKey);
+        if ($cachedData !== null) {
+            return $cachedData;
+        }
+
         $symbolsJson = json_encode([$code . '.TW']);
         $symbolsEnc  = rawurlencode($symbolsJson);
         $url         = "https://tw.stock.yahoo.com/_td-stock/api/resource/FinanceChartService.ApacLibraCharts;period=d;symbols={$symbolsEnc}";
@@ -702,13 +745,17 @@ class TgWebhookController extends Controller
                 ?? $quote['name']
                 ?? $code;
 
-            return [
+            $result = [
                 'name'           => $name,
                 'price'          => $price,
                 'priceChange'    => $quote['priceChange']      ?? $quote['change']          ?? null,
                 'priceChangePct' => $quote['priceChangePercent'] ?? $quote['changePercent'] ?? null,
                 'volume'         => $quote['volume']           ?? null,
             ];
+
+            Cache::put($cacheKey, $result, $this->stockCacheTtl());
+
+            return $result;
         } catch (\Exception $e) {
             Log::channel('tg_webhook')->warning('[TG Webhook] fetchStockQuote 失敗', [
                 'code'  => $code,
