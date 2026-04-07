@@ -17,13 +17,10 @@ class FetchOilPrice extends Command
 
     protected $description = '獲取布蘭特原油 5 分K 並存 DB；暴漲暴跌時發送 Telegram 告警';
 
-    const FINVIZ_URL     = 'https://finviz.com/api/quote.ashx';
     const TG_API         = 'https://api.telegram.org/bot%s/sendMessage';
     const TICKER         = 'QA';
     const TW_TICKER      = 'WTX';
     const VIX_TICKER     = 'VIX';
-    const TW_INDEX_URL   = 'https://tw.stock.yahoo.com/_td-stock/api/resource/FinanceChartService.ApacLibraCharts;symbols=%5B%22WTX%26%22%5D;type=tick';
-    const VIX_URL        = 'https://query2.finance.yahoo.com/v8/finance/chart/%5EVIX';
 
     // 告警閾值
     const ALERT_5M_PCT        = 1.0;   // 原油：當前+前一根 K 棒合併振幅超過 1% 告警
@@ -153,7 +150,7 @@ class FetchOilPrice extends Command
     {
         $client = new Client(['timeout' => 10]);
         try {
-            $res = $client->get(self::VIX_URL, [
+            $res = $client->get(getConfig('vix_api_url'), [
                 'query' => [
                     'interval'       => '5m',
                     'range'          => '1d',
@@ -291,7 +288,7 @@ class FetchOilPrice extends Command
     {
         $client = new Client(['timeout' => 10]);
         try {
-            $res = $client->get(self::TW_INDEX_URL, [
+            $res = $client->get(getConfig('tw_index_api_url'), [
                 'query' => [
                     'intl'       => 'tw',
                     'lang'       => 'zh-Hant-TW',
@@ -511,7 +508,7 @@ class FetchOilPrice extends Command
         $rev      = (int) round(microtime(true) * 1000);
 
         try {
-            $res = $client->get(self::FINVIZ_URL, [
+            $res = $client->get(getConfig('finviz_api_url'), [
                 'query' => [
                     'aftermarket'          => '0',
                     'chartEventsVersion'   => '2',

@@ -57,6 +57,7 @@ class ConfigController extends Controller
         $data   = $request->post();
         $config->fill($data);
         $config->save();
+        clearConfigCache($config->config_key);
         return $this->json(200, '修改成功');
     }
 
@@ -68,7 +69,9 @@ class ConfigController extends Controller
      */
     public function configDel($id)
     {
-        AdminConfig::findOrFail($id)->delete();
+        $config = AdminConfig::findOrFail($id);
+        clearConfigCache($config->config_key);
+        $config->delete();
         return $this->json(200, '删除成功');
     }
 }

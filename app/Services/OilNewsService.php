@@ -7,21 +7,9 @@ use GuzzleHttp\Client;
 class OilNewsService
 {
     /**
-     * RSS 來源清單（原油 / 能源 / 大宗商品 / 地緣政治）
+     * RSS 來源清單（從 admin_configs 載入，fallback 至空陣列）
      */
-    private array $feeds = [
-        // 原油市場
-        'OilPrice.com'     => 'https://oilprice.com/rss/main',
-        'Reuters Business' => 'https://feeds.reuters.com/reuters/businessNews',
-        'CNBC Energy'      => 'https://www.cnbc.com/id/10000664/device/rss/rss.html',
-        'Investing.com'    => 'https://www.investing.com/rss/news_285.rss',
-        'MarketWatch'      => 'https://feeds.content.dowjones.io/public/rss/mw_marketpulse',
-        // 地緣政治（美伊戰爭 / 川普 / 中東）
-        'Google News: 美伊油價' => 'https://news.google.com/rss/search?q=iran+oil+trump+war&hl=en-US&gl=US&ceid=US:en',
-        'Google News: 伊朗制裁' => 'https://news.google.com/rss/search?q=iran+sanctions+nuclear+oil&hl=en-US&gl=US&ceid=US:en',
-        'Reuters World'    => 'https://feeds.reuters.com/reuters/worldNews',
-        'BBC Middle East'  => 'https://feeds.bbci.co.uk/news/world/middle_east/rss.xml',
-    ];
+    private array $feeds;
 
     /**
      * 過濾關鍵字（原油市場 + 地緣政治）
@@ -42,6 +30,9 @@ class OilNewsService
 
     public function __construct()
     {
+        $feedsJson   = getConfig('oil_news_feeds');
+        $this->feeds = $feedsJson ? (json_decode($feedsJson, true) ?? []) : [];
+
         $this->client = new Client([
             'timeout'         => 10,
             'connect_timeout' => 5,

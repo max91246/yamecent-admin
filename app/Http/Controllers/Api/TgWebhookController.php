@@ -716,7 +716,8 @@ class TgWebhookController extends Controller
 
         $symbolsJson = json_encode([$code . '.TW']);
         $symbolsEnc  = rawurlencode($symbolsJson);
-        $url         = "https://tw.stock.yahoo.com/_td-stock/api/resource/FinanceChartService.ApacLibraCharts;period=d;symbols={$symbolsEnc}";
+        $base        = rtrim(getConfig('yahoo_stock_chart_base'), '/');
+        $url         = "{$base};period=d;symbols={$symbolsEnc}";
 
         try {
             $client = new Client(['timeout' => 10]);
@@ -782,7 +783,8 @@ class TgWebhookController extends Controller
     private function fetchInstitutional(string $code): ?array
     {
         $symbol = $code . '.TW';
-        $url    = "https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.tradesWithQuoteStats;limit=10;period=day;symbol={$symbol}";
+        $base   = rtrim(getConfig('yahoo_institutional_base'), '/');
+        $url    = "{$base};limit=10;period=day;symbol={$symbol}";
 
         try {
             $client = new Client(['timeout' => 10]);
