@@ -562,10 +562,10 @@ class TgWebhookController extends Controller
                 ],
             ]);
 
-            $data   = json_decode((string) $res->getBody(), true);
-            $trades = $data['data']['trades'] ?? $data['trades'] ?? [];
+            $data = json_decode((string) $res->getBody(), true);
+            $list = $data['list'] ?? [];
 
-            if (empty($trades)) {
+            if (empty($list)) {
                 Log::channel('tg_webhook')->info('[TG Webhook] fetchInstitutional 無資料', [
                     'code' => $code,
                     'raw'  => array_keys($data ?? []),
@@ -574,33 +574,14 @@ class TgWebhookController extends Controller
             }
 
             $result = [];
-            foreach ($trades as $row) {
-                $date  = substr($row['date'] ?? '', 0, 10);
-                $items = [];
-
-                foreach ($row['items'] ?? [] as $item) {
-                    $type = $item['type'] ?? '';
-                    $net  = $item['netBuySell'] ?? $item['net'] ?? null;
-
-                    if ($net !== null) {
-                        // 轉換為張（若單位是股則除以1000）
-                        $netVal = abs($net) >= 1000 ? (int) round($net / 1000) : (int) $net;
-                    } else {
-                        $netVal = null;
-                    }
-
-                    if (in_array($type, ['SITC', 'Foreign', 'foreign'])) {
-                        $items['foreign'] = $netVal;
-                    } elseif (in_array($type, ['Trust', 'trust'])) {
-                        $items['trust'] = $netVal;
-                    } elseif (in_array($type, ['Dealer', 'dealer'])) {
-                        $items['dealer'] = $netVal;
-                    }
-                }
-
-                if ($date) {
-                    $result[] = array_merge(['date' => $date], $items);
-                }
+            foreach ($list as $row) {
+                // 欄位單位已是張（VolK = 千股 = 張）
+                $result[] = [
+                    'date'    => $row['formattedDate'] ?? substr($row['date'] ?? '', 0, 10),
+                    'foreign' => isset($row['foreignDiffVolK'])          ? (int) $row['foreignDiffVolK']          : null,
+                    'trust'   => isset($row['investmentTrustDiffVolK'])  ? (int) $row['investmentTrustDiffVolK']  : null,
+                    'dealer'  => isset($row['dealerDiffVolK'])           ? (int) $row['dealerDiffVolK']           : null,
+                ];
             }
 
             return $result ?: null;
