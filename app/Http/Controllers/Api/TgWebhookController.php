@@ -665,6 +665,18 @@ class TgWebhookController extends Controller
                 return null;
             }
 
+            // debug：記錄 meta/quote 的所有 key
+            Log::channel('tg_webhook')->info('[fetchStockQuote] meta keys', [
+                'code'       => $code,
+                'meta_keys'  => array_keys($meta),
+                'quote_keys' => array_keys($quote),
+                'meta_name'  => $meta['name']      ?? null,
+                'meta_long'  => $meta['longName']  ?? null,
+                'meta_short' => $meta['shortName'] ?? null,
+                'q_name'     => $quote['name']     ?? null,
+                'q_short'    => $quote['shortName'] ?? null,
+            ]);
+
             // 股票名稱：優先使用 meta，其次 quote
             $name = $meta['name']
                 ?? $meta['longName']
