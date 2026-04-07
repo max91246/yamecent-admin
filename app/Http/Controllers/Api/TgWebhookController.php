@@ -351,8 +351,19 @@ class TgWebhookController extends Controller
         $buyPrice    = (float) $holding->buy_price;
         $isMargin    = (int) $holding->is_margin;
 
-        // 損益 = （賣出價 - 買進價）× 賣出張數 × 1000
-        $profit = ($sellPrice - $buyPrice) * $sellShares * 1000;
+        $buyValue  = $buyPrice  * $sellShares * 1000;
+        $sellValue = $sellPrice * $sellShares * 1000;
+
+        // 交易成本
+        $feeRate      = 0.001425; // 手續費 0.1425%（買賣皆收）
+        $taxRate      = 0.003;    // 交易稅 0.3%（僅賣出）
+        $buyFee       = ceil($buyValue  * $feeRate); // 買進手續費（無條件進位）
+        $sellFee      = ceil($sellValue * $feeRate); // 賣出手續費
+        $sellTax      = ceil($sellValue * $taxRate); // 證券交易稅
+        $totalCost    = $buyFee + $sellFee + $sellTax;
+
+        // 損益 = 賣出價值 - 買進價值 - 交易成本
+        $profit = $sellValue - $buyValue - $totalCost;
 
         // 記錄交易
         TgHoldingTrade::create([
@@ -385,6 +396,8 @@ class TgWebhookController extends Controller
         $confirm   = "📤 賣出完成：\n"
                    . "📌 {$holding->stock_name}（{$holding->stock_code}）{$sellShares} 張\n"
                    . "💵 買進：NT$" . $buyPrice . "　賣出：NT$" . $sellPrice . "\n"
+                   . "💸 手續費：NT$" . number_format($buyFee + $sellFee, 0)
+                   . "　交易稅：NT$" . number_format($sellTax, 0) . "\n"
                    . "{$profitTag}：{$sign}NT$" . number_format($profit, 0);
 
         $this->sendMessage($bot->token, $chatId, $confirm);
