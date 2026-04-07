@@ -98,6 +98,13 @@ class TgWebhookController extends Controller
                 $stateObj = $this->getState($bot->id, $chatId);
                 $state    = $stateObj ? $stateObj->state : null;
 
+                // 主選單按鈕優先：不論目前狀態，按到主選單直接跳過去
+                if ($state && $this->isMainMenuText($text)) {
+                    $this->clearState($bot->id, $chatId);
+                    $stateObj = null;
+                    $state    = null;
+                }
+
                 if ($state) {
                     [$replyText, $replyMarkup] = $this->handleState($bot, $chatId, $userId, $text, $stateObj);
                 } else {
@@ -636,6 +643,16 @@ class TgWebhookController extends Controller
     }
 
     // ─── 輔助 ────────────────────────────────────────────────────
+    private function isMainMenuText(string $text): bool
+    {
+        return str_contains($text, '布蘭特原油')
+            || str_contains($text, '台指期貨')
+            || str_contains($text, 'VIX')
+            || str_contains($text, '恐慌指數')
+            || str_contains($text, '台股查詢')
+            || str_contains($text, '我的持股');
+    }
+
     private function getMainKeyboard(): array
     {
         return [
