@@ -321,7 +321,14 @@ class FetchOilPrice extends Command
         // refreshedTs 是 UTC，date() 已依 app timezone (Asia/Taipei) 自動轉換
         $refreshedAt = null;
         if (!empty($quote['refreshedTs'])) {
-            $ts          = strtotime($quote['refreshedTs']);
+            $ts = strtotime($quote['refreshedTs']);
+
+            // 若資料超過 15 分鐘未更新，視為休市，略過
+            if ($ts < time() - 900) {
+                $this->line('  [台指] 資料已超過 15 分鐘未更新（' . date('Y-m-d H:i:s', $ts) . '），視為休市，略過');
+                return [null, null];
+            }
+
             $refreshedAt = date('Y-m-d H:i:s', $ts);
         }
 
