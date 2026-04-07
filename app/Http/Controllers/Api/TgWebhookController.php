@@ -270,14 +270,17 @@ class TgWebhookController extends Controller
         $this->clearState($bot->id, $chatId);
 
         $marginTag = $isMargin ? '融資' : '現股';
-        $reply     = "✅ 已添加持股：\n"
+        $confirm   = "✅ 已添加持股：\n"
                    . "📌 {$data['name']}（{$data['code']}）\n"
                    . "📦 {$shares} 張 · {$marginTag}\n"
                    . "💵 買進價：NT$" . $buyPrice . "　市值：NT$" . number_format($marketVal, 0) . "\n"
                    . "💰 持有成本：NT$" . number_format($cost, 0)
                    . ($isMargin ? "（自備 40%）" : '');
 
-        return [$reply, null];
+        // 先送確認訊息，再回傳持股列表
+        $this->sendMessage($bot->token, $chatId, $confirm);
+
+        return $this->buildPortfolioReply($bot->id, $chatId);
     }
 
     // ─── 回覆組建：油價 ──────────────────────────────────────────
