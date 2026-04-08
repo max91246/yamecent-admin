@@ -733,8 +733,23 @@ class TgWebhookController extends Controller
                 $stockProfitStr = "\n   稅費：{$txCostStr}（買費+賣費+稅）　淨損益：{$sign}NT$" . number_format($stockProfit, 0);
             }
 
-            $buyStr  = $buyPrice > 0 ? "　買進：NT$" . $buyPrice : '';
+            $buyStr = $buyPrice > 0 ? "　買進：NT$" . $buyPrice : '';
+
+            // 當前價格與漲跌幅
+            $curPriceStr = '';
+            if ($quote && $curPrice !== null) {
+                $diff  = isset($quote['priceChange'])    ? (float) $quote['priceChange']    : null;
+                $pct   = isset($quote['priceChangePct']) ? (float) $quote['priceChangePct'] : null;
+                $curPriceStr = "\n   現價：NT$" . $curPrice;
+                if ($diff !== null && $pct !== null) {
+                    $s = $diff >= 0 ? '+' : '';
+                    $a = $diff >= 0 ? '📈' : '📉';
+                    $curPriceStr .= "　{$a}{$s}" . number_format($diff, 2) . "（{$s}" . number_format($pct, 2) . "%）";
+                }
+            }
+
             $lines[] = "📌 {$h->stock_name}（{$h->stock_code}）{$h->shares}張·{$marginTag}{$buyStr}"
+                     . $curPriceStr
                      . "\n   現值：{$curValueStr}{$stockProfitStr}";
 
             $delButtons[] = ['text' => "💰 賣出 {$h->stock_code}", 'callback_data' => 'holding_sell_' . $h->id];
