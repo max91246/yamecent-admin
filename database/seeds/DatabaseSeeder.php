@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             TgHoldingMenuSeeder::class,
             ApiUrlConfigSeeder::class,
             RevenueUrlConfigSeeder::class,
+            MarginRateConfigSeeder::class,
         ]);
     }
 }

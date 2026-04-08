@@ -758,12 +758,16 @@ class TgWebhookController extends Controller
         $wallet          = TgWallet::where('bot_id', $botId)->where('tg_chat_id', $chatId)->first();
         $capital         = $wallet ? (float) $wallet->capital : null;
 
-        $totalSelfCost   = 0;  // 自備款合計
-        $totalOriginVal  = 0;  // 買進原始市值合計
-        $totalCurrentVal = 0;  // 當前市值合計
-        $totalTxCost     = 0;  // 預估交易成本合計（買進手續費 + 賣出手續費+稅）
-        $lines           = [];
-        $delButtons      = [];
+        // 融資年利率（從 admin_configs 取得，預設 6.5%）
+        $marginAnnualRate = (float) (getConfig('margin_interest_rate') ?: 6.5) / 100;
+
+        $totalSelfCost    = 0;  // 自備款合計
+        $totalOriginVal   = 0;  // 買進原始市值合計
+        $totalCurrentVal  = 0;  // 當前市值合計
+        $totalTxCost      = 0;  // 預估交易成本合計（買進手續費 + 賣出手續費+稅）
+        $totalInterest    = 0;  // 融資利息合計
+        $lines            = [];
+        $delButtons       = [];
 
         foreach ($holdings as $h) {
             $quote       = $this->fetchStockQuote($h->stock_code);
@@ -779,9 +783,19 @@ class TgWebhookController extends Controller
             $sellTax  = $curValue  !== null ? (int) ceil($curValue * $taxRate)  : 0;
             $txCost   = $buyFee + $sellFee + $sellTax;
 
+            // 融資利息：融資金額 × 年利率 × 持有天數 / 365
+            // 融資金額 = 原始市值 × 60%（= total_cost / 0.4 × 0.6 = total_cost × 1.5）
+            $interest = 0;
+            if ($h->is_margin && $buyPrice > 0) {
+                $loanAmount  = $originValue * 0.6;
+                $daysHeld    = max(1, (int) $h->created_at->diffInDays(now()));
+                $interest    = (int) round($loanAmount * $marginAnnualRate * $daysHeld / 365);
+            }
+
             $totalSelfCost   += $selfCost;
             $totalOriginVal  += $originValue;
             $totalTxCost     += $txCost;
+            $totalInterest   += $interest;
             if ($curValue !== null) {
                 $totalCurrentVal += $curValue;
             }
@@ -789,13 +803,14 @@ class TgWebhookController extends Controller
             $marginTag   = $h->is_margin ? '融資' : '現股';
             $curValueStr = $curValue !== null ? 'NT$' . number_format($curValue, 0) : '查詢失敗';
 
-            // 個股淨損益 = 現值 - 原始市值 - 交易成本
-            $stockProfit    = $curValue !== null ? $curValue - $originValue - $txCost : null;
+            // 個股淨損益 = 現值 - 原始市值 - 交易成本 - 融資利息
+            $stockProfit    = $curValue !== null ? $curValue - $originValue - $txCost - $interest : null;
             $stockProfitStr = '';
             if ($stockProfit !== null) {
-                $sign           = $stockProfit >= 0 ? '+' : '';
-                $txCostStr      = 'NT$' . number_format($txCost, 0);
-                $stockProfitStr = "\n   稅費：{$txCostStr}（買費+賣費+稅）　淨損益：{$sign}NT$" . number_format($stockProfit, 0);
+                $sign        = $stockProfit >= 0 ? '+' : '';
+                $txCostStr   = 'NT$' . number_format($txCost, 0);
+                $interestStr = $interest > 0 ? "　利息：NT$" . number_format($interest, 0) . "（{$daysHeld}天）" : '';
+                $stockProfitStr = "\n   稅費：{$txCostStr}（買費+賣費+稅）{$interestStr}　淨損益：{$sign}NT$" . number_format($stockProfit, 0);
             }
 
             $buyStr = $buyPrice > 0 ? "　買進：NT$" . $buyPrice : '';
@@ -824,12 +839,16 @@ class TgWebhookController extends Controller
         $profitStr = "\n\n📊 自備成本：NT$" . number_format($totalSelfCost, 0)
                    . "　原始市值：NT$" . number_format($totalOriginVal, 0);
         if ($totalCurrentVal > 0) {
-            $netProfit = $totalCurrentVal - $totalOriginVal - $totalTxCost;
+            $netProfit = $totalCurrentVal - $totalOriginVal - $totalTxCost - $totalInterest;
             $roi       = $totalSelfCost > 0 ? ($netProfit / $totalSelfCost * 100) : 0;
             $sign      = $netProfit >= 0 ? '+' : '';
             $profitStr .= "\n📈 現值合計：NT$" . number_format($totalCurrentVal, 0)
-                        . "\n💸 預估稅費：NT$" . number_format($totalTxCost, 0)
-                        . "\n💹 淨損益：{$sign}NT$" . number_format($netProfit, 0)
+                        . "\n💸 預估稅費：NT$" . number_format($totalTxCost, 0);
+            if ($totalInterest > 0) {
+                $profitStr .= "\n📋 融資利息：NT$" . number_format($totalInterest, 0)
+                            . "（年利率 " . number_format($marginAnnualRate * 100, 1) . "%）";
+            }
+            $profitStr .= "\n💹 淨損益：{$sign}NT$" . number_format($netProfit, 0)
                         . "　自備報酬：{$sign}" . number_format($roi, 2) . "%";
         }
 
