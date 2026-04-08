@@ -860,19 +860,7 @@ class TgWebhookController extends Controller
                         . "　自備報酬：{$sign}" . number_format($roi, 2) . "%";
         }
 
-        // 帳戶資金區塊
-        // $capital 是 running balance（買入時已扣款），本身即剩餘可用現金
-        if ($capital !== null) {
-            $totalCapital = $capital + $totalSelfCost;  // 反推帳戶總資金
-            $warning      = $capital < 0 ? ' ⚠️' : '';
-            $profitStr   .= "\n\n💰 帳戶總資金：NT$" . number_format($totalCapital, 0)
-                          . "\n   ├ 持股占用：NT$" . number_format($totalSelfCost, 0)
-                          . "\n   └ 剩餘可用：NT$" . number_format($capital, 0) . $warning;
-        } else {
-            $profitStr .= "\n\n💰 帳戶資金：未設定（點擊⚙️設定資金）";
-        }
-
-        // T+2 待交割款項
+        // T+2 待交割款項（先查出來，讓資金區塊可以扣除）
         $today       = Carbon::now('Asia/Taipei')->toDateString();
         $settlements = TgSettlement::where('bot_id', $botId)
             ->where('tg_chat_id', $chatId)
@@ -880,6 +868,8 @@ class TgWebhookController extends Controller
             ->where('settle_date', '>=', $today)
             ->orderBy('settle_date')
             ->get();
+
+        $totalPendingSettle = (float) $settlements->sum('settlement_amount');
 
         $settleStr = '';
         if ($settlements->isNotEmpty()) {
@@ -890,8 +880,27 @@ class TgWebhookController extends Controller
                             . "\n   💳 交割日：" . $s->settle_date->format('m/d')
                             . "　應付：NT$" . number_format($s->settlement_amount, 0);
             }
-            $totalSettle = $settlements->sum('settlement_amount');
-            $settleStr  .= "\n   合計應付：NT$" . number_format($totalSettle, 0);
+            $settleStr .= "\n   合計應付：NT$" . number_format($totalPendingSettle, 0);
+        }
+
+        // 帳戶資金區塊
+        // $capital = 帳戶現金餘額（已含過去扣款紀錄）
+        // 剩餘可用 = capital - 待交割款（尚未扣款但即將支出）
+        if ($capital !== null) {
+            $totalCapital  = $capital + $totalSelfCost;  // 反推帳戶總資金（含持股）
+            $afterSettle   = $capital - $totalPendingSettle;
+            $warning       = $afterSettle < 0 ? ' ⚠️' : '';
+            $profitStr    .= "\n\n💰 帳戶總資金：NT$" . number_format($totalCapital, 0)
+                           . "\n   ├ 持股占用：NT$" . number_format($totalSelfCost, 0)
+                           . "\n   ├ 帳戶現金：NT$" . number_format($capital, 0);
+            if ($totalPendingSettle > 0) {
+                $profitStr .= "\n   ├ 待交割扣款：-NT$" . number_format($totalPendingSettle, 0)
+                            . "\n   └ 交割後剩餘：NT$" . number_format($afterSettle, 0) . $warning;
+            } else {
+                $profitStr .= "\n   └ 剩餘可用：NT$" . number_format($capital, 0);
+            }
+        } else {
+            $profitStr .= "\n\n💰 帳戶資金：未設定（點擊⚙️設定資金）";
         }
 
         $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr . $settleStr;
