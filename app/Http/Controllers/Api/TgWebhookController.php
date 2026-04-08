@@ -482,18 +482,26 @@ class TgWebhookController extends Controller
             return ['❌ 請輸入有效金額（正整數，例如：1500000）：', null];
         }
 
+        // wallet.capital 是 running balance（剩餘現金），不是總資金
+        // remain 模式：直接存入剩餘現金
+        // total 模式：total - 持股成本 = 剩餘現金
+        $selfCostSum = (float) TgHolding::where('bot_id', $bot->id)
+            ->where('tg_chat_id', $chatId)
+            ->sum('total_cost');
+
         if ($mode === 'remain') {
-            // 剩餘資金模式：total = input + 當前持股自備成本合計
-            $selfCostSum = (float) TgHolding::where('bot_id', $bot->id)
-                ->where('tg_chat_id', $chatId)
-                ->sum('total_cost');
-            $capital = $input + $selfCostSum;
-            $note    = "✅ 剩餘資金 NT$" . number_format($input, 0)
-                     . " + 持股成本 NT$" . number_format($selfCostSum, 0)
-                     . "\n   → 總資金設定為 NT$" . number_format($capital, 0);
-        } else {
             $capital = $input;
-            $note    = "✅ 總資金已設定為 NT$" . number_format($capital, 0);
+            $note    = "✅ 剩餘可用資金設定為 NT$" . number_format($capital, 0)
+                     . "\n   帳戶總資金 = NT$" . number_format($capital + $selfCostSum, 0);
+        } else {
+            // 總資金模式：換算成剩餘現金存入（= total - 已佔用持股成本）
+            $capital = $input - $selfCostSum;
+            $note    = "✅ 帳戶總資金 NT$" . number_format($input, 0)
+                     . "\n   持股占用 NT$" . number_format($selfCostSum, 0)
+                     . "\n   → 剩餘可用 NT$" . number_format($capital, 0);
+            if ($capital < 0) {
+                $note .= " ⚠️（持股成本已超過總資金）";
+            }
         }
 
         TgWallet::updateOrCreate(
@@ -853,12 +861,13 @@ class TgWebhookController extends Controller
         }
 
         // 帳戶資金區塊
+        // $capital 是 running balance（買入時已扣款），本身即剩餘可用現金
         if ($capital !== null) {
-            $available    = $capital - $totalSelfCost;
-            $warning      = $available < 0 ? ' ⚠️' : '';
-            $profitStr   .= "\n\n💰 帳戶資金：NT$" . number_format($capital, 0)
+            $totalCapital = $capital + $totalSelfCost;  // 反推帳戶總資金
+            $warning      = $capital < 0 ? ' ⚠️' : '';
+            $profitStr   .= "\n\n💰 帳戶總資金：NT$" . number_format($totalCapital, 0)
                           . "\n   ├ 持股占用：NT$" . number_format($totalSelfCost, 0)
-                          . "\n   └ 剩餘可用：NT$" . number_format($available, 0) . $warning;
+                          . "\n   └ 剩餘可用：NT$" . number_format($capital, 0) . $warning;
         } else {
             $profitStr .= "\n\n💰 帳戶資金：未設定（點擊⚙️設定資金）";
         }
