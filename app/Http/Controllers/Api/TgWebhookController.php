@@ -316,24 +316,24 @@ class TgWebhookController extends Controller
             $walletRow->decrement('capital', $cost);
         }
 
-        // 建立 T+2 交割記錄（僅現股需要交割；融資由券商代墊）
-        if (!$isMargin) {
-            $buyFee      = (int) ceil($marketVal * 0.001425);
-            $settleAmt   = $marketVal + $buyFee;
-            $settleDate  = $this->calcSettleDate(Carbon::now('Asia/Taipei'));
-            TgSettlement::create([
-                'bot_id'             => $bot->id,
-                'tg_chat_id'         => $chatId,
-                'tg_user_id'         => $userId,
-                'stock_code'         => $data['code'],
-                'stock_name'         => $data['name'],
-                'shares'             => $shares,
-                'buy_price'          => $buyPrice,
-                'settlement_amount'  => $settleAmt,
-                'settle_date'        => $settleDate->toDateString(),
-                'is_settled'         => 0,
-            ]);
-        }
+        // 建立 T+2 交割記錄
+        // 現股：交割全額市值 + 手續費
+        // 融資：交割自備款（40%）+ 手續費
+        $buyFee     = (int) ceil($marketVal * 0.001425);
+        $settleAmt  = $cost + $buyFee;  // $cost 已是現股=全額 / 融資=40%
+        $settleDate = $this->calcSettleDate(Carbon::now('Asia/Taipei'));
+        TgSettlement::create([
+            'bot_id'            => $bot->id,
+            'tg_chat_id'        => $chatId,
+            'tg_user_id'        => $userId,
+            'stock_code'        => $data['code'],
+            'stock_name'        => $data['name'],
+            'shares'            => $shares,
+            'buy_price'         => $buyPrice,
+            'settlement_amount' => $settleAmt,
+            'settle_date'       => $settleDate->toDateString(),
+            'is_settled'        => 0,
+        ]);
 
         $this->clearState($bot->id, $chatId);
 
