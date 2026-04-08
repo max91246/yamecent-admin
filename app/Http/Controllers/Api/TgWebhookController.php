@@ -8,6 +8,7 @@ use App\TgHolding;
 use App\TgHoldingTrade;
 use App\TgMessage;
 use App\TgState;
+use App\TgSettlement;
 use App\TgWallet;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
@@ -77,10 +78,25 @@ class TgWebhookController extends Controller
                     [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
                 }
 
-            // 設定資金
+            // 設定資金 — 先選模式
             } elseif ($data === 'set_capital') {
-                $this->setState($bot->id, $chatId, 'set_capital');
-                $replyText = "💰 設定資金總額\n請輸入您的資金總額（台幣整數，例如：1500000）：\n\n輸入「取消」可返回";
+                $replyText   = "⚙️ 設定資金模式\n\n"
+                             . "📌 <b>總資金設置</b>：直接輸入您的總資金（含持股部位）\n"
+                             . "📌 <b>剩餘資金設置</b>：輸入帳戶現金餘額，系統自動加上持股成本計算總資金\n";
+                $replyMarkup = ['inline_keyboard' => [[
+                    ['text' => '💼 總資金設置',   'callback_data' => 'set_capital_total'],
+                    ['text' => '💵 剩餘資金設置', 'callback_data' => 'set_capital_remain'],
+                ]]];
+
+            // 設定資金 — 總資金模式
+            } elseif ($data === 'set_capital_total') {
+                $this->setState($bot->id, $chatId, 'set_capital_total');
+                $replyText = "💼 總資金設置\n請輸入您的總資金（台幣整數，例如：2000000）：\n\n輸入「取消」可返回";
+
+            // 設定資金 — 剩餘資金模式
+            } elseif ($data === 'set_capital_remain') {
+                $this->setState($bot->id, $chatId, 'set_capital_remain');
+                $replyText = "💵 剩餘資金設置\n請輸入您目前的帳戶現金餘額（台幣整數，例如：500000）：\n系統將自動加上持股成本計算總資金\n\n輸入「取消」可返回";
             }
 
             if ($replyText !== null) {
@@ -179,8 +195,10 @@ class TgWebhookController extends Controller
                 return $this->handleSellStep1($bot, $chatId, $userId, $text, $stateObj);
             case 'sell_step2':
                 return $this->handleSellStep2($bot, $chatId, $userId, $text, $stateObj);
-            case 'set_capital':
-                return $this->handleSetCapital($bot, $chatId, $userId, $text);
+            case 'set_capital_total':
+                return $this->handleSetCapital($bot, $chatId, $userId, $text, 'total');
+            case 'set_capital_remain':
+                return $this->handleSetCapital($bot, $chatId, $userId, $text, 'remain');
             default:
                 $this->clearState($bot->id, $chatId);
                 return ['請選擇查詢項目：', $this->getMainKeyboard()];
@@ -296,6 +314,25 @@ class TgWebhookController extends Controller
             ->first();
         if ($walletRow) {
             $walletRow->decrement('capital', $cost);
+        }
+
+        // 建立 T+2 交割記錄（僅現股需要交割；融資由券商代墊）
+        if (!$isMargin) {
+            $buyFee      = (int) ceil($marketVal * 0.001425);
+            $settleAmt   = $marketVal + $buyFee;
+            $settleDate  = $this->calcSettleDate(Carbon::now('Asia/Taipei'));
+            TgSettlement::create([
+                'bot_id'             => $bot->id,
+                'tg_chat_id'         => $chatId,
+                'tg_user_id'         => $userId,
+                'stock_code'         => $data['code'],
+                'stock_name'         => $data['name'],
+                'shares'             => $shares,
+                'buy_price'          => $buyPrice,
+                'settlement_amount'  => $settleAmt,
+                'settle_date'        => $settleDate->toDateString(),
+                'is_settled'         => 0,
+            ]);
         }
 
         $this->clearState($bot->id, $chatId);
@@ -437,23 +474,51 @@ class TgWebhookController extends Controller
         return $this->buildPortfolioReply($bot->id, $chatId);
     }
 
-    // ─── 設定資金總額 ────────────────────────────────────────────
-    private function handleSetCapital(TgBot $bot, int $chatId, string $userId, string $text): array
+    // ─── 設定資金總額（total=直接設定 / remain=剩餘+持股成本反推）──
+    private function handleSetCapital(TgBot $bot, int $chatId, string $userId, string $text, string $mode = 'total'): array
     {
-        $amount = (float) str_replace([',', '，', '$', 'NT$', ' '], '', $text);
-        if ($amount <= 0) {
+        $input = (float) str_replace([',', '，', '$', 'NT$', ' '], '', $text);
+        if ($input <= 0) {
             return ['❌ 請輸入有效金額（正整數，例如：1500000）：', null];
+        }
+
+        if ($mode === 'remain') {
+            // 剩餘資金模式：total = input + 當前持股自備成本合計
+            $selfCostSum = (float) TgHolding::where('bot_id', $bot->id)
+                ->where('tg_chat_id', $chatId)
+                ->sum('total_cost');
+            $capital = $input + $selfCostSum;
+            $note    = "✅ 剩餘資金 NT$" . number_format($input, 0)
+                     . " + 持股成本 NT$" . number_format($selfCostSum, 0)
+                     . "\n   → 總資金設定為 NT$" . number_format($capital, 0);
+        } else {
+            $capital = $input;
+            $note    = "✅ 總資金已設定為 NT$" . number_format($capital, 0);
         }
 
         TgWallet::updateOrCreate(
             ['bot_id' => $bot->id, 'tg_chat_id' => $chatId, 'tg_user_id' => $userId],
-            ['capital' => $amount]
+            ['capital' => $capital]
         );
 
         $this->clearState($bot->id, $chatId);
-        $this->sendMessage($bot->token, $chatId, '✅ 資金總額已設定為 NT$' . number_format($amount, 0));
+        $this->sendMessage($bot->token, $chatId, $note);
 
         return $this->buildPortfolioReply($bot->id, $chatId);
+    }
+
+    // ─── 計算 T+2 交割日（跳過周末，不處理國定假日）────────────
+    private function calcSettleDate(\Carbon\Carbon $tradeDate): \Carbon\Carbon
+    {
+        $d    = $tradeDate->copy()->startOfDay();
+        $days = 0;
+        while ($days < 2) {
+            $d->addDay();
+            if ($d->isWeekday()) {
+                $days++;
+            }
+        }
+        return $d;
     }
 
     // ─── 回覆組建：油價 ──────────────────────────────────────────
@@ -779,7 +844,29 @@ class TgWebhookController extends Controller
             $profitStr .= "\n\n💰 帳戶資金：未設定（點擊⚙️設定資金）";
         }
 
-        $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr;
+        // T+2 待交割款項
+        $today       = Carbon::now('Asia/Taipei')->toDateString();
+        $settlements = TgSettlement::where('bot_id', $botId)
+            ->where('tg_chat_id', $chatId)
+            ->where('is_settled', 0)
+            ->where('settle_date', '>=', $today)
+            ->orderBy('settle_date')
+            ->get();
+
+        $settleStr = '';
+        if ($settlements->isNotEmpty()) {
+            $settleStr = "\n\n━━ 📅 T+2 待交割款項 ━━";
+            foreach ($settlements as $s) {
+                $settleStr .= "\n📌 {$s->stock_name}（{$s->stock_code}）{$s->shares}張"
+                            . "　買進：NT$" . $s->buy_price
+                            . "\n   💳 交割日：" . $s->settle_date->format('m/d')
+                            . "　應付：NT$" . number_format($s->settlement_amount, 0);
+            }
+            $totalSettle = $settlements->sum('settlement_amount');
+            $settleStr  .= "\n   合計應付：NT$" . number_format($totalSettle, 0);
+        }
+
+        $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr . $settleStr;
 
         // Inline keyboard：添加 + 設定資金 + 賣出（每排最多2個）
         $inlineRows = [$addButton, $capitalBtn];
