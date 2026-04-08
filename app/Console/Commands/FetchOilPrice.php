@@ -93,33 +93,21 @@ class FetchOilPrice extends Command
         }
 
         // ── 5. 計算各項告警，合併成一則推送 ──────────────────────
-        $alert5m    = $this->calc5mAlert($candleAt);
-        $alertWtx5m = ($twPrice !== null) ? $this->calc5mAlertWtx() : null;
+        // 注意：台指告警已移至 fetch:tw-index（每分鐘執行），此處僅處理原油告警
+        $alert5m = $this->calc5mAlert($candleAt);
 
-        if ($alert5m !== null || $alertWtx5m !== null) {
+        if ($alert5m !== null) {
             $msg = "🚨 <b>市場告警</b>\n";
 
-            // 原油告警
-            if ($alert5m !== null) {
-                $this->warn('  [原油5分告警] 觸發！' . $alert5m['arrow'] . $alert5m['direction'] . ' 振幅 ' . $alert5m['pctFmt']);
-                $msg .= "\n━━ 🛢 布蘭特原油 5分震盪 ━━\n"
-                      . "💰 當前：<b>{$price}</b>（{$candleAt}）\n"
-                      . "{$alert5m['arrow']} <b>方向：{$alert5m['direction']}</b>　收盤 {$alert5m['prevClose']} → <b>{$alert5m['currClose']}</b>（<b>{$alert5m['closePctFmt']}</b> / {$alert5m['closeDiffFmt']}）\n"
-                      . "🕐 區間：<b>{$alert5m['fromTime']} – {$alert5m['currTime']}</b>\n"
-                      . "🔺 區間最高：<b>{$alert5m['maxHigh']}</b>　🔻 區間最低：<b>{$alert5m['minLow']}</b>\n"
-                      . "📊 振幅：<b>{$alert5m['pctFmt']}</b>（{$alert5m['diffFmt']}）　⚠️ 閾值 " . self::ALERT_5M_PCT . "%";
-            }
+            $this->warn('  [原油5分告警] 觸發！' . $alert5m['arrow'] . $alert5m['direction'] . ' 振幅 ' . $alert5m['pctFmt']);
+            $msg .= "\n━━ 🛢 布蘭特原油 5分震盪 ━━\n"
+                  . "💰 當前：<b>{$price}</b>（{$candleAt}）\n"
+                  . "{$alert5m['arrow']} <b>方向：{$alert5m['direction']}</b>　收盤 {$alert5m['prevClose']} → <b>{$alert5m['currClose']}</b>（<b>{$alert5m['closePctFmt']}</b> / {$alert5m['closeDiffFmt']}）\n"
+                  . "🕐 區間：<b>{$alert5m['fromTime']} – {$alert5m['currTime']}</b>\n"
+                  . "🔺 區間最高：<b>{$alert5m['maxHigh']}</b>　🔻 區間最低：<b>{$alert5m['minLow']}</b>\n"
+                  . "📊 振幅：<b>{$alert5m['pctFmt']}</b>（{$alert5m['diffFmt']}）　⚠️ 閾值 " . self::ALERT_5M_PCT . "%";
 
-            // 台指告警
-            if ($alertWtx5m !== null) {
-                $this->warn('  [台指5分告警] 觸發！' . $alertWtx5m['arrow'] . $alertWtx5m['direction'] . ' ' . $alertWtx5m['pointsFmt'] . '點');
-                $msg .= "\n\n━━ 📈 台指期貨 5分震盪 ━━\n"
-                      . "💹 當前：<b>" . number_format($twPrice, 0) . "</b>（{$alertWtx5m['currTime']}）\n"
-                      . "{$alertWtx5m['arrow']} <b>方向：{$alertWtx5m['direction']}</b>　{$alertWtx5m['prevClose']} → <b>{$alertWtx5m['currClose']}</b>（<b>{$alertWtx5m['pointsFmt']}點</b> / <b>{$alertWtx5m['pctFmt']}</b>）\n"
-                      . "⚠️ 閾值 " . self::ALERT_WTX_5M_POINTS . " 點";
-            }
-
-            // VIX 附帶資訊（不告警，僅顯示）
+            // VIX 附帶資訊
             if ($vixPrice !== null) {
                 $vixBlock = $this->buildVixBlock($vixPrice);
                 if ($vixBlock !== '') {
@@ -127,8 +115,8 @@ class FetchOilPrice extends Command
                 }
             }
 
-            // 台指現況（若無台指告警則顯示現況）
-            if ($alertWtx5m === null && $twPrice !== null) {
+            // 台指現況附帶顯示
+            if ($twPrice !== null) {
                 $twBlock = $this->buildTwIndexBlock($twPrice);
                 if ($twBlock !== '') {
                     $msg .= "\n\n" . $twBlock;

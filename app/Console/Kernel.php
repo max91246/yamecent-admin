@@ -30,12 +30,19 @@ class Kernel extends ConsoleKernel
                  ->withoutOverlapping()
                  ->appendOutputTo(storage_path('logs/scrape-wantgoo.log'));
 
-        // 每 5 分鐘獲取布蘭特原油最新價格並推送 Telegram
+        // 每 5 分鐘獲取布蘭特原油最新價格並推送 Telegram（台指告警已移至 fetch:tw-index）
         $schedule->command('fetch:oil-price')
                  ->everyFiveMinutes()
                  ->withoutOverlapping()
                  ->runInBackground()
                  ->appendOutputTo(storage_path('logs/oil-price.log'));
+
+        // 每分鐘抓取台指期 / VIX，5分鐘震盪 ≥ 50 點時告警
+        $schedule->command('fetch:tw-index')
+                 ->everyMinute()
+                 ->withoutOverlapping()
+                 ->runInBackground()
+                 ->appendOutputTo(storage_path('logs/tw-index.log'));
     }
 
     /**
