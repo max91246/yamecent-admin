@@ -790,7 +790,7 @@ class TgWebhookController extends Controller
         $inTradingHrs = $isWeekday && $afterOpen && $beforeClose;
 
         if ($inTradingHrs) {
-            return 300; // 盤中 5 分鐘
+            return 10; // 盤中 10 秒
         }
 
         // 找下一個交易日 09:00
