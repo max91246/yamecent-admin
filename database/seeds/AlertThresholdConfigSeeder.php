@@ -25,6 +25,15 @@ class AlertThresholdConfigSeeder extends Seeder
             ]
         );
 
+        AdminConfig::firstOrCreate(
+            ['config_key' => 'holding_alert_pct'],
+            [
+                'name'         => '持股告警漲跌幅（%）',
+                'config_value' => '10',
+                'type'         => 'number',
+            ]
+        );
+
         echo "AlertThresholdConfigSeeder 完成。" . PHP_EOL;
     }
 }

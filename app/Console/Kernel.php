@@ -48,6 +48,13 @@ class Kernel extends ConsoleKernel
         $schedule->command('settle:payments')
                  ->dailyAt('00:00')
                  ->appendOutputTo(storage_path('logs/settle-payments.log'));
+
+        // 每日 14:00（台股收盤後）審視持股，漲跌超過閾值時推送通知
+        $schedule->command('notify:holdings')
+                 ->timezone('Asia/Taipei')
+                 ->dailyAt('14:00')
+                 ->withoutOverlapping()
+                 ->appendOutputTo(storage_path('logs/notify-holdings.log'));
     }
 
     /**
