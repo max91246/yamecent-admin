@@ -16,7 +16,14 @@ class SettlePayments extends Command
     {
         $today = Carbon::now('Asia/Taipei')->toDateString();
 
+        // 只處理買入交割（sell 方向 wallet 已即時加回，僅標記完成）
+        TgSettlement::where('is_settled', 0)
+            ->where('direction', 'sell')
+            ->where('settle_date', '<=', $today)
+            ->update(['is_settled' => 1]);
+
         $dues = TgSettlement::where('is_settled', 0)
+            ->where('direction', '!=', 'sell')
             ->where('settle_date', '<=', $today)
             ->get();
 

@@ -467,6 +467,23 @@ class TgWebhookController extends Controller
             $walletRow->increment('capital', $walletAdd);
         }
 
+        // 建立賣出 T+2 待收款記錄（僅供顯示，wallet 已即時增款）
+        $sellSettle    = $sellValue - $sellFee - $sellTax;  // 實際預計收款（含賣出淨額）
+        $sellSettleDate = $this->calcSettleDate(Carbon::now('Asia/Taipei'));
+        TgSettlement::create([
+            'bot_id'            => $bot->id,
+            'tg_chat_id'        => $chatId,
+            'tg_user_id'        => $userId,
+            'stock_code'        => $holding->stock_code,
+            'stock_name'        => $holding->stock_name,
+            'shares'            => $sellShares,
+            'buy_price'         => $sellPrice,
+            'settlement_amount' => $sellSettle,
+            'settle_date'       => $sellSettleDate->toDateString(),
+            'is_settled'        => 0,   // 顯示用；direction=sell 排程不重複處理
+            'direction'         => 'sell',
+        ]);
+
         $this->clearState($bot->id, $chatId);
 
         $sign      = $profit >= 0 ? '+' : '';
@@ -860,58 +877,19 @@ class TgWebhookController extends Controller
         $lines            = [];
         $delButtons       = [];
 
-        foreach ($holdings as $h) {
-            $quote       = $this->fetchStockQuote($h->stock_code);
-            $curPrice    = $quote ? (float) $quote['price'] : null;
-            $curValue    = $curPrice !== null ? $curPrice * $h->shares * 1000 : null;
-            $buyPrice    = (float) $h->buy_price;
-            $originValue = $buyPrice > 0 ? $buyPrice * $h->shares * 1000 : (float) $h->total_cost;
-            $selfCost    = (float) $h->total_cost;
+        // 按股票代號分組顯示
+        $grouped = $holdings->groupBy('stock_code');
 
-            // 預估交易成本：買進手續費 + 賣出手續費 + 賣出交易稅
-            $buyFee   = $buyPrice > 0 ? (int) ceil($originValue * $feeRate) : 0;
-            $sellFee  = $curValue  !== null ? (int) ceil($curValue * $feeRate) : 0;
-            $sellTax  = $curValue  !== null ? (int) ceil($curValue * $taxRate)  : 0;
-            $txCost   = $buyFee + $sellFee + $sellTax;
+        foreach ($grouped as $stockCode => $group) {
+            $quote    = $this->fetchStockQuote($stockCode);
+            $curPrice = $quote ? (float) $quote['price'] : null;
 
-            // 融資利息：融資金額 × 年利率 × 持有天數 / 365
-            // 融資金額 = 原始市值 × 60%（= total_cost / 0.4 × 0.6 = total_cost × 1.5）
-            $interest = 0;
-            if ($h->is_margin && $buyPrice > 0) {
-                $loanAmount  = $originValue * 0.6;
-                $daysHeld    = max(1, (int) $h->created_at->diffInDays(now()));
-                $interest    = (int) round($loanAmount * $marginAnnualRate * $daysHeld / 365);
-            }
-
-            $totalSelfCost   += $selfCost;
-            $totalOriginVal  += $originValue;
-            $totalTxCost     += $txCost;
-            $totalInterest   += $interest;
-            if ($curValue !== null) {
-                $totalCurrentVal += $curValue;
-            }
-
-            $marginTag   = $h->is_margin ? '融資' : '現股';
-            $curValueStr = $curValue !== null ? 'NT$' . number_format($curValue, 0) : '查詢失敗';
-
-            // 個股淨損益 = 現值 - 原始市值 - 交易成本 - 融資利息
-            $stockProfit    = $curValue !== null ? $curValue - $originValue - $txCost - $interest : null;
-            $stockProfitStr = '';
-            if ($stockProfit !== null) {
-                $sign        = $stockProfit >= 0 ? '+' : '';
-                $txCostStr   = 'NT$' . number_format($txCost, 0);
-                $interestStr = $interest > 0 ? "　利息：NT$" . number_format($interest, 0) . "（{$daysHeld}天）" : '';
-                $stockProfitStr = "\n   稅費：{$txCostStr}（買費+賣費+稅）{$interestStr}　淨損益：{$sign}NT$" . number_format($stockProfit, 0);
-            }
-
-            $buyStr = $buyPrice > 0 ? "　買進：NT$" . $buyPrice : '';
-
-            // 當前價格與漲跌幅
+            // 當前價格與漲跌幅（整組共用）
             $curPriceStr = '';
             if ($quote && $curPrice !== null) {
-                $diff  = isset($quote['priceChange'])    ? (float) $quote['priceChange']    : null;
-                $pct   = isset($quote['priceChangePct']) ? (float) $quote['priceChangePct'] : null;
-                $curPriceStr = "\n   現價：NT$" . $curPrice;
+                $diff = isset($quote['priceChange'])    ? (float) $quote['priceChange']    : null;
+                $pct  = isset($quote['priceChangePct']) ? (float) $quote['priceChangePct'] : null;
+                $curPriceStr = "現價：NT$" . $curPrice;
                 if ($diff !== null && $pct !== null) {
                     $s = $diff >= 0 ? '+' : '';
                     $a = $diff >= 0 ? '📈' : '📉';
@@ -919,11 +897,82 @@ class TgWebhookController extends Controller
                 }
             }
 
-            $lines[] = "📌 {$h->stock_name}（{$h->stock_code}）{$h->shares}張·{$marginTag}{$buyStr}"
-                     . $curPriceStr
-                     . "\n   現值：{$curValueStr}{$stockProfitStr}";
+            $firstName  = $group->first()->stock_name;
+            $totalShares = $group->sum('shares');
+            $lotCount   = $group->count();
 
-            $delButtons[] = ['text' => "💰 賣出 {$h->stock_code}", 'callback_data' => 'holding_sell_' . $h->id];
+            // 分組標頭
+            $groupHeader = "📌 {$firstName}（{$stockCode}）合計 {$totalShares}張";
+            if ($curPriceStr) {
+                $groupHeader .= "\n   {$curPriceStr}";
+            }
+
+            $lotLines       = [];
+            $groupCurrentVal = 0;
+            $groupNetProfit  = 0;
+
+            foreach ($group as $idx => $h) {
+                $buyPrice    = (float) $h->buy_price;
+                $originValue = $buyPrice > 0 ? $buyPrice * $h->shares * 1000 : (float) $h->total_cost;
+                $selfCost    = (float) $h->total_cost;
+                $curValue    = $curPrice !== null ? $curPrice * $h->shares * 1000 : null;
+
+                $buyFee  = $buyPrice > 0 ? (int) ceil($originValue * $feeRate) : 0;
+                $sellFee = $curValue !== null ? (int) ceil($curValue * $feeRate) : 0;
+                $sellTax = $curValue !== null ? (int) ceil($curValue * $taxRate)  : 0;
+                $txCost  = $buyFee + $sellFee + $sellTax;
+
+                $interest = 0;
+                $daysHeld = 1;
+                if ($h->is_margin && $buyPrice > 0) {
+                    $loanAmount = $originValue * 0.6;
+                    $daysHeld   = max(1, (int) $h->created_at->diffInDays(now()));
+                    $interest   = (int) round($loanAmount * $marginAnnualRate * $daysHeld / 365);
+                }
+
+                $totalSelfCost  += $selfCost;
+                $totalOriginVal += $originValue;
+                $totalTxCost    += $txCost;
+                $totalInterest  += $interest;
+                if ($curValue !== null) {
+                    $totalCurrentVal += $curValue;
+                    $groupCurrentVal += $curValue;
+                }
+
+                $marginTag = $h->is_margin ? '融資' : '現股';
+                $buyStr    = $buyPrice > 0 ? "買入：NT$" . $buyPrice : '';
+
+                $stockProfit = $curValue !== null ? $curValue - $originValue - $txCost - $interest : null;
+                if ($stockProfit !== null) {
+                    $groupNetProfit += $stockProfit;
+                }
+
+                $profitStr = '';
+                if ($stockProfit !== null) {
+                    $sign        = $stockProfit >= 0 ? '+' : '';
+                    $txCostStr   = 'NT$' . number_format($txCost, 0);
+                    $interestStr = $interest > 0 ? "　利息：NT$" . number_format($interest, 0) . "（{$daysHeld}天）" : '';
+                    $profitStr   = "\n      稅費：{$txCostStr}（買費+賣費+稅）{$interestStr}　淨損益：{$sign}NT$" . number_format($stockProfit, 0);
+                }
+
+                $isLast    = $idx === $group->keys()->last();
+                $prefix    = $isLast ? '   └' : '   ├';
+                $curValStr = $curValue !== null ? '現值：NT$' . number_format($curValue, 0) : '查詢失敗';
+
+                $lotLines[] = "{$prefix} {$h->shares}張·{$marginTag}　{$buyStr}\n      {$curValStr}{$profitStr}";
+
+                $delButtons[] = ['text' => "💰 賣出 {$stockCode}", 'callback_data' => 'holding_sell_' . $h->id];
+            }
+
+            // 多筆時顯示分組合計
+            $groupSummary = '';
+            if ($lotCount > 1 && $groupCurrentVal > 0) {
+                $sign         = $groupNetProfit >= 0 ? '+' : '';
+                $groupSummary = "\n   合計現值：NT$" . number_format($groupCurrentVal, 0)
+                              . "　損益：{$sign}NT$" . number_format($groupNetProfit, 0);
+            }
+
+            $lines[] = $groupHeader . "\n" . implode("\n", $lotLines) . $groupSummary;
         }
 
         // 損益摘要
@@ -953,18 +1002,29 @@ class TgWebhookController extends Controller
             ->orderBy('settle_date')
             ->get();
 
-        $totalPendingSettle = (float) $settlements->sum('settlement_amount');
+        $buySettlements  = $settlements->filter(fn($s) => ($s->direction ?? 'buy') !== 'sell');
+        $sellSettlements = $settlements->filter(fn($s) => ($s->direction ?? 'buy') === 'sell');
+
+        $totalPendingSettle = (float) $buySettlements->sum('settlement_amount');
 
         $settleStr = '';
         if ($settlements->isNotEmpty()) {
             $settleStr = "\n\n━━ 📅 T+2 待交割款項 ━━";
-            foreach ($settlements as $s) {
+            foreach ($buySettlements as $s) {
                 $settleStr .= "\n📌 {$s->stock_name}（{$s->stock_code}）{$s->shares}張"
                             . "　買進：NT$" . $s->buy_price
                             . "\n   💳 交割日：" . $s->settle_date->format('m/d')
                             . "　應付：NT$" . number_format($s->settlement_amount, 0);
             }
-            $settleStr .= "\n   合計應付：NT$" . number_format($totalPendingSettle, 0);
+            if ($buySettlements->isNotEmpty()) {
+                $settleStr .= "\n   合計應付：NT$" . number_format($totalPendingSettle, 0);
+            }
+            foreach ($sellSettlements as $s) {
+                $settleStr .= "\n💚 {$s->stock_name}（{$s->stock_code}）{$s->shares}張"
+                            . "　賣出：NT$" . $s->buy_price
+                            . "\n   💳 交割日：" . $s->settle_date->format('m/d')
+                            . "　待收：NT$" . number_format($s->settlement_amount, 0);
+            }
         }
 
         // 帳戶資金區塊
