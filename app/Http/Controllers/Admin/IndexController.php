@@ -3,6 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Member;
+use App\Article;
+use App\ArticleComment;
+use App\TgWallet;
+use App\TgHolding;
+use App\TgHoldingTrade;
+use App\TgSettlement;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Storage;
 
@@ -16,7 +24,40 @@ class IndexController extends Controller
     }
     public function console()
     {
-        return view('admin.console');
+        $today = Carbon::today();
+
+        $holdingCount = TgHolding::count();
+        $marginCount  = TgHolding::where('is_margin', 1)->count();
+        $tradeTotal   = TgHoldingTrade::count();
+        $tradeWin     = TgHoldingTrade::where('profit', '>', 0)->count();
+
+        $stats = [
+            // 會員內容
+            'member_total'    => Member::count(),
+            'member_active'   => Member::where('is_active', 1)->count(),
+            'member_paid'     => Member::where('is_member', 1)->where('member_expired_at', '>', now())->count(),
+            'article_total'   => Article::where('is_active', 1)->count(),
+            'comment_today'   => ArticleComment::whereDate('created_at', $today)->count(),
+            // TG Bot
+            'bot_users'       => TgWallet::distinct('tg_chat_id')->count('tg_chat_id'),
+            'holding_users'   => TgHolding::distinct('tg_chat_id')->count('tg_chat_id'),
+            'holding_cost'    => TgHolding::sum('total_cost'),
+            'holding_count'   => $holdingCount,
+            'margin_count'    => $marginCount,
+            'margin_pct'      => $holdingCount > 0 ? round($marginCount / $holdingCount * 100) : 0,
+            'trade_total'     => $tradeTotal,
+            'trade_profit'    => TgHoldingTrade::sum('profit'),
+            'trade_win'       => $tradeWin,
+            'trade_win_pct'   => $tradeTotal > 0 ? round($tradeWin / $tradeTotal * 100) : 0,
+            // 交割款
+            'settle_pending'  => TgSettlement::where('is_settled', 0)->count(),
+            'settle_buy_amt'  => TgSettlement::where('is_settled', 0)->where('direction', 'buy')->sum('settlement_amount'),
+            'settle_sell_amt' => TgSettlement::where('is_settled', 0)->where('direction', 'sell')->sum('settlement_amount'),
+        ];
+
+        $recentTrades = TgHoldingTrade::orderBy('created_at', 'desc')->limit(10)->get();
+
+        return view('admin.console', compact('stats', 'recentTrades'));
     }
 
     /**
