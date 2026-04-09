@@ -928,12 +928,33 @@ class TgWebhookController extends Controller
                         . "　自備報酬：{$sign}" . number_format($roi, 2) . "%";
         }
 
-        // T+2 待交割款項（先查出來，讓資金區塊可以扣除）
-        $today       = Carbon::now('Asia/Taipei')->toDateString();
+        $today = Carbon::now('Asia/Taipei')->toDateString();
+
+        // 自動結算到期款項（settle_date <= today）：從 wallet 扣款並標記已完成
+        if ($capital !== null) {
+            $dueSettlements = TgSettlement::where('bot_id', $botId)
+                ->where('tg_chat_id', $chatId)
+                ->where('is_settled', 0)
+                ->where('settle_date', '<=', $today)
+                ->get();
+
+            foreach ($dueSettlements as $s) {
+                $walletRow = TgWallet::where('bot_id', $botId)->where('tg_chat_id', $chatId)->first();
+                if ($walletRow) {
+                    $walletRow->decrement('capital', $s->settlement_amount);
+                }
+                $s->update(['is_settled' => 1]);
+            }
+
+            // 重新讀取扣款後的最新餘額
+            $capital = (float) TgWallet::where('bot_id', $botId)->where('tg_chat_id', $chatId)->value('capital');
+        }
+
+        // T+2 待交割款項（只顯示未來，今天已自動結算）
         $settlements = TgSettlement::where('bot_id', $botId)
             ->where('tg_chat_id', $chatId)
             ->where('is_settled', 0)
-            ->where('settle_date', '>=', $today)
+            ->where('settle_date', '>', $today)
             ->orderBy('settle_date')
             ->get();
 
