@@ -16,15 +16,9 @@ class SettlePayments extends Command
     {
         $today = Carbon::now('Asia/Taipei')->toDateString();
 
-        // 只處理買入交割（sell 方向 wallet 已即時加回，僅標記完成）
-        TgSettlement::where('is_settled', 0)
-            ->where('direction', 'sell')
-            ->where('settle_date', '<=', $today)
-            ->update(['is_settled' => 1]);
-
         $dues = TgSettlement::where('is_settled', 0)
-            ->where('direction', '!=', 'sell')
             ->where('settle_date', '<=', $today)
+            ->where('stock_code', '!=', 'MANUAL')
             ->get();
 
         if ($dues->isEmpty()) {
@@ -37,14 +31,23 @@ class SettlePayments extends Command
                 ->where('tg_chat_id', $s->tg_chat_id)
                 ->first();
 
+            $direction = $s->direction ?? 'buy';
+
             if ($wallet) {
-                $wallet->decrement('capital', $s->settlement_amount);
+                if ($direction === 'sell') {
+                    // 賣出交割：將實收款加回 wallet
+                    $wallet->increment('capital', $s->settlement_amount);
+                    $this->line("  [結算-收款] {$s->stock_name}（{$s->stock_code}）"
+                        . " 交割日 {$s->settle_date} +NT$" . number_format($s->settlement_amount, 0));
+                } else {
+                    // 買入交割：扣除交割款
+                    $wallet->decrement('capital', $s->settlement_amount);
+                    $this->line("  [結算-付款] {$s->stock_name}（{$s->stock_code}）"
+                        . " 交割日 {$s->settle_date} -NT$" . number_format($s->settlement_amount, 0));
+                }
             }
 
             $s->update(['is_settled' => 1]);
-
-            $this->line("  [結算] {$s->stock_name}（{$s->stock_code}）"
-                . " 交割日 {$s->settle_date} NT$" . number_format($s->settlement_amount, 0));
         }
 
         $this->info("  [結算] 共處理 {$dues->count()} 筆，完成。");

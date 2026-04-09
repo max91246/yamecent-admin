@@ -453,16 +453,7 @@ class TgWebhookController extends Controller
             $holding->update(['shares' => $remainShares, 'total_cost' => $newCost]);
         }
 
-        // 回款至帳戶資金（若已設定）
-        $walletRow = TgWallet::where('bot_id', $bot->id)
-            ->where('tg_chat_id', $chatId)
-            ->where('tg_user_id', $userId)
-            ->first();
-        if ($walletRow) {
-            $walletRow->increment('capital', $walletAdd);
-        }
-
-        // 建立賣出 T+2 待收款記錄（僅供顯示，wallet 已即時增款）
+        // 建立賣出 T+2 待收款記錄（wallet 由 settle:payments cron 在交割日加款）
         // 融資：需還券商 60% 借款；現股：全額收回
         $loanRepay  = $isMargin ? $buyValue * 0.6 : 0;
         $sellSettle = $sellValue - $loanRepay - $sellFee - $sellTax;
