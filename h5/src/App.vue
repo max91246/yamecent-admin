@@ -12,13 +12,15 @@ import { isTelegramApp, getInitData, initTgApp } from './utils/telegram'
 const router = useRouter()
 
 onMounted(async () => {
-  // 若不是從 Telegram Mini App 開啟，或已有 token，略過自動登入
-  if (!isTelegramApp() || getToken()) {
-    if (isTelegramApp()) initTgApp()
-    return
+  // 只要 Telegram SDK 存在就先呼叫 ready()，否則 Mini App 會永遠白畫面
+  if (window.Telegram?.WebApp) {
+    initTgApp()
   }
 
-  initTgApp()
+  // 若不是從 Telegram Mini App 開啟，或已有 token，略過自動登入
+  if (!isTelegramApp() || getToken()) {
+    return
+  }
 
   try {
     const { data } = await http.post('/auth/tg-login', {
