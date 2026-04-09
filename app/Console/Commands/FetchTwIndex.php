@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\OilPrice;
+use Carbon\Carbon;
 use GuzzleHttp\Client;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -12,16 +13,21 @@ class FetchTwIndex extends Command
     protected $signature   = 'fetch:tw-index
                               {--no-tg : 只存 DB，不推送 Telegram}
                               {--debug : 顯示原始 API 回應}';
-    protected $description = '每分鐘抓取台指期 / VIX 現價，存 DB 並在 5 分鐘震盪 ≥ 50 點時發送告警';
+    protected $description = '交易時段每分鐘抓取台指期 / VIX 現價，存 1分鐘K棒，1分鐘震盪 ≥ 閾值時發送告警';
 
     const TW_TICKER          = 'WTX';
     const VIX_TICKER         = 'VIX';
     const TG_API             = 'https://api.telegram.org/bot%s/sendMessage';
-    const ALERT_POINTS       = 50;     // 5 分鐘震盪閾值（點）
     const ALERT_COOLDOWN_SEC = 300;    // 告警冷卻 5 分鐘，避免重複推送
 
     public function handle()
     {
+        // ── 0. 交易時段判斷 ──────────────────────────────────────
+        if (!$this->isTradingHours()) {
+            $this->line('  [台指] 非交易時段（日盤 08:45–13:45 / 夜盤 15:00–05:00），略過');
+            return 0;
+        }
+
         // ── 1. 抓取台指 ──────────────────────────────────────────
         [$twPrice, $twRefreshedAt] = $this->fetchTwIndex();
 
@@ -44,7 +50,7 @@ class FetchTwIndex extends Command
             return 0;
         }
 
-        // ── 3. 5 分鐘震盪告警 ────────────────────────────────────
+        // ── 3. 1 分鐘震盪告警 ────────────────────────────────────
         $alert = $this->calcAlert($twPrice);
         if ($alert === null) {
             return 0;
@@ -56,14 +62,16 @@ class FetchTwIndex extends Command
             return 0;
         }
 
+        $alertPoints = (int) getConfig('wtx_alert_points', 50);
+
         $this->warn(sprintf('  [台指告警] %s %s %s點', $alert['arrow'], $alert['direction'], $alert['pointsFmt']));
 
-        $msg = "🚨 <b>台指期貨 5分震盪</b>\n"
+        $msg = "🚨 <b>台指期貨 1分震盪</b>\n"
              . "💹 當前：<b>" . number_format($twPrice, 0) . "</b>（{$alert['currTime']}）\n"
              . "{$alert['arrow']} <b>方向：{$alert['direction']}</b>　"
              . "{$alert['prevClose']} → <b>{$alert['currClose']}</b>（<b>{$alert['pointsFmt']}點</b> / <b>{$alert['pctFmt']}</b>）\n"
              . "📅 比較基準：{$alert['prevTime']}\n"
-             . "⚠️ 閾值 " . self::ALERT_POINTS . " 點";
+             . "⚠️ 閾值 {$alertPoints} 點";
 
         if ($vixPrice !== null) {
             $msg .= "\n\n" . $this->buildVixBlock($vixPrice);
@@ -74,19 +82,34 @@ class FetchTwIndex extends Command
         return 0;
     }
 
-    // ─── 告警計算：當前價 vs 5 分鐘前最近一筆 ──────────────────
+    // ─── 交易時段判斷 ────────────────────────────────────────────
+    // 日盤：08:45 – 13:45（台北時間）
+    // 夜盤：15:00 – 05:00 隔日（跨午夜）
+    private function isTradingHours(): bool
+    {
+        $now = Carbon::now('Asia/Taipei');
+        $t   = $now->hour * 60 + $now->minute;
+
+        $isDay   = ($t >= 8 * 60 + 45 && $t <= 13 * 60 + 45);
+        $isNight = ($t >= 15 * 60 || $t < 5 * 60);
+
+        return $isDay || $isNight;
+    }
+
+    // ─── 告警計算：當前價 vs 前一根1分鐘K棒 ─────────────────────
     private function calcAlert(float $currentPrice): ?array
     {
-        $fiveMinAgo = date('Y-m-d H:i:s', time() - self::ALERT_COOLDOWN_SEC);
+        $alertPoints = (int) getConfig('wtx_alert_points', 50);
 
+        // 取第 2 新的記錄（當前已存入 DB，需跳過最新那筆）
         $prevRecord = OilPrice::where('ticker', self::TW_TICKER)
-            ->where('candle_at', '<=', $fiveMinAgo)
             ->whereNotNull('close')
             ->orderBy('candle_at', 'desc')
+            ->skip(1)
             ->first();
 
         if (!$prevRecord) {
-            $this->line('  [台指告警] 5分鐘前無記錄，略過');
+            $this->line('  [台指告警] 無前一分鐘記錄，略過');
             return null;
         }
 
@@ -95,14 +118,14 @@ class FetchTwIndex extends Command
         $absDiff   = abs($diff);
         $pct       = $prevClose > 0 ? ($diff / $prevClose * 100) : 0;
 
-        $this->line(sprintf('  [台指告警] 5分前 %.0f → 現 %.0f = %.0f 點', $prevClose, $currentPrice, $diff));
+        $this->line(sprintf('  [台指告警] 前 %.0f → 現 %.0f = %.0f 點（閾值 %d）', $prevClose, $currentPrice, $diff, $alertPoints));
 
-        if ($absDiff < self::ALERT_POINTS) {
+        if ($absDiff < $alertPoints) {
             return null;
         }
 
-        $up        = $diff >= 0;
-        $sign      = $up ? '+' : '';
+        $up   = $diff >= 0;
+        $sign = $up ? '+' : '';
 
         return [
             'arrow'      => $up ? '📈' : '📉',
@@ -112,7 +135,7 @@ class FetchTwIndex extends Command
             'pointsFmt'  => sprintf('%s%.0f', $sign, $diff),
             'pctFmt'     => sprintf('%s%.2f%%', $sign, $pct),
             'prevTime'   => $prevRecord->candle_at->format('H:i'),
-            'currTime'   => date('H:i'),
+            'currTime'   => Carbon::now('Asia/Taipei')->format('H:i'),
         ];
     }
 
@@ -165,15 +188,15 @@ class FetchTwIndex extends Command
         return [(float) $price, $refreshedAt];
     }
 
-    // ─── 儲存台指（對齊 5 分鐘窗口）───────────────────────────
+    // ─── 儲存台指（對齊 1 分鐘窗口）───────────────────────────
     private function saveTwIndexPrice(float $price, ?string $refreshedAt): void
     {
         $ts       = $refreshedAt ? strtotime($refreshedAt) : time();
-        $candleAt = date('Y-m-d H:i:s', (int) (floor($ts / 300) * 300));
+        $candleAt = date('Y-m-d H:i:s', (int) (floor($ts / 60) * 60));
 
         OilPrice::updateOrCreate(
             ['ticker' => self::TW_TICKER, 'candle_at' => $candleAt],
-            ['timeframe' => 'i5', 'close' => $price]
+            ['timeframe' => 'i1', 'close' => $price]
         );
     }
 

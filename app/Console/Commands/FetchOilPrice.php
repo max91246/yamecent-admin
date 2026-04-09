@@ -22,9 +22,7 @@ class FetchOilPrice extends Command
     const TW_TICKER      = 'WTX';
     const VIX_TICKER     = 'VIX';
 
-    // 告警閾值
-    const ALERT_5M_PCT        = 1.0;   // 原油：當前+前一根 K 棒合併振幅超過 1% 告警
-    const ALERT_WTX_5M_POINTS = 50;    // 台指：5分鐘漲跌超過 50 點告警
+    // 告警閾值（已移至 admin_configs，使用 getConfig() 動態讀取）
 
     public function handle()
     {
@@ -105,7 +103,7 @@ class FetchOilPrice extends Command
                   . "{$alert5m['arrow']} <b>方向：{$alert5m['direction']}</b>　收盤 {$alert5m['prevClose']} → <b>{$alert5m['currClose']}</b>（<b>{$alert5m['closePctFmt']}</b> / {$alert5m['closeDiffFmt']}）\n"
                   . "🕐 區間：<b>{$alert5m['fromTime']} – {$alert5m['currTime']}</b>\n"
                   . "🔺 區間最高：<b>{$alert5m['maxHigh']}</b>　🔻 區間最低：<b>{$alert5m['minLow']}</b>\n"
-                  . "📊 振幅：<b>{$alert5m['pctFmt']}</b>（{$alert5m['diffFmt']}）　⚠️ 閾值 " . self::ALERT_5M_PCT . "%";
+                  . "📊 振幅：<b>{$alert5m['pctFmt']}</b>（{$alert5m['diffFmt']}）　⚠️ 閾值 " . getConfig('oil_alert_5m_pct', 1.0) . "%";
 
             // VIX 附帶資訊
             if ($vixPrice !== null) {
@@ -461,7 +459,7 @@ class FetchOilPrice extends Command
 
         $this->line(sprintf('  [5分告警] 合併振幅 高%.4f 低%.4f = %.4f%%', $maxHigh, $minLow, $pct));
 
-        if ($pct < self::ALERT_5M_PCT) {
+        if ($pct < (float) getConfig('oil_alert_5m_pct', 1.0)) {
             return null;
         }
 

@@ -632,34 +632,49 @@ class TgWebhookController extends Controller
     // ─── 回覆組建：台指 ──────────────────────────────────────────
     private function buildWtxReply(): string
     {
-        $latest = OilPrice::where('ticker', 'WTX')
+        // 撈最近 6 筆（5 根 K + 1 根用來算最舊那根的變化）
+        $rows = OilPrice::where('ticker', 'WTX')
             ->whereNotNull('close')
             ->orderBy('candle_at', 'desc')
-            ->first();
+            ->limit(6)
+            ->get();
 
-        if (!$latest) {
+        if ($rows->isEmpty()) {
             return '暫無台指資料';
         }
 
-        $prev = OilPrice::where('ticker', 'WTX')
-            ->whereNotNull('close')
-            ->where('candle_at', '<', $latest->candle_at)
-            ->orderBy('candle_at', 'desc')
-            ->first();
+        // 由舊到新排列
+        $rows = $rows->reverse()->values();
+        $display = $rows->slice(1);   // 顯示最新 5 根
+        $oldest  = $rows->first();    // 第 6 筆，用來算最舊顯示根的變化
 
-        $changeStr = '';
-        if ($prev) {
-            $diff  = (float) $latest->close - (float) $prev->close;
-            $pct   = (float) $prev->close > 0 ? ($diff / (float) $prev->close * 100) : 0;
-            $sign  = $diff >= 0 ? '+' : '';
-            $arrow = $diff >= 0 ? '📈' : '📉';
-            $changeStr = "\n{$arrow} 5分變化：{$sign}" . number_format($diff, 0) . "點（{$sign}" . number_format($pct, 2) . "%）";
+        $lines = [];
+        foreach ($display as $i => $row) {
+            $prev      = $i === 0 ? $oldest : $display->get($i - 1);
+            $price     = (float) $row->close;
+            $prevPrice = $prev ? (float) $prev->close : null;
+            $time      = \Carbon\Carbon::parse($row->candle_at)->setTimezone('Asia/Taipei')->format('H:i');
+
+            if ($prevPrice !== null && $prevPrice > 0) {
+                $diff  = $price - $prevPrice;
+                $pct   = $diff / $prevPrice * 100;
+                $sign  = $diff >= 0 ? '+' : '';
+                $arrow = $diff >= 0 ? '▲' : '▼';
+                $changeStr = "  {$arrow}{$sign}" . number_format($diff, 0) . "（{$sign}" . number_format($pct, 2) . "%）";
+            } else {
+                $changeStr = '';
+            }
+
+            $lines[] = "🕐 {$time}　" . number_format($price, 0) . $changeStr;
         }
 
         $vix    = OilPrice::where('ticker', 'VIX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
-        $vixStr = $vix ? "\n😨 VIX 恐慌指數：" . number_format((float) $vix->close, 2) : '';
+        $vixStr = $vix ? "\n\n😨 VIX 恐慌指數：" . number_format((float) $vix->close, 2) : '';
 
-        return "📈 台指期貨\n最新價：" . number_format((float) $latest->close, 0) . "{$changeStr}\n🕐 時間：{$latest->candle_at}{$vixStr}";
+        return "📈 台指期貨（近5根K棒）\n"
+             . "─────────────────\n"
+             . implode("\n", array_reverse($lines))
+             . $vixStr;
     }
 
     // ─── 回覆組建：VIX ───────────────────────────────────────────
