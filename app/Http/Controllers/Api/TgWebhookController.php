@@ -459,7 +459,9 @@ class TgWebhookController extends Controller
         }
 
         // 建立賣出 T+2 待收款記錄（僅供顯示，wallet 已即時增款）
-        $sellSettle    = $sellValue - $sellFee - $sellTax;  // 實際預計收款（含賣出淨額）
+        // 融資：需還券商 60% 借款；現股：全額收回
+        $loanRepay  = $isMargin ? $buyValue * 0.6 : 0;
+        $sellSettle = $sellValue - $loanRepay - $sellFee - $sellTax;
         $sellSettleDate = $this->calcSettleDate(Carbon::now('Asia/Taipei'));
         TgSettlement::create([
             'bot_id'            => $bot->id,
