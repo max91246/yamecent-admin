@@ -933,19 +933,36 @@ class TgWebhookController extends Controller
             ->where(fn($q) => $q->where('direction', 'buy')->orWhereNull('direction'))
             ->get();
 
-        $totalPendingSettle = (float) $pendingBuySettlements->sum('settlement_amount');
+        $totalPendingBuy = (float) $pendingBuySettlements->sum('settlement_amount');
+
+        // 待收賣出款項
+        $pendingSellSettlements = TgSettlement::where('bot_id', $botId)
+            ->where('tg_chat_id', $chatId)
+            ->where('is_settled', 0)
+            ->where('settle_date', '>=', $today)
+            ->where('stock_code', '!=', 'MANUAL')
+            ->where('direction', 'sell')
+            ->get();
+        $totalPendingSell = (float) $pendingSellSettlements->sum('settlement_amount');
 
         // 帳戶資金區塊
         if ($capital !== null) {
-            $totalCapital  = $capital + $totalSelfCost;
-            $afterSettle   = $capital - $totalPendingSettle;
-            $warning       = $afterSettle < 0 ? ' ⚠️' : '';
-            $profitStr    .= "\n\n💰 帳戶總資金：NT$" . number_format($totalCapital, 0)
-                           . "\n   ├ 持股占用：NT$" . number_format($totalSelfCost, 0)
-                           . "\n   ├ 帳戶現金：NT$" . number_format($capital, 0);
-            if ($totalPendingSettle > 0) {
-                $profitStr .= "\n   ├ 待交割扣款：-NT$" . number_format($totalPendingSettle, 0)
-                            . "\n   └ 交割後剩餘：NT$" . number_format($afterSettle, 0) . $warning;
+            $totalCapital = $capital + $totalSelfCost;
+            $netSettle    = $totalPendingSell - $totalPendingBuy;  // 正=淨收 負=淨付
+            $afterSettle  = $capital + $netSettle;
+            $warning      = $afterSettle < 0 ? ' ⚠️' : '';
+            $profitStr   .= "\n\n💰 帳戶總資金：NT$" . number_format($totalCapital, 0)
+                          . "\n   ├ 持股占用：NT$" . number_format($totalSelfCost, 0)
+                          . "\n   ├ 帳戶現金：NT$" . number_format($capital, 0);
+            if ($totalPendingBuy > 0 || $totalPendingSell > 0) {
+                if ($totalPendingBuy > 0) {
+                    $profitStr .= "\n   ├ 待付交割：-NT$" . number_format($totalPendingBuy, 0);
+                }
+                if ($totalPendingSell > 0) {
+                    $profitStr .= "\n   ├ 待收交割：+NT$" . number_format($totalPendingSell, 0);
+                }
+                $netSign    = $netSettle >= 0 ? '+' : '';
+                $profitStr .= "\n   └ 交割後剩餘：NT$" . number_format($afterSettle, 0) . $warning;
             } else {
                 $profitStr .= "\n   └ 剩餘可用：NT$" . number_format($capital, 0);
             }
