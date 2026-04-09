@@ -932,6 +932,7 @@ class TgWebhookController extends Controller
             ->where('tg_chat_id', $chatId)
             ->where('is_settled', 0)
             ->where('settle_date', '>=', $today)
+            ->where('stock_code', '!=', 'MANUAL')
             ->orderBy('settle_date')
             ->get();
 
