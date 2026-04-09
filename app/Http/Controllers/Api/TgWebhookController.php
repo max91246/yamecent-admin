@@ -78,6 +78,10 @@ class TgWebhookController extends Controller
                     [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
                 }
 
+            // 交割款查詢
+            } elseif ($data === 'view_settlements') {
+                [$replyText, $replyMarkup] = $this->buildSettlementReply($bot->id, $chatId);
+
             // 設定資金 — 先選模式
             } elseif ($data === 'set_capital') {
                 $replyText   = "⚙️ 設定資金模式\n\n"
@@ -929,45 +933,20 @@ class TgWebhookController extends Controller
 
         $today = Carbon::now('Asia/Taipei')->toDateString();
 
-        // T+2 待交割款項（settle:payments 排程每日 00:00 自動結算，此處僅顯示）
-        $settlements = TgSettlement::where('bot_id', $botId)
+        // T+2 待付交割款（只算買入方向，供帳戶資金計算用）
+        $pendingBuySettlements = TgSettlement::where('bot_id', $botId)
             ->where('tg_chat_id', $chatId)
             ->where('is_settled', 0)
             ->where('settle_date', '>=', $today)
             ->where('stock_code', '!=', 'MANUAL')
-            ->orderBy('settle_date')
+            ->where(fn($q) => $q->where('direction', 'buy')->orWhereNull('direction'))
             ->get();
 
-        $buySettlements  = $settlements->filter(fn($s) => ($s->direction ?? 'buy') !== 'sell');
-        $sellSettlements = $settlements->filter(fn($s) => ($s->direction ?? 'buy') === 'sell');
-
-        $totalPendingSettle = (float) $buySettlements->sum('settlement_amount');
-
-        $settleStr = '';
-        if ($settlements->isNotEmpty()) {
-            $settleStr = "\n\n━━ 📅 T+2 待交割款項 ━━";
-            foreach ($buySettlements as $s) {
-                $settleStr .= "\n📌 {$s->stock_name}（{$s->stock_code}）{$s->shares}張"
-                            . "　買進：NT$" . $s->buy_price
-                            . "\n   💳 交割日：" . $s->settle_date->format('m/d')
-                            . "　應付：NT$" . number_format($s->settlement_amount, 0);
-            }
-            if ($buySettlements->isNotEmpty()) {
-                $settleStr .= "\n   合計應付：NT$" . number_format($totalPendingSettle, 0);
-            }
-            foreach ($sellSettlements as $s) {
-                $settleStr .= "\n💚 {$s->stock_name}（{$s->stock_code}）{$s->shares}張"
-                            . "　賣出：NT$" . $s->buy_price
-                            . "\n   💳 交割日：" . $s->settle_date->format('m/d')
-                            . "　待收：NT$" . number_format($s->settlement_amount, 0);
-            }
-        }
+        $totalPendingSettle = (float) $pendingBuySettlements->sum('settlement_amount');
 
         // 帳戶資金區塊
-        // $capital = 帳戶現金餘額（已含過去扣款紀錄）
-        // 剩餘可用 = capital - 待交割款（尚未扣款但即將支出）
         if ($capital !== null) {
-            $totalCapital  = $capital + $totalSelfCost;  // 反推帳戶總資金（含持股）
+            $totalCapital  = $capital + $totalSelfCost;
             $afterSettle   = $capital - $totalPendingSettle;
             $warning       = $afterSettle < 0 ? ' ⚠️' : '';
             $profitStr    .= "\n\n💰 帳戶總資金：NT$" . number_format($totalCapital, 0)
@@ -983,15 +962,74 @@ class TgWebhookController extends Controller
             $profitStr .= "\n\n💰 帳戶資金：未設定（點擊⚙️設定資金）";
         }
 
-        $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr . $settleStr;
+        $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr;
 
-        // Inline keyboard：添加 + 設定資金 + 賣出（每排最多2個）
-        $inlineRows = [$addButton, $capitalBtn];
+        // Inline keyboard：添加 + 設定資金 + 交割款查詢 + 賣出（每排最多2個）
+        $settleQueryBtn = [['text' => '📅 交割款查詢', 'callback_data' => 'view_settlements']];
+        $inlineRows = [$addButton, $capitalBtn, $settleQueryBtn];
         foreach (array_chunk($delButtons, 2) as $row) {
             $inlineRows[] = $row;
         }
 
         return [$text, ['inline_keyboard' => $inlineRows]];
+    }
+
+    // ─── 回覆組建：交割款查詢 ────────────────────────────────────────
+    private function buildSettlementReply(int $botId, int $chatId): array
+    {
+        $today = Carbon::now('Asia/Taipei')->toDateString();
+
+        $settlements = TgSettlement::where('bot_id', $botId)
+            ->where('tg_chat_id', $chatId)
+            ->where('is_settled', 0)
+            ->where('settle_date', '>=', $today)
+            ->where('stock_code', '!=', 'MANUAL')
+            ->orderBy('settle_date')
+            ->orderBy('direction')
+            ->get();
+
+        if ($settlements->isEmpty()) {
+            return ["📅 交割款查詢\n\n目前無待交割款項。", null];
+        }
+
+        // 按交割日分組
+        $byDate = $settlements->groupBy(fn($s) => $s->settle_date->format('m/d'));
+
+        $text = "📅 交割款查詢\n";
+
+        $grandNet = 0;
+
+        foreach ($byDate as $dateStr => $group) {
+            $buys  = $group->filter(fn($s) => ($s->direction ?? 'buy') !== 'sell');
+            $sells = $group->filter(fn($s) => ($s->direction ?? 'buy') === 'sell');
+
+            $totalOut = (float) $buys->sum('settlement_amount');
+            $totalIn  = (float) $sells->sum('settlement_amount');
+            $net      = $totalIn - $totalOut;
+            $grandNet += $net;
+
+            $sign  = $net >= 0 ? '+' : '';
+            $emoji = $net >= 0 ? '🟢' : '🔴';
+
+            $text .= "\n━━ {$dateStr} 交割　{$emoji} 淨額：{$sign}NT$" . number_format($net, 0) . " ━━";
+
+            foreach ($buys as $s) {
+                $text .= "\n📌 {$s->stock_name}（{$s->stock_code}）{$s->shares}張　買進：NT${$s->buy_price}"
+                       . "\n   💸 應付：-NT$" . number_format($s->settlement_amount, 0);
+            }
+            foreach ($sells as $s) {
+                $text .= "\n💚 {$s->stock_name}（{$s->stock_code}）{$s->shares}張　賣出：NT${$s->buy_price}"
+                       . "\n   💰 待收：+NT$" . number_format($s->settlement_amount, 0);
+            }
+        }
+
+        $grandSign  = $grandNet >= 0 ? '+' : '';
+        $grandEmoji = $grandNet >= 0 ? '🟢' : '🔴';
+        $text .= "\n\n─────────────────"
+               . "\n{$grandEmoji} 合計淨額：{$grandSign}NT$" . number_format($grandNet, 0)
+               . "\n（正數 = 淨收款　負數 = 淨付款）";
+
+        return [$text, null];
     }
 
     // ─── Yahoo Finance：股票現價 ──────────────────────────────────
