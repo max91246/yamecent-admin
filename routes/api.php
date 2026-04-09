@@ -7,6 +7,7 @@ $router->post('/tg/webhook/{botId}', 'Api\TgWebhookController@handle');
 
 // 公開路由（不需要 Token）
 $router->post('/auth/login',       'Api\AuthController@login');
+$router->post('/auth/tg-login',    'Api\TgAuthController@login');
 $router->post('/members/register', 'Api\MemberController@register');
 
 // 文章（公開）
