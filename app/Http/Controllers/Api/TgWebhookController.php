@@ -78,11 +78,6 @@ class TgWebhookController extends Controller
                     [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
                 }
 
-            // 補登交割款
-            } elseif ($data === 'add_settlement') {
-                $this->setState($bot->id, $chatId, 'settle_step1');
-                $replyText = "📅 補登交割款\n請輸入交割日期（格式：MM/DD，例如：04/09）：\n\n輸入「取消」可返回";
-
             // 設定資金 — 先選模式
             } elseif ($data === 'set_capital') {
                 $replyText   = "⚙️ 設定資金模式\n\n"
@@ -200,10 +195,6 @@ class TgWebhookController extends Controller
                 return $this->handleSellStep1($bot, $chatId, $userId, $text, $stateObj);
             case 'sell_step2':
                 return $this->handleSellStep2($bot, $chatId, $userId, $text, $stateObj);
-            case 'settle_step1':
-                return $this->handleSettleStep1($bot, $chatId, $text);
-            case 'settle_step2':
-                return $this->handleSettleStep2($bot, $chatId, $userId, $text, $stateObj);
             case 'set_capital_total':
                 return $this->handleSetCapital($bot, $chatId, $userId, $text, 'total');
             case 'set_capital_remain':
@@ -500,64 +491,6 @@ class TgWebhookController extends Controller
         return $this->buildPortfolioReply($bot->id, $chatId);
     }
 
-    // ─── 補登交割款：step1 輸入日期 ─────────────────────────────
-    private function handleSettleStep1(TgBot $bot, int $chatId, string $text): array
-    {
-        // 接受 MM/DD 或 YYYY/MM/DD 或 MM-DD
-        $text = trim(str_replace('-', '/', $text));
-        $year = date('Y');
-
-        if (preg_match('/^(\d{1,2})\/(\d{1,2})$/', $text, $m)) {
-            $date = sprintf('%s-%02d-%02d', $year, (int) $m[1], (int) $m[2]);
-        } elseif (preg_match('/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/', $text, $m)) {
-            $date = sprintf('%s-%02d-%02d', $m[1], (int) $m[2], (int) $m[3]);
-        } else {
-            return ['❌ 日期格式錯誤，請輸入如 04/09：', null];
-        }
-
-        if (!strtotime($date)) {
-            return ['❌ 無效日期，請重新輸入（例如：04/09）：', null];
-        }
-
-        $this->setState($bot->id, $chatId, 'settle_step2', ['date' => $date]);
-        return ["請輸入 {$date} 的交割金額（台幣整數，例如：696708）：\n\n輸入「取消」可返回", null];
-    }
-
-    // ─── 補登交割款：step2 輸入金額，建立記錄 ───────────────────
-    private function handleSettleStep2(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj): array
-    {
-        $amount = (float) str_replace([',', '，', '$', 'NT$', ' '], '', $text);
-        if ($amount <= 0) {
-            return ['❌ 請輸入有效金額（正整數，例如：696708）：', null];
-        }
-
-        $date = $stateObj->state_data['date'] ?? null;
-        if (!$date) {
-            $this->clearState($bot->id, $chatId);
-            return ['❌ 狀態錯誤，請重新操作。', null];
-        }
-
-        TgSettlement::create([
-            'bot_id'            => $bot->id,
-            'tg_chat_id'        => $chatId,
-            'tg_user_id'        => $userId,
-            'stock_code'        => 'MANUAL',
-            'stock_name'        => '手動補登',
-            'shares'            => 0,
-            'buy_price'         => 0,
-            'settlement_amount' => $amount,
-            'settle_date'       => $date,
-            'is_settled'        => 0,
-        ]);
-
-        $this->clearState($bot->id, $chatId);
-        $this->sendMessage($bot->token, $chatId,
-            "✅ 已補登交割款\n📅 交割日：{$date}\n💳 金額：NT$" . number_format($amount, 0)
-        );
-
-        return $this->buildPortfolioReply($bot->id, $chatId);
-    }
-
     // ─── 設定資金總額（total=直接設定 / remain=剩餘+持股成本反推）──
     private function handleSetCapital(TgBot $bot, int $chatId, string $userId, string $text, string $mode = 'total'): array
     {
@@ -849,14 +782,13 @@ class TgWebhookController extends Controller
             ->where('tg_chat_id', $chatId)
             ->get();
 
-        $addButton   = [['text' => '➕ 添加持股',   'callback_data' => 'holding_add']];
-        $capitalBtn  = [['text' => '⚙️ 設定資金',   'callback_data' => 'set_capital']];
-        $settleBtn   = [['text' => '📅 補登交割款', 'callback_data' => 'add_settlement']];
+        $addButton  = [['text' => '➕ 添加持股', 'callback_data' => 'holding_add']];
+        $capitalBtn = [['text' => '⚙️ 設定資金', 'callback_data' => 'set_capital']];
 
         if ($holdings->isEmpty()) {
             return [
                 "💼 我的持股\n\n目前沒有持股記錄。",
-                ['inline_keyboard' => [$addButton, $capitalBtn, $settleBtn]],
+                ['inline_keyboard' => [$addButton, $capitalBtn]],
             ];
         }
 
@@ -1050,8 +982,8 @@ class TgWebhookController extends Controller
 
         $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr . $settleStr;
 
-        // Inline keyboard：添加 + 設定資金 + 補登交割款 + 賣出（每排最多2個）
-        $inlineRows = [$addButton, $capitalBtn, $settleBtn];
+        // Inline keyboard：添加 + 設定資金 + 賣出（每排最多2個）
+        $inlineRows = [$addButton, $capitalBtn];
         foreach (array_chunk($delButtons, 2) as $row) {
             $inlineRows[] = $row;
         }
