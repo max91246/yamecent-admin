@@ -43,6 +43,11 @@ class Kernel extends ConsoleKernel
                  ->withoutOverlapping()
                  ->runInBackground()
                  ->appendOutputTo(storage_path('logs/tw-index.log'));
+
+        // 每日 00:00 結算當日到期的 T+2 交割款
+        $schedule->command('settle:payments')
+                 ->dailyAt('00:00')
+                 ->appendOutputTo(storage_path('logs/settle-payments.log'));
     }
 
     /**
