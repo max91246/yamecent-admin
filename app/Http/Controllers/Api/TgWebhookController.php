@@ -960,9 +960,10 @@ class TgWebhookController extends Controller
                 $curValStr = $curValue !== null ? '現值：NT$' . number_format($curValue, 0) : '查詢失敗';
 
                 $lotLines[] = "{$prefix} {$h->shares}張·{$marginTag}　{$buyStr}\n      {$curValStr}{$profitStr}";
-
-                $delButtons[] = ['text' => "💰 賣出 {$stockCode}", 'callback_data' => 'holding_sell_' . $h->id];
             }
+
+            // 每個股票代號只加一顆賣出按鈕（指向最早那筆持股）
+            $delButtons[] = ['text' => "💰 賣出 {$stockCode}", 'callback_data' => 'holding_sell_' . $group->first()->id];
 
             // 多筆時顯示分組合計
             $groupSummary = '';
