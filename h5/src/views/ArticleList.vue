@@ -122,8 +122,7 @@ const page         = ref(1)
 const sentinel     = ref(null)
 const member       = getMember()
 const memberActive = ref(isMemberActive())
-const apiBase       = import.meta.env.VITE_API_BASE_URL || ''
-const imgUrl        = (path) => path ? apiBase + path : ''
+import { imgUrl } from '../utils/image'
 
 const TYPE_LABELS = { 1: '普通文章', 4: '玩股網' }
 const typeLabel   = (t) => TYPE_LABELS[t] || '文章'
