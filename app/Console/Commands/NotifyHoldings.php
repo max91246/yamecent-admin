@@ -82,9 +82,8 @@ class NotifyHoldings extends Command
                 $sign     = $isProfit ? '+' : '';
                 $emoji    = $isProfit ? '📈' : '📉';
                 $label    = $isProfit ? '獲利' : '虧損';
-                $type     = $holding->is_margin ? '融資' : '現股';
 
-                $alerts[] = "{$emoji} <b>{$holding->stock_name}（{$holding->stock_code}）</b> [{$type}]\n"
+                $alerts[] = "{$emoji} <b>{$holding->stock_name}（{$holding->stock_code}）</b>\n"
                           . "   買入：<b>{$buyPrice}</b>　現價：<b>{$currentPrice}</b>\n"
                           . "   {$label}：<b>{$sign}" . number_format($pct, 2) . "%</b>";
             }
