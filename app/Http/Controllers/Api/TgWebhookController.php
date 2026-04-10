@@ -311,16 +311,7 @@ class TgWebhookController extends Controller
             'buy_price'  => $buyPrice,
         ]);
 
-        // 扣除帳戶資金（若已設定）
-        $walletRow = TgWallet::where('bot_id', $bot->id)
-            ->where('tg_chat_id', $chatId)
-            ->where('tg_user_id', $userId)
-            ->first();
-        if ($walletRow) {
-            $walletRow->decrement('capital', $cost);
-        }
-
-        // 建立 T+2 交割記錄
+        // 建立 T+2 交割記錄（不立即扣款，由每日 settle:payments cron 處理）
         // 現股：交割全額市值 + 手續費
         // 融資：交割自備款（40%）+ 手續費
         $buyFee     = (int) ceil($marketVal * 0.001425);
