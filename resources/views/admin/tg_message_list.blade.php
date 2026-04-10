@@ -76,10 +76,18 @@
                                         <td>{{ $item->tg_user_id }}</td>
                                         <td>{{ $item->tg_username ?: '-' }}</td>
                                         <td>{{ $item->tg_chat_id }}</td>
-                                        <td>
-                                            <span title="{{ $item->content }}">
-                                                {{ mb_substr($item->content, 0, 80) }}{{ mb_strlen($item->content) > 80 ? '...' : '' }}
-                                            </span>
+                                        <td style="max-width:320px;">
+                                            @if(mb_strlen($item->content) > 80)
+                                                {{ mb_substr($item->content, 0, 80) }}...
+                                                <a href="#" class="text-primary small"
+                                                   data-toggle="modal" data-target="#msgModal"
+                                                   data-content="{{ htmlspecialchars($item->content) }}"
+                                                   data-id="{{ $item->id }}">
+                                                   展開
+                                                </a>
+                                            @else
+                                                {{ $item->content }}
+                                            @endif
                                         </td>
                                         <td>
                                             @if($item->direction == 1)
@@ -103,4 +111,27 @@
             </div>
         </div>
     </div>
+
+    {{-- 訊息完整內容 Modal --}}
+    <div class="modal fade" id="msgModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">訊息完整內容 <small class="text-muted" id="msgModalId"></small></h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <pre id="msgModalContent" style="white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:0.9rem;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $('#msgModal').on('show.bs.modal', function (e) {
+            var btn = $(e.relatedTarget);
+            $('#msgModalContent').text(btn.data('content'));
+            $('#msgModalId').text('#' + btn.data('id'));
+        });
+    </script>
 @endsection
