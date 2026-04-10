@@ -57,10 +57,26 @@ class TgHoldingController extends Controller
             ->when($botId, fn($q) => $q->where('bot_id', $botId))
             ->first();
 
+        // 同股票＋同類型（現股/融資）合併為一筆，張數與成本加總，買進均價重新加權平均
         $holdings = TgHolding::where('tg_chat_id', $chatId)
             ->when($botId, fn($q) => $q->where('bot_id', $botId))
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->get()
+            ->groupBy(fn($h) => $h->stock_code . '_' . $h->is_margin)
+            ->map(function ($group) {
+                $first      = $group->first();
+                $totalShares = $group->sum('shares');
+                $totalCost   = $group->sum('total_cost');
+                $avgPrice    = $totalShares > 0
+                    ? round($group->sum(fn($h) => $h->buy_price * $h->shares) / $totalShares, 2)
+                    : $first->buy_price;
+
+                $first->shares     = $totalShares;
+                $first->total_cost = $totalCost;
+                $first->buy_price  = $avgPrice;
+                return $first;
+            })
+            ->sortByDesc('created_at')
+            ->values();
 
         $trades = TgHoldingTrade::where('tg_chat_id', $chatId)
             ->when($botId, fn($q) => $q->where('bot_id', $botId))
