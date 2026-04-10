@@ -8,8 +8,6 @@ use App\Article;
 use App\ArticleComment;
 use App\TgWallet;
 use App\TgHolding;
-use App\TgHoldingTrade;
-use App\TgSettlement;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Storage;
@@ -36,15 +34,9 @@ class IndexController extends Controller
             // TG Bot
             'bot_users'       => TgWallet::distinct('tg_chat_id')->count('tg_chat_id'),
             'holding_users'   => TgHolding::distinct('tg_chat_id')->count('tg_chat_id'),
-            // 交割款
-            'settle_pending'  => TgSettlement::where('is_settled', 0)->count(),
-            'settle_buy_amt'  => TgSettlement::where('is_settled', 0)->where('direction', 'buy')->sum('settlement_amount'),
-            'settle_sell_amt' => TgSettlement::where('is_settled', 0)->where('direction', 'sell')->sum('settlement_amount'),
         ];
 
-        $recentTrades = TgHoldingTrade::orderBy('created_at', 'desc')->limit(10)->get();
-
-        return view('admin.console', compact('stats', 'recentTrades'));
+        return view('admin.console', compact('stats'));
     }
 
     /**
