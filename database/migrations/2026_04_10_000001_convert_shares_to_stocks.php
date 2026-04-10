@@ -5,9 +5,20 @@ use Illuminate\Support\Facades\DB;
 
 class ConvertSharesToStocks extends Migration
 {
+    private function tablePrefix(): string
+    {
+        // 優先取 config 前綴；若為空則嘗試偵測實際前綴
+        $p = DB::getTablePrefix();
+        if ($p !== '') return $p;
+
+        // 偵測：若 ya_tg_holdings 存在則前綴為 ya_
+        $tables = DB::select("SHOW TABLES LIKE 'ya_tg_holdings'");
+        return count($tables) > 0 ? 'ya_' : '';
+    }
+
     public function up()
     {
-        $p = DB::getTablePrefix();
+        $p = $this->tablePrefix();
 
         // 先將現有資料乘以 1000（張→股）
         DB::statement("UPDATE {$p}tg_holdings SET shares = shares * 1000");
@@ -22,7 +33,7 @@ class ConvertSharesToStocks extends Migration
 
     public function down()
     {
-        $p = DB::getTablePrefix();
+        $p = $this->tablePrefix();
 
         DB::statement("UPDATE {$p}tg_holdings SET shares = shares / 1000");
         DB::statement("UPDATE {$p}tg_holding_trades SET sell_shares = sell_shares / 1000");
