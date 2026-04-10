@@ -1010,7 +1010,7 @@ class TgWebhookController extends Controller
         }
 
         // 按交割日分組
-        $byDate = $settlements->groupBy(fn($s) => $s->settle_date->format('m/d'));
+        $byDate = $settlements->groupBy(fn($s) => Carbon::parse($s->settle_date)->format('m/d'));
 
         $text = "📅 交割款查詢\n";
 
@@ -1031,11 +1031,11 @@ class TgWebhookController extends Controller
             $text .= "\n━━ {$dateStr} 交割　{$emoji} 淨額：{$sign}NT$" . number_format($net, 0) . " ━━";
 
             foreach ($buys as $s) {
-                $text .= "\n📌 {$s->stock_name}（{$s->stock_code}）{$s->shares}張　買進：NT${$s->buy_price}"
+                $text .= "\n📌 {$s->stock_name}（{$s->stock_code}）{$s->shares}張　買進：NT$" . $s->buy_price
                        . "\n   💸 應付：-NT$" . number_format($s->settlement_amount, 0);
             }
             foreach ($sells as $s) {
-                $text .= "\n💚 {$s->stock_name}（{$s->stock_code}）{$s->shares}張　賣出：NT${$s->buy_price}"
+                $text .= "\n💚 {$s->stock_name}（{$s->stock_code}）{$s->shares}張　賣出：NT$" . $s->buy_price
                        . "\n   💰 待收：+NT$" . number_format($s->settlement_amount, 0);
             }
         }
