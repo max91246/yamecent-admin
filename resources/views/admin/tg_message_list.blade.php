@@ -79,12 +79,9 @@
                                         <td style="max-width:320px;">
                                             @if(mb_strlen($item->content) > 80)
                                                 {{ mb_substr($item->content, 0, 80) }}...
-                                                <a href="#" class="text-primary small"
-                                                   data-toggle="modal" data-target="#msgModal"
-                                                   data-content="{{ htmlspecialchars($item->content) }}"
-                                                   data-id="{{ $item->id }}">
-                                                   展開
-                                                </a>
+                                                <a href="#" class="text-primary small msg-expand"
+                                                   data-id="{{ $item->id }}">展開</a>
+                                                <div id="msg-content-{{ $item->id }}" style="display:none">{{ $item->content }}</div>
                                             @else
                                                 {{ $item->content }}
                                             @endif
@@ -128,10 +125,13 @@
     </div>
 
     <script>
-        $('#msgModal').on('show.bs.modal', function (e) {
-            var btn = $(e.relatedTarget);
-            $('#msgModalContent').text(btn.data('content'));
-            $('#msgModalId').text('#' + btn.data('id'));
+        $(document).on('click', '.msg-expand', function (e) {
+            e.preventDefault();
+            var id = $(this).data('id');
+            var content = $('#msg-content-' + id).text();
+            $('#msgModalContent').text(content);
+            $('#msgModalId').text('#' + id);
+            $('#msgModal').modal('show');
         });
     </script>
 @endsection
