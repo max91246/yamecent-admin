@@ -239,7 +239,7 @@ class TgWebhookController extends Controller
         ]);
 
         return [
-            "✅ 找到：{$quote['name']}（{$code}）\n💰 當前價：{$quote['price']}\n\n請輸入持有股數（1張=1000股，例如：5000；零股例如：500）：",
+            "✅ 找到：{$quote['name']}（{$code}）\n💰 當前價：{$quote['price']}\n\n請輸入持有【股數】（整股：5張請輸入 5000，零股：500股請輸入 500）：",
             null,
         ];
     }
