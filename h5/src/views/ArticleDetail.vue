@@ -154,13 +154,13 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import http from '../utils/request'
 import { getToken, getMember, setMember, isMemberActive } from '../utils/auth'
+import { imgUrl } from '../utils/image'
 
 const route        = useRoute()
 const article      = ref(null)
 const loading      = ref(true)
 const error        = ref('')
 const memberActive = ref(isMemberActive())
-import { imgUrl } from '../utils/image'
 
 const TYPE_LABELS = { 1: '普通文章', 4: '玩股網' }
 const typeLabel   = (t) => TYPE_LABELS[t] || '文章'

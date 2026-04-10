@@ -5,50 +5,110 @@ namespace App\Http\Controllers\Admin;
 use App\TgBot;
 use App\TgHolding;
 use App\TgHoldingTrade;
+use App\TgSettlement;
+use App\TgWallet;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
 class TgHoldingController extends Controller
 {
-    // 當前持股列表
+    // 用戶持股總覽（以用戶為單位）
     public function holdingList(Request $request)
     {
-        $query = TgHolding::orderBy('id', 'desc');
+        $botId  = $request->input('bot_id');
+        $chatId = $request->input('tg_chat_id');
 
-        if ($botId = $request->input('bot_id')) {
-            $query->where('bot_id', $botId);
-        }
-        if ($chatId = $request->input('tg_chat_id')) {
-            $query->where('tg_chat_id', $chatId);
-        }
-        if ($code = $request->input('stock_code')) {
-            $query->where('stock_code', 'like', "%{$code}%");
-        }
+        // 查出所有有持股或有交易記錄的用戶（以 chat_id 為單位）
+        $query = TgWallet::orderBy('id', 'desc');
+        if ($botId)  $query->where('bot_id', $botId);
+        if ($chatId) $query->where('tg_chat_id', $chatId);
+
+        $wallets = $query->paginate(20)->appends($request->query());
+
+        // 為每個用戶附加持股筆數、歷史損益
+        $chatIds = $wallets->pluck('tg_chat_id')->toArray();
+
+        $holdingCounts = TgHolding::whereIn('tg_chat_id', $chatIds)
+            ->selectRaw('tg_chat_id, COUNT(*) as cnt, SUM(total_cost) as total_cost')
+            ->groupBy('tg_chat_id')
+            ->get()
+            ->keyBy('tg_chat_id');
+
+        $tradeProfits = TgHoldingTrade::whereIn('tg_chat_id', $chatIds)
+            ->selectRaw('tg_chat_id, COUNT(*) as total, SUM(profit) as profit, SUM(profit > 0) as win')
+            ->groupBy('tg_chat_id')
+            ->get()
+            ->keyBy('tg_chat_id');
 
         return view('admin.tg_holding_list', [
-            'list' => $query->paginate(20)->appends($request->query()),
-            'bots' => TgBot::orderBy('id')->get(['id', 'name']),
+            'wallets'       => $wallets,
+            'holdingCounts' => $holdingCounts,
+            'tradeProfits'  => $tradeProfits,
+            'bots'          => TgBot::orderBy('id')->get(['id', 'name']),
         ]);
     }
 
-    // 歷史交易記錄
+    // 單一用戶詳情
+    public function userDetail(Request $request, $chatId)
+    {
+        $botId  = $request->input('bot_id');
+
+        $wallet   = TgWallet::where('tg_chat_id', $chatId)
+            ->when($botId, fn($q) => $q->where('bot_id', $botId))
+            ->first();
+
+        $holdings = TgHolding::where('tg_chat_id', $chatId)
+            ->when($botId, fn($q) => $q->where('bot_id', $botId))
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $trades = TgHoldingTrade::where('tg_chat_id', $chatId)
+            ->when($botId, fn($q) => $q->where('bot_id', $botId))
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $settlements = TgSettlement::where('tg_chat_id', $chatId)
+            ->when($botId, fn($q) => $q->where('bot_id', $botId))
+            ->where('is_settled', 0)
+            ->orderBy('settle_date')
+            ->get();
+
+        $tradeTotal  = $trades->count();
+        $tradeWin    = $trades->where('profit', '>', 0)->count();
+        $tradeProfit = $trades->sum('profit');
+        $holdingCost = $holdings->sum('total_cost');
+        $settleBuy   = $settlements->where('direction', 'buy')->sum('settlement_amount');
+        $settleSell  = $settlements->where('direction', 'sell')->sum('settlement_amount');
+
+        return view('admin.tg_user_detail', [
+            'chatId'      => $chatId,
+            'wallet'      => $wallet,
+            'holdings'    => $holdings,
+            'trades'      => $trades,
+            'settlements' => $settlements,
+            'holdingCost' => $holdingCost,
+            'tradeTotal'  => $tradeTotal,
+            'tradeWin'    => $tradeWin,
+            'tradeWinPct' => $tradeTotal > 0 ? round($tradeWin / $tradeTotal * 100) : 0,
+            'tradeProfit' => $tradeProfit,
+            'settleBuy'   => $settleBuy,
+            'settleSell'  => $settleSell,
+            'settleNet'   => $settleSell - $settleBuy,
+            'bots'        => TgBot::orderBy('id')->get(['id', 'name']),
+        ]);
+    }
+
+    // 歷史交易記錄（保留，可從用戶詳情連結過來）
     public function tradeList(Request $request)
     {
         $query = TgHoldingTrade::orderBy('id', 'desc');
 
-        if ($botId = $request->input('bot_id')) {
-            $query->where('bot_id', $botId);
-        }
-        if ($chatId = $request->input('tg_chat_id')) {
-            $query->where('tg_chat_id', $chatId);
-        }
-        if ($code = $request->input('stock_code')) {
-            $query->where('stock_code', 'like', "%{$code}%");
-        }
+        if ($botId = $request->input('bot_id'))       $query->where('bot_id', $botId);
+        if ($chatId = $request->input('tg_chat_id'))  $query->where('tg_chat_id', $chatId);
+        if ($code = $request->input('stock_code'))    $query->where('stock_code', 'like', "%{$code}%");
 
         $list = $query->paginate(20)->appends($request->query());
 
-        // 計算篩選後的總損益
         $totalProfit = TgHoldingTrade::when($request->input('bot_id'), fn($q, $v) => $q->where('bot_id', $v))
             ->when($request->input('tg_chat_id'), fn($q, $v) => $q->where('tg_chat_id', $v))
             ->when($request->input('stock_code'), fn($q, $v) => $q->where('stock_code', 'like', "%{$v}%"))

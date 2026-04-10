@@ -105,8 +105,9 @@ Route::group([
         $route->get('tg-message/list',       'Admin\TgMessageController@tgMessageList');
 
         // TG 持股管理
-        $route->get('tg-holding/list',       'Admin\TgHoldingController@holdingList');
-        $route->get('tg-holding/trade-list', 'Admin\TgHoldingController@tradeList');
+        $route->get('tg-holding/list',           'Admin\TgHoldingController@holdingList');
+        $route->get('tg-holding/user/{chatId}',  'Admin\TgHoldingController@userDetail');
+        $route->get('tg-holding/trade-list',     'Admin\TgHoldingController@tradeList');
     });
 
 });

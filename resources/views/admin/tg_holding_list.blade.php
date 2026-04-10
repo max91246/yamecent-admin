@@ -7,24 +7,18 @@
                     <span class="page-title-icon bg-gradient-primary text-white mr-2">
                         <i class="mdi mdi-briefcase"></i>
                     </span>
-                    TG 用戶持股
+                    TG 用戶持股管理
                 </h3>
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb">
-                        <li class="breadcrumb-item"><a href="#">TG 機器人</a></li>
-                        <li class="breadcrumb-item active">持股管理</li>
-                    </ol>
-                </nav>
             </div>
             <div class="row">
                 <div class="col-lg-12 grid-margin stretch-card">
                     <div class="card">
                         <div class="card-body">
-                            <h4 class="card-title">當前持股列表</h4>
+                            <h4 class="card-title">用戶列表</h4>
 
                             <form method="GET" action="" class="mb-3">
                                 <div class="row">
-                                    <div class="col-md-3">
+                                    <div class="col-md-4">
                                         <select name="bot_id" class="form-control form-control-sm">
                                             <option value="">全部機器人</option>
                                             @foreach($bots as $bot)
@@ -32,16 +26,12 @@
                                             @endforeach
                                         </select>
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-4">
                                         <input type="text" name="tg_chat_id" class="form-control form-control-sm" placeholder="Chat ID" value="{{ request('tg_chat_id') }}">
                                     </div>
-                                    <div class="col-md-3">
-                                        <input type="text" name="stock_code" class="form-control form-control-sm" placeholder="股票代號" value="{{ request('stock_code') }}">
-                                    </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-4">
                                         <button type="submit" class="btn btn-primary btn-sm">搜尋</button>
                                         <a href="{{ request()->url() }}" class="btn btn-secondary btn-sm">重置</a>
-                                        <a href="{{ url('admin/tg-holding/trade-list') }}" class="btn btn-info btn-sm ml-2">交易記錄</a>
                                     </div>
                                 </div>
                             </form>
@@ -50,43 +40,58 @@
                                 <table class="table table-hover">
                                     <thead>
                                         <tr>
-                                            <th>ID</th>
-                                            <th>機器人</th>
                                             <th>Chat ID</th>
-                                            <th>股票</th>
-                                            <th>張數</th>
-                                            <th>類型</th>
-                                            <th>買進價</th>
-                                            <th>持有成本</th>
-                                            <th>新增時間</th>
+                                            <th>機器人</th>
+                                            <th>帳戶資金</th>
+                                            <th>持股筆數</th>
+                                            <th>持股總成本</th>
+                                            <th>歷史損益</th>
+                                            <th>勝率</th>
+                                            <th>操作</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @forelse($list as $row)
+                                        @forelse($wallets as $wallet)
+                                            @php
+                                                $hc = $holdingCounts[$wallet->tg_chat_id] ?? null;
+                                                $tp = $tradeProfits[$wallet->tg_chat_id] ?? null;
+                                                $profit  = $tp ? (float)$tp->profit : 0;
+                                                $total   = $tp ? (int)$tp->total : 0;
+                                                $win     = $tp ? (int)$tp->win : 0;
+                                                $winPct  = $total > 0 ? round($win / $total * 100) : 0;
+                                                $botName = optional(collect($bots)->firstWhere('id', $wallet->bot_id))->name ?? $wallet->bot_id;
+                                            @endphp
                                             <tr>
-                                                <td>{{ $row->id }}</td>
-                                                <td>{{ optional(collect($bots)->firstWhere('id', $row->bot_id))->name ?? $row->bot_id }}</td>
-                                                <td>{{ $row->tg_chat_id }}</td>
-                                                <td>{{ $row->stock_name }}（{{ $row->stock_code }}）</td>
-                                                <td>{{ $row->shares }} 張</td>
+                                                <td><strong>{{ $wallet->tg_chat_id }}</strong></td>
+                                                <td>{{ $botName }}</td>
+                                                <td>NT${{ number_format($wallet->capital, 0) }}</td>
+                                                <td>{{ $hc ? $hc->cnt : 0 }} 筆</td>
+                                                <td>{{ $hc ? 'NT$' . number_format($hc->total_cost, 0) : '-' }}</td>
+                                                <td class="{{ $profit >= 0 ? 'text-success' : 'text-danger' }} font-weight-bold">
+                                                    {{ $total > 0 ? ($profit >= 0 ? '+' : '') . 'NT$' . number_format($profit, 0) : '-' }}
+                                                </td>
                                                 <td>
-                                                    @if($row->is_margin)
-                                                        <span class="badge badge-warning">融資</span>
+                                                    @if($total > 0)
+                                                        <span class="badge {{ $winPct >= 50 ? 'badge-success' : 'badge-danger' }}">{{ $winPct }}%</span>
+                                                        <small class="text-muted">{{ $win }}/{{ $total }}</small>
                                                     @else
-                                                        <span class="badge badge-info">現股</span>
+                                                        -
                                                     @endif
                                                 </td>
-                                                <td>NT${{ $row->buy_price }}</td>
-                                                <td>NT${{ number_format($row->total_cost, 0) }}</td>
-                                                <td>{{ $row->created_at }}</td>
+                                                <td>
+                                                    <a href="{{ url('admin/tg-holding/user/' . $wallet->tg_chat_id) }}?bot_id={{ $wallet->bot_id }}"
+                                                       class="btn btn-primary btn-sm">
+                                                        查看詳情
+                                                    </a>
+                                                </td>
                                             </tr>
                                         @empty
-                                            <tr><td colspan="9" class="text-center">無資料</td></tr>
+                                            <tr><td colspan="8" class="text-center">無資料</td></tr>
                                         @endforelse
                                     </tbody>
                                 </table>
                             </div>
-                            {{ $list->links() }}
+                            {{ $wallets->links() }}
                         </div>
                     </div>
                 </div>

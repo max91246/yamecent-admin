@@ -111,6 +111,7 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import http from '../utils/request'
 import { getMember, setMember, isMemberActive } from '../utils/auth'
+import { imgUrl } from '../utils/image'
 
 const router       = useRouter()
 const articles     = ref([])
@@ -122,7 +123,6 @@ const page         = ref(1)
 const sentinel     = ref(null)
 const member       = getMember()
 const memberActive = ref(isMemberActive())
-import { imgUrl } from '../utils/image'
 
 const TYPE_LABELS = { 1: '普通文章', 4: '玩股網' }
 const typeLabel   = (t) => TYPE_LABELS[t] || '文章'

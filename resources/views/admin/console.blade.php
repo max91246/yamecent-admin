@@ -62,69 +62,7 @@
                 </div>
             </div>
 
-            {{-- 第二排：持股總成本 / 歷史損益 / 勝率 --}}
-            <div class="row">
-                <div class="col-md-4 stretch-card grid-margin">
-                    <div class="card">
-                        <div class="card-body">
-                            <h4 class="card-title">持股總成本</h4>
-                            <div class="d-flex align-items-center mt-3">
-                                <i class="mdi mdi-briefcase-outline icon-lg text-info mr-3"></i>
-                                <div>
-                                    <h3 class="mb-0">NT$ {{ number_format($stats['holding_cost']) }}</h3>
-                                    <p class="text-muted small mb-0">{{ $stats['holding_count'] }} 筆持股紀錄</p>
-                                </div>
-                            </div>
-                            <div class="mt-3">
-                                <div class="d-flex justify-content-between small text-muted mb-1">
-                                    <span>融資</span><span>{{ $stats['margin_pct'] }}%</span>
-                                </div>
-                                <div class="progress" style="height:6px;">
-                                    <div class="progress-bar bg-gradient-warning" style="width:{{ $stats['margin_pct'] }}%"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4 stretch-card grid-margin">
-                    <div class="card">
-                        <div class="card-body">
-                            <h4 class="card-title">歷史交易損益</h4>
-                            @php $profit = $stats['trade_profit']; @endphp
-                            <div class="d-flex align-items-center mt-3">
-                                <i class="mdi mdi-chart-line icon-lg {{ $profit >= 0 ? 'text-success' : 'text-danger' }} mr-3"></i>
-                                <div>
-                                    <h3 class="mb-0 {{ $profit >= 0 ? 'text-success' : 'text-danger' }}">
-                                        {{ $profit >= 0 ? '+' : '' }}NT$ {{ number_format($profit) }}
-                                    </h3>
-                                    <p class="text-muted small mb-0">共 {{ $stats['trade_total'] }} 筆已結算交易</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4 stretch-card grid-margin">
-                    <div class="card">
-                        <div class="card-body">
-                            <h4 class="card-title">交易勝率</h4>
-                            <div class="d-flex align-items-center mt-3">
-                                <i class="mdi mdi-trophy-outline icon-lg text-primary mr-3"></i>
-                                <div>
-                                    <h3 class="mb-0">{{ $stats['trade_win_pct'] }}%</h3>
-                                    <p class="text-muted small mb-0">盈利 {{ $stats['trade_win'] }} 筆 ／ 虧損 {{ $stats['trade_total'] - $stats['trade_win'] }} 筆</p>
-                                </div>
-                            </div>
-                            <div class="mt-3">
-                                <div class="progress" style="height:6px;">
-                                    <div class="progress-bar bg-gradient-success" style="width:{{ $stats['trade_win_pct'] }}%"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {{-- 第三排：內容統計 + 交割款明細 --}}
+            {{-- 第二排：內容統計 + 交割款明細 --}}
             <div class="row">
                 <div class="col-md-4 grid-margin stretch-card">
                     <div class="card">
