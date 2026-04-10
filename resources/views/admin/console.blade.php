@@ -36,7 +36,7 @@
                             </h4>
                             <h2 class="mb-2">{{ number_format($stats['bot_users']) }}</h2>
                             <h6 class="card-text">
-                                持股中 {{ $stats['holding_users'] }} 人 ／ 融資佔比 {{ $stats['margin_pct'] }}%
+                                持股中 {{ $stats['holding_users'] }} 人
                             </h6>
                         </div>
                     </div>
