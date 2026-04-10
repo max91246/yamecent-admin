@@ -117,8 +117,8 @@
                     <h5 class="modal-title">訊息完整內容 <small class="text-muted" id="msgModalId"></small></h5>
                     <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                 </div>
-                <div class="modal-body">
-                    <pre id="msgModalContent" style="white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:0.9rem;"></pre>
+                <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+                    <pre id="msgModalContent" style="white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:0.9rem;margin:0;"></pre>
                 </div>
             </div>
         </div>
