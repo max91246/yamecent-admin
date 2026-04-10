@@ -72,8 +72,8 @@ class TgWebhookController extends Controller
                 if ($holding) {
                     $this->setState($bot->id, $chatId, 'sell_step1', ['holding_id' => $holdingId]);
                     $replyText = "💰 賣出 {$holding->stock_name}（{$holding->stock_code}）\n"
-                               . "持有：{$holding->shares} 張\n\n"
-                               . "請輸入賣出張數（最多 {$holding->shares} 張）：\n\n輸入「取消」可返回";
+                               . "持有：" . $this->sharesDisplay($holding->shares) . "\n\n"
+                               . "請輸入賣出股數（最多 {$holding->shares} 股）：\n\n輸入「取消」可返回";
                 } else {
                     [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
                 }
@@ -239,7 +239,7 @@ class TgWebhookController extends Controller
         ]);
 
         return [
-            "✅ 找到：{$quote['name']}（{$code}）\n💰 當前價：{$quote['price']}\n\n請輸入持有張數（整數，1張=1000股）：",
+            "✅ 找到：{$quote['name']}（{$code}）\n💰 當前價：{$quote['price']}\n\n請輸入持有股數（1張=1000股，例如：5000；零股例如：500）：",
             null,
         ];
     }
@@ -248,7 +248,7 @@ class TgWebhookController extends Controller
     private function handleHoldingStep2(TgBot $bot, int $chatId, string $text, TgState $stateObj): array
     {
         if (!ctype_digit($text) || (int) $text <= 0) {
-            return ['❌ 張數請輸入正整數（例如：5）：', null];
+            return ['❌ 股數請輸入正整數（例如：5000；零股例如：500）：', null];
         }
 
         $data           = $stateObj->state_data ?? [];
@@ -279,7 +279,7 @@ class TgWebhookController extends Controller
         $name   = $stateData['name']   ?? '';
         $shares = $stateData['shares'] ?? 0;
 
-        return ["請輸入當時買進的每股價格（元）：\n例如：{$name} 買 {$shares} 張，每股 53.5 就輸入 53.5\n\n輸入「取消」可返回", null];
+        return ["請輸入當時買進的每股價格（元）：\n例如：{$name} 買 " . $this->sharesDisplay((int)$shares) . "，每股 53.5 就輸入 53.5\n\n輸入「取消」可返回", null];
     }
 
     // ─── 持股添加：step4 輸入買進價格，自動計算成本 ─────────────────
@@ -294,7 +294,7 @@ class TgWebhookController extends Controller
         $data      = $stateObj->state_data ?? [];
         $shares    = (int) ($data['shares'] ?? 0);
         $isMargin  = (int) ($data['is_margin'] ?? 0);
-        $marketVal = $buyPrice * $shares * 1000;
+        $marketVal = $buyPrice * $shares;
 
         // 現股：全額；融資：自備約 4 成
         $cost = $isMargin ? $marketVal * 0.4 : $marketVal;
@@ -335,7 +335,7 @@ class TgWebhookController extends Controller
         $marginTag = $isMargin ? '融資' : '現股';
         $confirm   = "✅ 已添加持股：\n"
                    . "📌 {$data['name']}（{$data['code']}）\n"
-                   . "📦 {$shares} 張 · {$marginTag}\n"
+                   . "📦 " . $this->sharesDisplay($shares) . " · {$marginTag}\n"
                    . "💵 買進價：NT$" . $buyPrice . "　市值：NT$" . number_format($marketVal, 0) . "\n"
                    . "💰 持有成本：NT$" . number_format($cost, 0)
                    . ($isMargin ? "（自備 40%）" : '');
@@ -350,7 +350,7 @@ class TgWebhookController extends Controller
     private function handleSellStep1(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj): array
     {
         if (!ctype_digit($text) || (int) $text <= 0) {
-            return ['❌ 請輸入有效的賣出張數（正整數）：', null];
+            return ['❌ 請輸入有效的賣出股數（正整數）：', null];
         }
 
         $data      = $stateObj->state_data ?? [];
@@ -366,7 +366,7 @@ class TgWebhookController extends Controller
 
         $sellShares = (int) $text;
         if ($sellShares > $holding->shares) {
-            return ["❌ 持有只有 {$holding->shares} 張，請重新輸入：", null];
+            return ["❌ 持有只有 " . $this->sharesDisplay($holding->shares) . "，請重新輸入：", null];
         }
 
         $data['sell_shares'] = $sellShares;
@@ -402,8 +402,8 @@ class TgWebhookController extends Controller
         $buyPrice    = (float) $holding->buy_price;
         $isMargin    = (int) $holding->is_margin;
 
-        $buyValue  = $buyPrice  * $sellShares * 1000;
-        $sellValue = $sellPrice * $sellShares * 1000;
+        $buyValue  = $buyPrice  * $sellShares;
+        $sellValue = $sellPrice * $sellShares;
 
         // 交易成本
         $feeRate      = 0.001425; // 手續費 0.1425%（買賣皆收）
@@ -468,7 +468,7 @@ class TgWebhookController extends Controller
         $sign      = $profit >= 0 ? '+' : '';
         $profitTag = $profit >= 0 ? '✅ 獲利' : '❌ 虧損';
         $confirm   = "📤 賣出完成：\n"
-                   . "📌 {$holding->stock_name}（{$holding->stock_code}）{$sellShares} 張\n"
+                   . "📌 {$holding->stock_name}（{$holding->stock_code}）" . $this->sharesDisplay($sellShares) . "\n"
                    . "💵 買進：NT$" . $buyPrice . "　賣出：NT$" . $sellPrice . "\n"
                    . "💸 手續費：NT$" . number_format($buyFee + $sellFee, 0)
                    . "　交易稅：NT$" . number_format($sellTax, 0) . "\n"
@@ -822,7 +822,7 @@ class TgWebhookController extends Controller
             $lotCount   = $group->count();
 
             // 分組標頭
-            $groupHeader = "📌 {$firstName}（{$stockCode}）合計 {$totalShares}張";
+            $groupHeader = "📌 {$firstName}（{$stockCode}）合計 " . $this->sharesDisplay($totalShares);
             if ($curPriceStr) {
                 $groupHeader .= "\n   {$curPriceStr}";
             }
@@ -833,9 +833,9 @@ class TgWebhookController extends Controller
 
             foreach ($group as $idx => $h) {
                 $buyPrice    = (float) $h->buy_price;
-                $originValue = $buyPrice > 0 ? $buyPrice * $h->shares * 1000 : (float) $h->total_cost;
+                $originValue = $buyPrice > 0 ? $buyPrice * $h->shares : (float) $h->total_cost;
                 $selfCost    = (float) $h->total_cost;
-                $curValue    = $curPrice !== null ? $curPrice * $h->shares * 1000 : null;
+                $curValue    = $curPrice !== null ? $curPrice * $h->shares : null;
 
                 $buyFee  = $buyPrice > 0 ? (int) ceil($originValue * $feeRate) : 0;
                 $sellFee = $curValue !== null ? (int) ceil($curValue * $feeRate) : 0;
@@ -879,7 +879,7 @@ class TgWebhookController extends Controller
                 $prefix    = $isLast ? '   └' : '   ├';
                 $curValStr = $curValue !== null ? '現值：NT$' . number_format($curValue, 0) : '查詢失敗';
 
-                $lotLines[] = "{$prefix} {$h->shares}張·{$marginTag}　{$buyStr}\n      {$curValStr}{$profitStr}";
+                $lotLines[] = "{$prefix} " . $this->sharesDisplay($h->shares) . "·{$marginTag}　{$buyStr}\n      {$curValStr}{$profitStr}";
             }
 
             // 每個股票代號只加一顆賣出按鈕（指向最早那筆持股）
@@ -1022,11 +1022,11 @@ class TgWebhookController extends Controller
             $text .= "\n━━ {$dateStr} 交割　{$emoji} 淨額：{$sign}NT$" . number_format($net, 0) . " ━━";
 
             foreach ($buys as $s) {
-                $text .= "\n📌 {$s->stock_name}（{$s->stock_code}）{$s->shares}張　買進：NT$" . $s->buy_price
+                $text .= "\n📌 {$s->stock_name}（{$s->stock_code}）" . $this->sharesDisplay($s->shares) . "　買進：NT$" . $s->buy_price
                        . "\n   💸 應付：-NT$" . number_format($s->settlement_amount, 0);
             }
             foreach ($sells as $s) {
-                $text .= "\n💚 {$s->stock_name}（{$s->stock_code}）{$s->shares}張　賣出：NT$" . $s->buy_price
+                $text .= "\n💚 {$s->stock_name}（{$s->stock_code}）" . $this->sharesDisplay($s->shares) . "　賣出：NT$" . $s->buy_price
                        . "\n   💰 待收：+NT$" . number_format($s->settlement_amount, 0);
             }
         }
@@ -1038,6 +1038,21 @@ class TgWebhookController extends Controller
                . "\n（正數 = 淨收款　負數 = 淨付款）";
 
         return [$text, null];
+    }
+
+    // ─── 股數顯示 helper ─────────────────────────────────────────
+    private function sharesDisplay(int $shares): string
+    {
+        $lots = intdiv($shares, 1000);
+        $odd  = $shares % 1000;
+
+        if ($odd === 0) {
+            return number_format($shares) . '股（' . $lots . '張）';
+        }
+        if ($lots > 0) {
+            return number_format($shares) . '股（' . $lots . '張' . $odd . '零股）';
+        }
+        return number_format($shares) . '股（零股）';
     }
 
     // ─── Yahoo Finance：股票現價 ──────────────────────────────────

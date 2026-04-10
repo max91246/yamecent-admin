@@ -121,10 +121,13 @@
                                     </thead>
                                     <tbody>
                                         @foreach($settlements as $s)
+                                        @php $sLots = intdiv($s->shares, 1000); $sOdd = $s->shares % 1000; @endphp
                                         <tr>
                                             <td>{{ $s->settle_date }}</td>
                                             <td>{{ $s->stock_name }}（{{ $s->stock_code }}）</td>
-                                            <td>{{ $s->shares }} 張</td>
+                                            <td>{{ number_format($s->shares) }}股
+                                                @if($sLots > 0)（{{ $sLots }}張@if($sOdd > 0) {{ $sOdd }}零股@endif）@endif
+                                            </td>
                                             <td>
                                                 @if(($s->direction ?? 'buy') === 'sell')
                                                     <span class="badge badge-success">賣出待收</span>
@@ -157,7 +160,7 @@
                                     <thead>
                                         <tr>
                                             <th>股票</th>
-                                            <th>張數</th>
+                                            <th>股數</th>
                                             <th>類型</th>
                                             <th>買進均價</th>
                                             <th>持有成本</th>
@@ -166,9 +169,12 @@
                                     </thead>
                                     <tbody>
                                         @forelse($holdings as $row)
+                                        @php $lots = intdiv($row->shares, 1000); $odd = $row->shares % 1000; @endphp
                                         <tr>
                                             <td>{{ $row->stock_name }}（{{ $row->stock_code }}）</td>
-                                            <td>{{ $row->shares }} 張</td>
+                                            <td>{{ number_format($row->shares) }}股
+                                                @if($lots > 0)（{{ $lots }}張@if($odd > 0) {{ $odd }}零股@endif）@endif
+                                            </td>
                                             <td>
                                                 @if($row->is_margin)
                                                     <span class="badge badge-warning">融資</span>
@@ -212,9 +218,12 @@
                                     </thead>
                                     <tbody>
                                         @forelse($trades as $row)
+                                        @php $tLots = intdiv($row->sell_shares, 1000); $tOdd = $row->sell_shares % 1000; @endphp
                                         <tr>
                                             <td>{{ $row->stock_name }}（{{ $row->stock_code }}）</td>
-                                            <td>{{ $row->sell_shares }} 張</td>
+                                            <td>{{ number_format($row->sell_shares) }}股
+                                                @if($tLots > 0)（{{ $tLots }}張@if($tOdd > 0) {{ $tOdd }}零股@endif）@endif
+                                            </td>
                                             <td>
                                                 @if($row->is_margin)
                                                     <span class="badge badge-warning">融資</span>
