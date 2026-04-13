@@ -761,9 +761,14 @@ class TgWebhookController extends Controller
         if (!empty($news)) {
             $reply .= "\n\n━━ 最新消息 ━━";
             foreach ($news as $i => $n) {
-                $title = htmlspecialchars($n['title'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                $link  = htmlspecialchars($n['link'],  ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                $reply .= "\n" . ($i + 1) . ". <a href=\"{$link}\">{$title}</a>\n   🕐 {$n['date']}";
+                $title = htmlspecialchars($n['title'] ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $link  = $n['link'] ?? '';
+                if ($link) {
+                    $linkEsc = htmlspecialchars($link, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                    $reply .= "\n" . ($i + 1) . ". <a href=\"{$linkEsc}\">{$title}</a>\n   🕐 {$n['date']}";
+                } else {
+                    $reply .= "\n" . ($i + 1) . ". {$title}\n   🕐 {$n['date']}";
+                }
             }
         }
 
@@ -791,9 +796,19 @@ class TgWebhookController extends Controller
                 foreach ($xml->channel->item as $item) {
                     if ($count >= $limit) break;
                     $pubDate = isset($item->pubDate) ? date('m/d H:i', strtotime((string) $item->pubDate)) : '';
-                    $items[] = [
+                    // SimpleXML 對 RSS <link> 解析不穩定，嘗試多種方式取得
+                $link = '';
+                if (!empty((string) $item->link)) {
+                    $link = trim((string) $item->link);
+                } elseif (!empty((string) $item->children('http://www.w3.org/1999/xhtml')->a)) {
+                    $link = trim((string) $item->children('http://www.w3.org/1999/xhtml')->a->attributes()->href);
+                } else {
+                    // fallback：從 guid 取連結
+                    $link = trim((string) $item->guid);
+                }
+                $items[] = [
                         'title' => html_entity_decode(strip_tags((string) $item->title), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-                        'link'  => trim((string) $item->link),
+                        'link'  => $link,
                         'date'  => $pubDate,
                     ];
                     $count++;
