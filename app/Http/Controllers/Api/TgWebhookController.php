@@ -756,7 +756,50 @@ class TgWebhookController extends Controller
             }
         }
 
+        // 最新新聞
+        $news = $this->fetchStockNews($code);
+        if (!empty($news)) {
+            $reply .= "\n\n━━ 最新消息 ━━";
+            foreach ($news as $i => $n) {
+                $reply .= "\n" . ($i + 1) . ". {$n['title']}\n   🕐 {$n['date']}";
+            }
+        }
+
         return $reply;
+    }
+
+    // ─── 抓取股票新聞（Yahoo 奇摩股市 RSS）───────────────────────
+    private function fetchStockNews(string $code, int $limit = 5): array
+    {
+        $cacheKey = "tw-news-{$code}";
+        return Cache::remember($cacheKey, 600, function () use ($code, $limit) {
+            try {
+                $url      = "https://tw.stock.yahoo.com/rss?s={$code}";
+                $response = \Illuminate\Support\Facades\Http::timeout(5)
+                    ->withHeaders(['User-Agent' => 'Mozilla/5.0'])
+                    ->get($url);
+
+                if (!$response->ok()) return [];
+
+                $xml = simplexml_load_string($response->body());
+                if (!$xml) return [];
+
+                $items  = [];
+                $count  = 0;
+                foreach ($xml->channel->item as $item) {
+                    if ($count >= $limit) break;
+                    $pubDate = isset($item->pubDate) ? date('m/d H:i', strtotime((string) $item->pubDate)) : '';
+                    $items[] = [
+                        'title' => html_entity_decode(strip_tags((string) $item->title), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                        'date'  => $pubDate,
+                    ];
+                    $count++;
+                }
+                return $items;
+            } catch (\Exception $e) {
+                return [];
+            }
+        });
     }
 
     // 橫條圖：外資 [████████░░░░] ▼9,206張
