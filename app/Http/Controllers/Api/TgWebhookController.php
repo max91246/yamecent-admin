@@ -761,7 +761,9 @@ class TgWebhookController extends Controller
         if (!empty($news)) {
             $reply .= "\n\n━━ 最新消息 ━━";
             foreach ($news as $i => $n) {
-                $reply .= "\n" . ($i + 1) . ". {$n['title']}\n   🕐 {$n['date']}";
+                $title = htmlspecialchars($n['title'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $link  = htmlspecialchars($n['link'],  ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $reply .= "\n" . ($i + 1) . ". <a href=\"{$link}\">{$title}</a>\n   🕐 {$n['date']}";
             }
         }
 
@@ -791,6 +793,7 @@ class TgWebhookController extends Controller
                     $pubDate = isset($item->pubDate) ? date('m/d H:i', strtotime((string) $item->pubDate)) : '';
                     $items[] = [
                         'title' => html_entity_decode(strip_tags((string) $item->title), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                        'link'  => trim((string) $item->link),
                         'date'  => $pubDate,
                     ];
                     $count++;
@@ -1388,9 +1391,9 @@ class TgWebhookController extends Controller
         ]);
     }
 
-    private function sendMessage(string $token, $chatId, string $text, ?array $replyMarkup = null): void
+    private function sendMessage(string $token, $chatId, string $text, ?array $replyMarkup = null, string $parseMode = 'HTML'): void
     {
-        $params = ['chat_id' => $chatId, 'text' => $text];
+        $params = ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => $parseMode];
         if ($replyMarkup) {
             $params['reply_markup'] = json_encode($replyMarkup);
         }
