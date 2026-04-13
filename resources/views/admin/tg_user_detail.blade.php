@@ -218,7 +218,12 @@
                                     </thead>
                                     <tbody>
                                         @forelse($trades as $row)
-                                        @php $tLots = intdiv($row->sell_shares, 1000); $tOdd = $row->sell_shares % 1000; @endphp
+                                        @php
+                                            $tLots = intdiv($row->sell_shares, 1000);
+                                            $tOdd  = $row->sell_shares % 1000;
+                                            $buyVal = $row->buy_price * $row->sell_shares;
+                                            $profitPct = $buyVal > 0 ? round($row->profit / $buyVal * 100, 2) : null;
+                                        @endphp
                                         <tr>
                                             <td>{{ $row->stock_name }}（{{ $row->stock_code }}）</td>
                                             <td>{{ number_format($row->sell_shares) }}股
@@ -235,6 +240,9 @@
                                             <td>NT${{ $row->sell_price }}</td>
                                             <td class="{{ $row->profit >= 0 ? 'text-success' : 'text-danger' }} font-weight-bold">
                                                 {{ $row->profit >= 0 ? '+' : '' }}NT${{ number_format($row->profit, 0) }}
+                                                @if($profitPct !== null)
+                                                <br><small class="font-weight-normal">{{ $row->profit >= 0 ? '+' : '' }}{{ $profitPct }}%</small>
+                                                @endif
                                             </td>
                                             <td class="text-muted small">{{ $row->created_at->format('m/d H:i') }}</td>
                                         </tr>
