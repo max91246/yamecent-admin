@@ -62,18 +62,28 @@ class TgWebhookController extends Controller
                 $this->setState($bot->id, $chatId, 'holding_step1');
                 $replyText = "➕ 請輸入要添加的股票代號\n（例如：2317）\n\n輸入「取消」可返回主選單";
 
-            // 賣出持股 — 進入賣出流程
-            } elseif (str_starts_with($data, 'holding_sell_')) {
-                $holdingId = (int) substr($data, strlen('holding_sell_'));
-                $holding   = TgHolding::where('id', $holdingId)
-                    ->where('bot_id', $bot->id)
+            // 賣出持股 — 進入賣出流程（新格式：holding_sell_c_{code}_{margin}）
+            } elseif (str_starts_with($data, 'holding_sell_c_')) {
+                $parts     = explode('_', substr($data, strlen('holding_sell_c_')));
+                $isMargin  = (int) array_pop($parts);
+                $stockCode = implode('_', $parts);
+                $holdings  = TgHolding::where('bot_id', $bot->id)
                     ->where('tg_chat_id', $chatId)
-                    ->first();
-                if ($holding) {
-                    $this->setState($bot->id, $chatId, 'sell_step1', ['holding_id' => $holdingId]);
-                    $replyText = "💰 賣出 {$holding->stock_name}（{$holding->stock_code}）\n"
-                               . "持有：" . $this->sharesDisplay($holding->shares) . "\n\n"
-                               . "請輸入賣出股數（最多 {$holding->shares} 股）：\n\n輸入「取消」可返回";
+                    ->where('stock_code', $stockCode)
+                    ->where('is_margin', $isMargin)
+                    ->orderBy('created_at')
+                    ->get();
+                if ($holdings->isNotEmpty()) {
+                    $totalShares = $holdings->sum('shares');
+                    $stockName   = $holdings->first()->stock_name;
+                    $typeTag     = $isMargin ? '（融資）' : '';
+                    $this->setState($bot->id, $chatId, 'sell_step1', [
+                        'stock_code' => $stockCode,
+                        'is_margin'  => $isMargin,
+                    ]);
+                    $replyText = "💰 賣出 {$stockName}（{$stockCode}）{$typeTag}\n"
+                               . "持有：" . $this->sharesDisplay($totalShares) . "\n\n"
+                               . "請輸入賣出股數（最多 {$totalShares} 股）：\n\n輸入「取消」可返回";
                 } else {
                     [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
                 }
@@ -354,19 +364,22 @@ class TgWebhookController extends Controller
         }
 
         $data      = $stateObj->state_data ?? [];
-        $holding   = TgHolding::where('id', $data['holding_id'])
-            ->where('bot_id', $bot->id)
+        $holdings  = TgHolding::where('bot_id', $bot->id)
             ->where('tg_chat_id', $chatId)
-            ->first();
+            ->where('stock_code', $data['stock_code'])
+            ->where('is_margin', $data['is_margin'])
+            ->orderBy('created_at')
+            ->get();
 
-        if (!$holding) {
+        if ($holdings->isEmpty()) {
             $this->clearState($bot->id, $chatId);
             return $this->buildPortfolioReply($bot->id, $chatId);
         }
 
-        $sellShares = (int) $text;
-        if ($sellShares > $holding->shares) {
-            return ["❌ 持有只有 " . $this->sharesDisplay($holding->shares) . "，請重新輸入：", null];
+        $totalShares = $holdings->sum('shares');
+        $sellShares  = (int) $text;
+        if ($sellShares > $totalShares) {
+            return ["❌ 持有只有 " . $this->sharesDisplay($totalShares) . "，請重新輸入：", null];
         }
 
         $data['sell_shares'] = $sellShares;
@@ -387,65 +400,74 @@ class TgWebhookController extends Controller
             return ['❌ 請輸入有效的每股賣出價格（例如：55）：', null];
         }
 
-        $data    = $stateObj->state_data ?? [];
-        $holding = TgHolding::where('id', $data['holding_id'])
-            ->where('bot_id', $bot->id)
+        $data     = $stateObj->state_data ?? [];
+        // 取出所有同股票+同類型的持股（FIFO 順序：最早買進的先賣）
+        $holdings = TgHolding::where('bot_id', $bot->id)
             ->where('tg_chat_id', $chatId)
-            ->first();
+            ->where('stock_code', $data['stock_code'])
+            ->where('is_margin', $data['is_margin'])
+            ->orderBy('created_at')
+            ->get();
 
-        if (!$holding) {
+        if ($holdings->isEmpty()) {
             $this->clearState($bot->id, $chatId);
             return $this->buildPortfolioReply($bot->id, $chatId);
         }
 
-        $sellShares  = (int) $data['sell_shares'];
-        $buyPrice    = (float) $holding->buy_price;
-        $isMargin    = (int) $holding->is_margin;
+        $sellShares = (int) $data['sell_shares'];
+        $isMargin   = (int) $data['is_margin'];
+        $stockCode  = $data['stock_code'];
+        $stockName  = $holdings->first()->stock_name;
 
-        $buyValue  = $buyPrice  * $sellShares;
-        $sellValue = $sellPrice * $sellShares;
+        // FIFO：依序扣減持股，並計算加權平均買價與比例成本
+        $remaining        = $sellShares;
+        $totalBuyValue    = 0;
+        $totalCostDeducted = 0;
+        foreach ($holdings as $h) {
+            if ($remaining <= 0) break;
+            $deduct = min($remaining, $h->shares);
+            $totalBuyValue    += (float) $h->buy_price * $deduct;
+            $totalCostDeducted += (float) $h->total_cost * ($deduct / $h->shares);
+
+            if ($deduct >= $h->shares) {
+                $h->delete();
+            } else {
+                $remainShares = $h->shares - $deduct;
+                $newCost      = (float) $h->total_cost * ($remainShares / $h->shares);
+                $h->update(['shares' => $remainShares, 'total_cost' => $newCost]);
+            }
+            $remaining -= $deduct;
+        }
+
+        $avgBuyPrice = $sellShares > 0 ? round($totalBuyValue / $sellShares, 4) : 0;
+        $buyValue    = $totalBuyValue;
+        $sellValue   = $sellPrice * $sellShares;
 
         // 交易成本
-        $feeRate      = 0.001425; // 手續費 0.1425%（買賣皆收）
-        $taxRate      = 0.003;    // 交易稅 0.3%（僅賣出）
-        $buyFee       = ceil($buyValue  * $feeRate); // 買進手續費（無條件進位）
-        $sellFee      = ceil($sellValue * $feeRate); // 賣出手續費
-        $sellTax      = ceil($sellValue * $taxRate); // 證券交易稅
-        $totalCost    = $buyFee + $sellFee + $sellTax;
+        $feeRate   = 0.001425;
+        $taxRate   = 0.003;
+        $buyFee    = ceil($buyValue  * $feeRate);
+        $sellFee   = ceil($sellValue * $feeRate);
+        $sellTax   = ceil($sellValue * $taxRate);
 
         // 損益 = 賣出價值 - 買進價值 - 交易成本
-        $profit = $sellValue - $buyValue - $totalCost;
+        $profit = $sellValue - $buyValue - $buyFee - $sellFee - $sellTax;
 
-        // 記錄交易
+        // 記錄交易（加權平均買價）
         TgHoldingTrade::create([
             'bot_id'      => $bot->id,
             'tg_chat_id'  => $chatId,
             'tg_user_id'  => $userId,
-            'stock_code'  => $holding->stock_code,
-            'stock_name'  => $holding->stock_name,
+            'stock_code'  => $stockCode,
+            'stock_name'  => $stockName,
             'sell_shares' => $sellShares,
-            'buy_price'   => $buyPrice,
+            'buy_price'   => $avgBuyPrice,
             'sell_price'  => $sellPrice,
             'is_margin'   => $isMargin,
             'profit'      => $profit,
         ]);
 
-        // 計算回款（在更新持股前讀取原始張數與成本）
-        $proportionalCost = (float) $holding->total_cost * ($sellShares / $holding->shares);
-        $walletAdd        = $proportionalCost + $profit;
-
-        // 更新或刪除持股
-        if ($sellShares >= $holding->shares) {
-            $holding->delete();
-        } else {
-            // 剩餘持股：成本按比例扣除
-            $remainShares = $holding->shares - $sellShares;
-            $newCost      = (float) $holding->total_cost * ($remainShares / $holding->shares);
-            $holding->update(['shares' => $remainShares, 'total_cost' => $newCost]);
-        }
-
-        // 建立賣出 T+2 待收款記錄（wallet 由 settle:payments cron 在交割日加款）
-        // 融資：需還券商 60% 借款；現股：全額收回
+        // 建立賣出 T+2 待收款記錄
         $loanRepay  = $isMargin ? $buyValue * 0.6 : 0;
         $sellSettle = $sellValue - $loanRepay - $sellFee - $sellTax;
         $sellSettleDate = $this->calcSettleDate(Carbon::now('Asia/Taipei'));
@@ -453,13 +475,13 @@ class TgWebhookController extends Controller
             'bot_id'            => $bot->id,
             'tg_chat_id'        => $chatId,
             'tg_user_id'        => $userId,
-            'stock_code'        => $holding->stock_code,
-            'stock_name'        => $holding->stock_name,
+            'stock_code'        => $stockCode,
+            'stock_name'        => $stockName,
             'shares'            => $sellShares,
             'buy_price'         => $sellPrice,
             'settlement_amount' => $sellSettle,
             'settle_date'       => $sellSettleDate->toDateString(),
-            'is_settled'        => 0,   // 顯示用；direction=sell 排程不重複處理
+            'is_settled'        => 0,
             'direction'         => 'sell',
         ]);
 
@@ -468,8 +490,8 @@ class TgWebhookController extends Controller
         $sign      = $profit >= 0 ? '+' : '';
         $profitTag = $profit >= 0 ? '✅ 獲利' : '❌ 虧損';
         $confirm   = "📤 賣出完成：\n"
-                   . "📌 {$holding->stock_name}（{$holding->stock_code}）" . $this->sharesDisplay($sellShares) . "\n"
-                   . "💵 買進：NT$" . $buyPrice . "　賣出：NT$" . $sellPrice . "\n"
+                   . "📌 {$stockName}（{$stockCode}）" . $this->sharesDisplay($sellShares) . "\n"
+                   . "💵 買進均價：NT$" . $avgBuyPrice . "　賣出：NT$" . $sellPrice . "\n"
                    . "💸 手續費：NT$" . number_format($buyFee + $sellFee, 0)
                    . "　交易稅：NT$" . number_format($sellTax, 0) . "\n"
                    . "{$profitTag}：{$sign}NT$" . number_format($profit, 0);
@@ -882,8 +904,13 @@ class TgWebhookController extends Controller
                 $lotLines[] = "{$prefix} " . $this->sharesDisplay($h->shares) . "·{$marginTag}　{$buyStr}\n      {$curValStr}{$profitStr}";
             }
 
-            // 每個股票代號只加一顆賣出按鈕（指向最早那筆持股）
-            $delButtons[] = ['text' => "💰 賣出 {$stockCode}", 'callback_data' => 'holding_sell_' . $group->first()->id];
+            // 按 is_margin 分組各加一顆賣出按鈕（合併同股同類型全部持股）
+            $marginGroups = $group->groupBy('is_margin');
+            $hasMultipleTypes = $marginGroups->count() > 1;
+            foreach ($marginGroups as $marginVal => $mGroup) {
+                $typeTag = $hasMultipleTypes ? ($marginVal ? '(融資)' : '(現股)') : '';
+                $delButtons[] = ['text' => "💰 賣出 {$stockCode}{$typeTag}", 'callback_data' => "holding_sell_c_{$stockCode}_{$marginVal}"];
+            }
 
             // 多筆時顯示分組合計
             $groupSummary = '';
