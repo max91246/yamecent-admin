@@ -10,7 +10,7 @@ class TgSettlement extends Model
     protected $fillable = [
         'bot_id', 'tg_chat_id', 'tg_user_id',
         'stock_code', 'stock_name', 'shares',
-        'buy_price', 'settlement_amount', 'settle_date', 'is_settled',
+        'buy_price', 'settlement_amount', 'settle_date', 'is_settled', 'direction',
     ];
 
     protected $casts = [
