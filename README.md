@@ -17,7 +17,7 @@
 | 認證 | JWT（7 天有效） |
 | 部署環境 | Docker（Laradock）|
 | 資料庫 | MySQL 8 |
-| 快取 | Redis |
+| 快取 | Redis（DB 1） |
 | Web Server | Nginx |
 | HTTPS | Let's Encrypt（Certbot）|
 
@@ -59,7 +59,7 @@
 | 機器人列表/新增/編輯/刪除 | `/admin/tg-bot/*` |
 | 手動設定 Webhook | `POST /admin/tg-bot/set-webhook/{id}` |
 | 訊息記錄查詢 | `GET /admin/tg-message/list` |
-| 用戶持股查詢 | `GET /admin/tg-holding/list` |
+| 用戶持股查詢（以用戶為單位） | `GET /admin/tg-holding/list` |
 | 交易歷史查詢（含損益） | `GET /admin/tg-holding/trade-list` |
 
 ---
@@ -156,7 +156,7 @@ POST /api/auth/login
 
 ### 📈 台指期貨
 
-顯示台指期最新資料：
+顯示台指期最新資料（1 分 K）：
 - 當前報價
 - 5 分鐘漲跌（點數 / 百分比）
 - 資料更新時間
@@ -181,6 +181,8 @@ POST /api/auth/login
    - 股票名稱、成交價、漲跌幅、成交張數
    - 近 10 日三大法人買賣超橫條圖
    - 每日明細（外資 / 投信 / 自營商）
+   - 月營收資訊
+   - Yahoo Finance RSS 最新新聞（含可點擊連結）
    - 10 日合計
 
 **範例輸出：**
@@ -202,24 +204,20 @@ POST /api/auth/login
 📊 10日合計  外▼9,206  信▲629  營▼1,897
 ```
 
-> 查詢結果快取：盤中 5 分鐘，盤後至下一交易日 09:00
+> 查詢結果快取：盤中 10 秒，盤後至下一交易日 09:00
 
 ---
 
 ### 💼 我的持股
 
-顯示用戶個人持倉總覽：
+顯示用戶個人持倉總覽（以股為單位，支援零股）：
 
 ```
 💼 我的持股
 
-📌 威剛（3260）2張·融資　買進：NT$366.5
+📌 威剛（3260）5000股（5張）·融資　買進：NT$366.5
    現值：NT$726,000
    稅費：NT$3,120（買費+賣費+稅）　淨損益：-NT$5,620
-
-📌 台玻（1802）15張·融資　買進：NT$54.5
-   現值：NT$805,500
-   稅費：NT$xx,xxx　淨損益：-NT$xx,xxx
 
 📊 自備成本：NT$1,232,200　原始市值：NT$2,162,500
 📈 現值合計：NT$2,122,500
@@ -238,10 +236,10 @@ POST /api/auth/login
 | 步驟 | 說明 |
 |------|------|
 | Step 1 | 輸入股票代號（自動查詢驗證，取得股票名稱） |
-| Step 2 | 輸入持有張數（整數） |
+| Step 2 | 輸入持有股數（支援零股，1 張 = 1000 股） |
 | Step 3 | 選擇是否融資（Inline 按鈕：是/否） |
 | Step 4 | 輸入買進每股價格 |
-| 完成 | 系統計算成本（現股=全額，融資=40%），存入 DB，顯示最新持股列表 |
+| 完成 | 系統計算成本（現股=全額，融資=40%），存入 DB，建立 T+2 交割款，顯示最新持股列表 |
 
 ---
 
@@ -250,37 +248,42 @@ POST /api/auth/login
 | 步驟 | 說明 |
 |------|------|
 | Step 1 | 點擊「💰 賣出 XXXX」按鈕 |
-| Step 2 | 輸入賣出張數 |
+| Step 2 | 輸入賣出股數（支援 FIFO 多筆合併扣除） |
 | Step 3 | 輸入賣出每股價格 |
-| 完成 | 計算損益並記錄，更新剩餘持股，顯示最新持股列表 |
+| 完成 | 計算損益並記錄，更新剩餘持股，建立 T+2 交割款，顯示最新持股列表 |
 
 **損益計算公式：**
 ```
 損益 = 賣出價值 - 買進價值 - 買進手續費(0.1425%) - 賣出手續費(0.1425%) - 證券交易稅(0.3%)
+融資利息亦計入持股成本
 ```
+
+---
+
+#### 帳戶資金（Wallet）
+
+- 顯示現金餘額，扣除 T+2 待交割款後的真實可用金額
+- 每日 00:00 自動結算到期交割款（cron）
+- 買進不立即扣款，T+2 到期後由排程統一扣/入帳
 
 ---
 
 #### 通用操作
 
 任何對話步驟輸入「取消」，立即返回主選單。
+主選單按鈕可隨時中斷進行中的對話狀態。
 
 ---
 
 ### 市場告警（排程自動推送）
 
-排程每 5 分鐘執行，以下條件觸發推送：
-
-| 標的 | 觸發條件 |
-|------|----------|
-| 布蘭特原油 | 5 分鐘合併振幅 ≥ 1% |
-| 台指期貨 | 5 分鐘漲跌 ≥ 50 點 |
-| VIX 恐慌指數 | 不觸發告警，僅附帶顯示 |
-
-告警訊息包含：
-- 當前價格與漲跌方向
-- 區間高低點
-- 相關新聞（Google News RSS，近 1 小時）
+| 排程 | 指令 | 說明 |
+|------|------|------|
+| 每 5 分鐘 | `fetch:oil-price` | 布蘭特原油，振幅 ≥ 1% 推送告警 |
+| 每分鐘 | `fetch:tw-index` | 台指期（1分K），5分鐘漲跌 ≥ 50 點推送告警 |
+| 每日 00:00 | `settle:payments` | 結算 T+2 到期交割款 |
+| 每日 14:00 | `notify:holdings` | 台股收盤後推送持股漲跌通知 |
+| 每 6 小時 | `scrape:wantgoo` | 爬取玩股網精選文章 |
 
 > 若無新 K 棒寫入（休市或資料未更新），自動跳過全部處理。
 
@@ -290,21 +293,29 @@ POST /api/auth/login
 
 | 表名 | 說明 |
 |------|------|
-| `admin_users` | 後台管理員帳號 |
-| `admin_roles` | 角色 |
-| `admin_permissions` | 權限（對應路由） |
-| `admin_menus` | 後台側邊欄選單 |
-| `admin_configs` | 系統設定鍵值 |
-| `members` | 前台會員資料 |
-| `member_balance_logs` | 會員餘額變動記錄 |
-| `articles` | 文章 |
-| `article_comments` | 文章留言 |
-| `oil_prices` | 5分K棒（ticker: `QA`=原油 / `WTX`=台指 / `VIX`=恐慌指數）|
-| `tg_bots` | TG 機器人設定（token、webhook 狀態）|
-| `tg_messages` | TG 對話記錄（收/發）|
-| `tg_states` | TG 多步驟對話狀態機（含暫存資料）|
-| `tg_holdings` | 用戶持股記錄 |
-| `tg_holding_trades` | 歷史交易記錄（含損益）|
+| `ya_admin_users` | 後台管理員帳號 |
+| `ya_admin_roles` | 角色 |
+| `ya_admin_permissions` | 權限（對應路由） |
+| `ya_admin_menus` | 後台側邊欄選單 |
+| `ya_admin_configs` | 系統設定鍵值（API URL 等） |
+| `ya_members` | 前台會員資料 |
+| `ya_member_balance_logs` | 會員餘額變動記錄 |
+| `ya_articles` | 文章 |
+| `ya_article_comments` | 文章留言 |
+| `ya_oil_prices` | 5分K棒（ticker: `QA`=原油 / `WTX`=台指 / `VIX`=恐慌指數） |
+| `ya_tg_bots` | TG 機器人設定（token、webhook 狀態） |
+| `ya_tg_messages` | TG 對話記錄（收/發） |
+| `ya_tg_states` | TG 多步驟對話狀態機（含暫存資料，JSON） |
+| `ya_tg_holdings` | 用戶持股記錄（以股為單位） |
+| `ya_tg_holding_trades` | 歷史交易記錄（含損益、手續費） |
+| `ya_tg_wallets` | 用戶帳戶資金 |
+| `ya_tg_settlements` | T+2 交割款明細（direction: buy/sell） |
+
+**外鍵關聯：**
+
+- `ya_tg_states`, `ya_tg_holdings`, `ya_tg_holding_trades`, `ya_tg_messages` → `ya_tg_bots.id`
+- `ya_article_comments` → `ya_articles.id`, `ya_members.id`
+- `ya_member_balance_logs` → `ya_members.id`
 
 ---
 
@@ -314,7 +325,7 @@ POST /api/auth/login
 
 - GCP Compute Engine（Debian）
 - Docker + Docker Compose
-- Laradock
+- Laradock（位於 `~/laradock`）
 
 ### 首次部署
 
@@ -335,7 +346,7 @@ composer install --ignore-platform-reqs
 
 # 5. 環境設定
 cp .env.example .env
-# 編輯 .env：設定 DB、Redis、JWT、APP_URL、TG 等
+# 編輯 .env：設定 DB、Redis、JWT、APP_URL 等
 
 # 6. 初始化
 php artisan key:generate
@@ -350,7 +361,6 @@ php artisan config:cache
 cd /var/www/yamecent-admin
 git pull
 php artisan migrate
-php artisan db:seed
 php artisan config:cache
 ```
 
@@ -379,19 +389,15 @@ APP_URL=https://yourdomain.com
 CACHE_DRIVER=redis
 REDIS_HOST=redis
 REDIS_PASSWORD=your_redis_password
-
-TG_BOT_TOKEN=       # 告警推送用的 Bot Token
-TG_CHAT_ID=         # 告警推送的 Chat ID
+REDIS_DB=1
 ```
 
 ### 排程設定（Crontab）
 
 ```bash
-# 主機 crontab
-* * * * * docker exec laradock-workspace-1 php /var/www/yamecent-admin/artisan schedule:run >> /dev/null 2>&1
+# 主機 crontab（注意容器名稱）
+* * * * * docker exec laradock_workspace_1 php /var/www/yamecent-admin/artisan schedule:run >> /dev/null 2>&1
 ```
-
-`app/Console/Kernel.php` 中已設定每 5 分鐘執行 `fetch:oil-price`。
 
 ---
 
@@ -399,24 +405,45 @@ TG_CHAT_ID=         # 告警推送的 Chat ID
 
 ```
 app/
-├── Console/Commands/
-│   └── FetchOilPrice.php          # 油價/台指/VIX 抓取與告警
+├── Console/
+│   ├── Kernel.php                     # 排程設定
+│   └── Commands/
+│       ├── FetchOilPrice.php          # 布蘭特原油抓取與告警
+│       ├── FetchTwIndex.php           # 台指期 / VIX 抓取與告警
+│       ├── NotifyHoldings.php         # 每日持股漲跌通知
+│       ├── SettlePayments.php         # T+2 交割款自動結算
+│       └── ScrapeWantgoo.php          # 玩股網文章爬蟲
 ├── Http/Controllers/
-│   ├── Admin/                     # 後台控制器
+│   ├── Admin/                         # 後台控制器
 │   │   ├── TgBotController.php
 │   │   ├── TgMessageController.php
 │   │   └── TgHoldingController.php
 │   └── Api/
-│       └── TgWebhookController.php # TG Webhook 主控制器
+│       ├── TgWebhookController.php    # TG Webhook 主控制器
+│       └── TgAuthController.php      # Telegram Mini App 登入
 ├── TgBot.php
 ├── TgMessage.php
 ├── TgState.php
 ├── TgHolding.php
-└── TgHoldingTrade.php
+├── TgHoldingTrade.php
+├── TgWallet.php
+└── TgSettlement.php
 database/
 ├── migrations/
 └── seeds/
 routes/
-├── web.php                        # 後台路由
-└── api.php                        # API 路由
+├── web.php                            # 後台路由
+└── api.php                            # API 路由
 ```
+
+---
+
+## RBAC 鑑權流程
+
+詳見 [Rbac.md](Rbac.md)。
+
+後台採 Session-based RBAC，流程：
+
+1. `CheckSession` 中間件 — 驗證 Session 是否存在登入資訊
+2. `Rbac` 中間件 — 從 Session 取得 AdminUser，比對當前路由是否在授權範圍內
+3. 通過後進入對應 Controller 方法，取得該用戶的選單集合傳至 View
