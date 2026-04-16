@@ -31,20 +31,117 @@
       background-color: #F5F5F5;
     }
 
-    /*定义滚动条轨道 内阴影+圆角*/
-    ::-webkit-scrollbar-track
-    {
-      -webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.3);
+    ::-webkit-scrollbar-track {
+      background-color: #0f1428;
+    }
+    ::-webkit-scrollbar-thumb {
       border-radius: 10px;
-      background-color: #F5F5F5;
+      background-color: #2a3a5e;
     }
 
-    /*定义滑块 内阴影+圆角*/
-    ::-webkit-scrollbar-thumb
-    {
-      border-radius: 10px;
-      -webkit-box-shadow: inset 0 0 6px rgba(0,0,0,.3);
-      background-color: #b66dff;
+    /* === Dark theme: iframe content === */
+    body {
+      background-color: #0b0f1e !important;
+    }
+
+    .main-panel {
+      background-color: #0b0f1e !important;
+    }
+
+    .content-wrapper {
+      background-color: #0b0f1e !important;
+    }
+
+    .page-title {
+      color: #e2e8f0 !important;
+    }
+
+    /* Cards */
+    .card {
+      background: #111628 !important;
+      border: 1px solid rgba(100, 160, 255, 0.1) !important;
+    }
+
+    .card-title {
+      color: #e2e8f0 !important;
+    }
+
+    .card-body h4 {
+      color: #e2e8f0 !important;
+    }
+
+    .text-muted {
+      color: #718096 !important;
+    }
+
+    /* Border dividers in dark mode */
+    .border-right {
+      border-right-color: rgba(100, 160, 255, 0.1) !important;
+    }
+
+    /* Tables */
+    .table {
+      color: #a0aec0 !important;
+    }
+
+    .table thead th {
+      background-color: #0d1224 !important;
+      color: #63b3ed !important;
+      border-color: rgba(100, 160, 255, 0.15) !important;
+    }
+
+    .table td, .table th {
+      border-color: rgba(100, 160, 255, 0.08) !important;
+    }
+
+    .table-striped tbody tr:nth-of-type(odd) {
+      background-color: rgba(100, 160, 255, 0.04) !important;
+    }
+
+    .table-hover tbody tr:hover {
+      background-color: rgba(100, 160, 255, 0.08) !important;
+    }
+
+    /* Forms */
+    .form-control {
+      background-color: #0d1224 !important;
+      border-color: rgba(100, 160, 255, 0.2) !important;
+      color: #e2e8f0 !important;
+    }
+
+    .form-control:focus {
+      background-color: #151d35 !important;
+      border-color: rgba(100, 160, 255, 0.5) !important;
+      color: #e2e8f0 !important;
+      box-shadow: 0 0 0 0.2rem rgba(100, 160, 255, 0.15) !important;
+    }
+
+    .form-control::placeholder {
+      color: #4a5568 !important;
+    }
+
+    label {
+      color: #a0aec0 !important;
+    }
+
+    /* Select */
+    select.form-control option {
+      background-color: #0d1224;
+    }
+
+    /* Footer */
+    .footer {
+      background: #0d1224 !important;
+      border-top: 1px solid rgba(100, 160, 255, 0.08) !important;
+    }
+
+    .footer .text-muted {
+      color: #4a5568 !important;
+    }
+
+    /* Page header icon */
+    .page-title-icon {
+      background: linear-gradient(135deg, #1a3a6e, #2563a8) !important;
     }
   </style>
 </head>

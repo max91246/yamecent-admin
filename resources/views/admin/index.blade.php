@@ -15,12 +15,129 @@
   <!-- endinject -->
   <link rel="shortcut icon" href="/assets/images/favicon.png" />
   <style>
-    /*定义滚动条高宽及背景 高宽分别对应横竖滚动条的尺寸*/
-    ::-webkit-scrollbar
-    {
-      width: 0px;
-      height: 0px;
-      background-color: #F5F5F5;
+    ::-webkit-scrollbar { width: 0; height: 0; }
+
+    /* === Dark theme overrides === */
+    body {
+      background-color: #0b0f1e !important;
+    }
+
+    /* Page body background */
+    .container-fluid.page-body-wrapper {
+      background-color: #0b0f1e !important;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: #111628 !important;
+      border-right: 1px solid rgba(100, 160, 255, 0.1);
+    }
+
+    .sidebar .nav .nav-item .nav-link {
+      color: #a0aec0 !important;
+    }
+
+    .sidebar .nav .nav-item .nav-link i.menu-icon {
+      color: #5a7ab8 !important;
+    }
+
+    .sidebar .nav .nav-item .nav-link i.menu-arrow {
+      color: #5a7ab8 !important;
+    }
+
+    .sidebar .nav .nav-item:hover {
+      background: rgba(100, 160, 255, 0.08) !important;
+    }
+
+    .sidebar .nav .nav-item:hover .nav-link {
+      color: #e2e8f0 !important;
+    }
+
+    .sidebar .nav .nav-item.active {
+      background: rgba(100, 160, 255, 0.12) !important;
+    }
+
+    .sidebar .nav .nav-item.active > .nav-link .menu-title {
+      color: #63b3ed !important;
+    }
+
+    .sidebar .nav .nav-item.active > .nav-link i {
+      color: #63b3ed !important;
+    }
+
+    /* Profile section in sidebar */
+    .sidebar .nav .nav-item.nav-profile .nav-link {
+      border-bottom: 1px solid rgba(100, 160, 255, 0.1);
+    }
+
+    .sidebar .nav-profile-text span {
+      color: #e2e8f0 !important;
+    }
+
+    .sidebar .nav-profile-text .text-secondary {
+      color: #718096 !important;
+    }
+
+    /* Sub menu */
+    .sidebar .nav .sub-menu {
+      background: rgba(0, 0, 0, 0.2) !important;
+    }
+
+    .sidebar .nav .sub-menu .nav-item .nav-link {
+      color: #718096 !important;
+    }
+
+    .sidebar .nav .sub-menu .nav-item:hover .nav-link {
+      color: #a0aec0 !important;
+    }
+
+    /* Navbar brand wrapper (logo area) */
+    .navbar.default-layout-navbar .navbar-brand-wrapper {
+      background: #0d1224 !important;
+      border-right: 1px solid rgba(100, 160, 255, 0.1);
+      border-bottom: 1px solid rgba(100, 160, 255, 0.08);
+    }
+
+    /* Navbar menu wrapper (top bar) */
+    .navbar.default-layout-navbar .navbar-menu-wrapper {
+      background: #0d1224 !important;
+      border-bottom: 1px solid rgba(100, 160, 255, 0.08);
+      color: #a0aec0 !important;
+    }
+
+    .navbar.default-layout-navbar .navbar-menu-wrapper .nav-profile-text p {
+      color: #e2e8f0 !important;
+    }
+
+    .navbar.default-layout-navbar .navbar-menu-wrapper i {
+      color: #718096;
+    }
+
+    .navbar.default-layout-navbar .navbar-menu-wrapper .search-field input {
+      color: #a0aec0 !important;
+    }
+
+    /* Dropdown menus */
+    .navbar-dropdown {
+      background: #151d35 !important;
+      border: 1px solid rgba(100, 160, 255, 0.15) !important;
+    }
+
+    .navbar-dropdown .dropdown-item {
+      color: #a0aec0 !important;
+    }
+
+    .navbar-dropdown .dropdown-item:hover {
+      background: rgba(100, 160, 255, 0.1) !important;
+      color: #e2e8f0 !important;
+    }
+
+    .navbar-dropdown .dropdown-divider {
+      border-color: rgba(100, 160, 255, 0.1) !important;
+    }
+
+    .navbar-dropdown h6 {
+      color: #718096 !important;
     }
   </style>
 </head>
