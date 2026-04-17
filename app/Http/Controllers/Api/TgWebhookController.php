@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Member;
 use App\OilPrice;
 use App\TgBot;
 use App\TgHolding;
@@ -112,6 +113,22 @@ class TgWebhookController extends Controller
                 $this->setState($bot->id, $chatId, 'set_capital_remain');
                 $replyText = "💵 剩餘資金設置\n請輸入您目前的帳戶現金餘額（台幣整數，例如：500000）：\n系統將自動加上持股成本計算總資金\n\n輸入「取消」可返回";
 
+            // 設置選單
+            } elseif ($data === 'portfolio_settings') {
+                $replyText   = "⚙️ 設置\n\n請選擇要設置的項目：";
+                $replyMarkup = ['inline_keyboard' => [
+                    [['text' => '🖼 我的 Banner', 'callback_data' => 'set_banner']],
+                ]];
+
+            // 設置 Banner — 上傳說明
+            } elseif ($data === 'set_banner') {
+                $this->setState($bot->id, $chatId, 'upload_banner');
+                $replyText = "🖼 設置我的 Banner\n\n"
+                           . "請直接發送一張圖片作為您的 Banner。\n"
+                           . "支援格式：JPG、PNG、GIF\n\n"
+                           . "圖片將顯示在「我的持股」資訊上方。\n\n"
+                           . "輸入「取消」可返回";
+
             }
 
             if ($replyText !== null) {
@@ -122,13 +139,26 @@ class TgWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        // ── 一般文字訊息 ──────────────────────────────────────────
+        // ── 一般文字訊息 / 圖片訊息 ─────────────────────────────────
         if (isset($update['message'])) {
             $msg      = $update['message'];
             $chatId   = (int) $msg['chat']['id'];
             $userId   = (string) $msg['from']['id'];
             $username = $msg['from']['username'] ?? null;
             $text     = trim($msg['text'] ?? '');
+
+            // ── 圖片訊息：處理 banner 上傳 ──────────────────────────
+            if (isset($msg['photo'])) {
+                $this->logMessage($bot->id, $userId, $username, $chatId, '[photo]', 1, 'photo');
+
+                $stateObj = $this->getState($bot->id, $chatId);
+                if ($stateObj && $stateObj->state === 'upload_banner') {
+                    $result = $this->handleBannerUpload($bot, $chatId, $userId, $msg['photo']);
+                    $this->logMessage($bot->id, $userId, $username, $chatId, $result, 2, 'reply');
+                }
+
+                return response()->json(['ok' => true]);
+            }
 
             $this->logMessage($bot->id, $userId, $username, $chatId, $text, 1, 'text');
 
@@ -185,6 +215,7 @@ class TgWebhookController extends Controller
             return ["📊 台股查詢\n請輸入股票代號（例如：2317）\n\n輸入「取消」可返回", null];
         }
         if (str_contains($text, '我的持股')) {
+            $this->sendBannerPhoto($bot, $chatId, $userId);
             return $this->buildPortfolioReply($bot->id, $chatId);
         }
 
@@ -214,6 +245,8 @@ class TgWebhookController extends Controller
                 return $this->handleSetCapital($bot, $chatId, $userId, $text, 'total');
             case 'set_capital_remain':
                 return $this->handleSetCapital($bot, $chatId, $userId, $text, 'remain');
+            case 'upload_banner':
+                return ["🖼 請直接發送一張圖片作為 Banner。\n支援格式：JPG、PNG、GIF\n\n輸入「取消」可返回", null];
             default:
                 $this->clearState($bot->id, $chatId);
                 return ['請選擇查詢項目：', $this->getMainKeyboard()];
@@ -847,6 +880,88 @@ class TgWebhookController extends Controller
         return $arrow . number_format(abs($v));
     }
 
+    // ─── Banner 圖片發送 ───────────────────────────────────────────
+    private function sendBannerPhoto(TgBot $bot, int $chatId, string $userId): void
+    {
+        $member = Member::where('account', 'tg_' . $userId)->first();
+        $bannerPath = $member && $member->banner
+            ? public_path($member->banner)
+            : public_path('assets/images/login-bg.jpg');
+
+        if (file_exists($bannerPath)) {
+            $this->sendPhoto($bot->token, $chatId, $bannerPath);
+        }
+    }
+
+    // ─── Banner 上傳處理 ────────────────────────────────────────────
+    private function handleBannerUpload(TgBot $bot, int $chatId, string $userId, array $photos): string
+    {
+        // Telegram 回傳多個尺寸，取最大的（最後一個）
+        $photo  = end($photos);
+        $fileId = $photo['file_id'];
+
+        try {
+            // 1. 取得檔案路徑
+            $res = Http::timeout(10)->get("https://api.telegram.org/bot{$bot->token}/getFile", [
+                'file_id' => $fileId,
+            ]);
+
+            $fileData = $res->json();
+            if (!($fileData['ok'] ?? false)) {
+                $this->sendMessage($bot->token, $chatId, '❌ 無法取得圖片，請重新發送。');
+                return '❌ getFile 失敗';
+            }
+
+            $filePath = $fileData['result']['file_path'];
+            $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif'])) {
+                $ext = 'jpg';
+            }
+
+            // 2. 下載圖片
+            $fileUrl  = "https://api.telegram.org/file/bot{$bot->token}/{$filePath}";
+            $fileRes  = Http::timeout(30)->get($fileUrl);
+
+            if (!$fileRes->ok()) {
+                $this->sendMessage($bot->token, $chatId, '❌ 圖片下載失敗，請重試。');
+                return '❌ 圖片下載失敗';
+            }
+
+            // 3. 存檔到 public/uploads/banner/{YYYYMMDD}/
+            $dateDir  = date('Ymd');
+            $saveDir  = public_path("uploads/banner/{$dateDir}");
+            if (!is_dir($saveDir)) {
+                mkdir($saveDir, 0755, true);
+            }
+            $filename = uniqid() . '.' . $ext;
+            $savePath = "{$saveDir}/{$filename}";
+            file_put_contents($savePath, $fileRes->body());
+
+            // 4. 更新 Member banner 欄位
+            $bannerRelPath = "/uploads/banner/{$dateDir}/{$filename}";
+            $member = Member::where('account', 'tg_' . $userId)->first();
+            if ($member) {
+                $member->update(['banner' => $bannerRelPath]);
+            }
+
+            // 5. 清除狀態，回覆成功
+            $this->clearState($bot->id, $chatId);
+
+            // 發送新 banner 預覽
+            $this->sendPhoto($bot->token, $chatId, $savePath, '✅ Banner 更新成功！');
+
+            return '✅ Banner 更新成功';
+
+        } catch (\Exception $e) {
+            Log::channel('tg_webhook')->error('[TG Webhook] handleBannerUpload 失敗', [
+                'chat_id' => $chatId,
+                'error'   => $e->getMessage(),
+            ]);
+            $this->sendMessage($bot->token, $chatId, '❌ Banner 更新失敗，請稍後重試。');
+            return '❌ Banner 更新失敗：' . $e->getMessage();
+        }
+    }
+
     // ─── 回覆組建：我的持股 ───────────────────────────────────────
     private function buildPortfolioReply(int $botId, int $chatId): array
     {
@@ -857,10 +972,12 @@ class TgWebhookController extends Controller
         $addButton  = [['text' => '➕ 添加持股', 'callback_data' => 'holding_add']];
         $capitalBtn = [['text' => '⚙️ 設定資金', 'callback_data' => 'set_capital']];
 
+        $settingsBtn = [['text' => '⚙️ 設置', 'callback_data' => 'portfolio_settings']];
+
         if ($holdings->isEmpty()) {
             return [
                 "💼 我的持股\n\n目前沒有持股記錄。",
-                ['inline_keyboard' => [$addButton, $capitalBtn]],
+                ['inline_keyboard' => [$addButton, $capitalBtn, $settingsBtn]],
             ];
         }
 
@@ -1061,9 +1178,10 @@ class TgWebhookController extends Controller
 
         $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr;
 
-        // Inline keyboard：添加 + 設定資金 + 交割款查詢 + 賣出（每排最多2個）
+        // Inline keyboard：添加 + 設定資金 + 交割款查詢 + 設置 + 賣出（每排最多2個）
         $settleQueryBtn = [['text' => '📅 交割款查詢', 'callback_data' => 'view_settlements']];
-        $inlineRows = [$addButton, $capitalBtn, $settleQueryBtn];
+        $settingsBtn    = [['text' => '⚙️ 設置', 'callback_data' => 'portfolio_settings']];
+        $inlineRows = [$addButton, $capitalBtn, $settleQueryBtn, $settingsBtn];
         foreach (array_chunk($delButtons, 2) as $row) {
             $inlineRows[] = $row;
         }
@@ -1423,6 +1541,56 @@ class TgWebhookController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::channel('tg_webhook')->error('[TG Webhook] sendMessage 失敗', [
+                'chat_id' => $chatId,
+                'error'   => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function sendPhoto(string $token, $chatId, string $photoPath, string $caption = '', ?array $replyMarkup = null): void
+    {
+        try {
+            $params = [
+                [
+                    'name'     => 'chat_id',
+                    'contents' => $chatId,
+                ],
+                [
+                    'name'     => 'parse_mode',
+                    'contents' => 'HTML',
+                ],
+            ];
+
+            if ($caption) {
+                $params[] = ['name' => 'caption', 'contents' => $caption];
+            }
+            if ($replyMarkup) {
+                $params[] = ['name' => 'reply_markup', 'contents' => json_encode($replyMarkup)];
+            }
+
+            // 本地檔案用 multipart 上傳
+            if (file_exists($photoPath)) {
+                $params[] = [
+                    'name'     => 'photo',
+                    'contents' => fopen($photoPath, 'r'),
+                    'filename' => basename($photoPath),
+                ];
+            } else {
+                // URL 直接傳送
+                $params[] = ['name' => 'photo', 'contents' => $photoPath];
+            }
+
+            $client = new Client(['timeout' => 30]);
+            $res = $client->post("https://api.telegram.org/bot{$token}/sendPhoto", [
+                'multipart' => $params,
+            ]);
+
+            Log::channel('tg_webhook')->info('[TG Webhook] sendPhoto 回應', [
+                'chat_id' => $chatId,
+                'status'  => $res->getStatusCode(),
+            ]);
+        } catch (\Exception $e) {
+            Log::channel('tg_webhook')->error('[TG Webhook] sendPhoto 失敗', [
                 'chat_id' => $chatId,
                 'error'   => $e->getMessage(),
             ]);
