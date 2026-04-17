@@ -215,8 +215,9 @@ class TgWebhookController extends Controller
             return ["📊 台股查詢\n請輸入股票代號（例如：2317）\n\n輸入「取消」可返回", null];
         }
         if (str_contains($text, '我的持股')) {
-            $this->sendBannerPhoto($bot, $chatId, $userId);
-            return $this->buildPortfolioReply($bot->id, $chatId);
+            [$portfolioText, $portfolioMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
+            $this->sendBannerPhoto($bot, $chatId, $userId, $portfolioMarkup);
+            return [$portfolioText, null];
         }
 
         // 其他（/start, 任意文字）→ 顯示主選單
@@ -881,7 +882,7 @@ class TgWebhookController extends Controller
     }
 
     // ─── Banner 圖片發送 ───────────────────────────────────────────
-    private function sendBannerPhoto(TgBot $bot, int $chatId, string $userId): void
+    private function sendBannerPhoto(TgBot $bot, int $chatId, string $userId, ?array $replyMarkup = null): void
     {
         $member = Member::where('account', 'tg_' . $userId)->first();
         $bannerPath = $member && $member->banner
@@ -889,7 +890,7 @@ class TgWebhookController extends Controller
             : public_path('assets/images/login-bg.jpg');
 
         if (file_exists($bannerPath)) {
-            $this->sendPhoto($bot->token, $chatId, $bannerPath);
+            $this->sendPhoto($bot->token, $chatId, $bannerPath, '', $replyMarkup);
         }
     }
 
