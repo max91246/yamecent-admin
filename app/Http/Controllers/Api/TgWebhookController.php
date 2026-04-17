@@ -1070,7 +1070,7 @@ class TgWebhookController extends Controller
             if ($quote && $curPrice !== null) {
                 $diff = isset($quote['priceChange'])    ? (float) $quote['priceChange']    : null;
                 $pct  = isset($quote['priceChangePct']) ? (float) $quote['priceChangePct'] : null;
-                $curPriceStr = "現價：NT$" . $curPrice;
+                $curPriceStr = $this->t('portfolio_cur_price', $lang) . "：NT$" . $curPrice;
                 if ($diff !== null && $pct !== null) {
                     $s = $diff >= 0 ? '+' : '';
                     $a = $diff >= 0 ? '📈' : '📉';
@@ -1083,7 +1083,7 @@ class TgWebhookController extends Controller
             $lotCount   = $group->count();
 
             // 分組標頭
-            $groupHeader = "📌 {$firstName}（{$stockCode}）合計 " . $this->sharesDisplay($totalShares);
+            $groupHeader = "📌 {$firstName}（{$stockCode}）" . $this->t('portfolio_total_label', $lang) . " " . $this->sharesDisplay($totalShares);
             if ($curPriceStr) {
                 $groupHeader .= "\n   {$curPriceStr}";
             }
@@ -1120,8 +1120,8 @@ class TgWebhookController extends Controller
                     $groupCurrentVal += $curValue;
                 }
 
-                $marginTag = $h->is_margin ? '融資' : '現股';
-                $buyStr    = $buyPrice > 0 ? "買入：NT$" . $buyPrice : '';
+                $marginTag = $h->is_margin ? $this->t('holding_margin_tag', $lang) : $this->t('holding_cash_tag', $lang);
+                $buyStr    = $buyPrice > 0 ? $this->t('portfolio_bought', $lang) . "：NT$" . $buyPrice : '';
 
                 $stockProfit = $curValue !== null ? $curValue - $originValue - $txCost - $interest : null;
                 if ($stockProfit !== null) {
@@ -1132,13 +1132,15 @@ class TgWebhookController extends Controller
                 if ($stockProfit !== null) {
                     $sign        = $stockProfit >= 0 ? '+' : '';
                     $txCostStr   = 'NT$' . number_format($txCost, 0);
-                    $interestStr = $interest > 0 ? "　利息：NT$" . number_format($interest, 0) . "（{$daysHeld}天）" : '';
-                    $profitStr   = "\n      稅費：{$txCostStr}（買費+賣費+稅）{$interestStr}　淨損益：{$sign}NT$" . number_format($stockProfit, 0);
+                    $interestStr = $interest > 0
+                        ? "　" . $this->t('portfolio_interest_lbl', $lang) . "：NT$" . number_format($interest, 0) . "（{$daysHeld}" . $this->t('portfolio_days_unit', $lang) . "）"
+                        : '';
+                    $profitStr   = "\n      " . $this->t('portfolio_fees', $lang) . "：{$txCostStr}" . $this->t('portfolio_fees_detail', $lang) . "{$interestStr}　" . $this->t('portfolio_net_pnl', $lang) . "：{$sign}NT$" . number_format($stockProfit, 0);
                 }
 
                 $isLast    = $idx === $group->keys()->last();
                 $prefix    = $isLast ? '   └' : '   ├';
-                $curValStr = $curValue !== null ? '現值：NT$' . number_format($curValue, 0) : '查詢失敗';
+                $curValStr = $curValue !== null ? $this->t('portfolio_cur_val', $lang) . '：NT$' . number_format($curValue, 0) : $this->t('portfolio_quote_fail', $lang);
 
                 $lotLines[] = "{$prefix} " . $this->sharesDisplay($h->shares) . "·{$marginTag}　{$buyStr}\n      {$curValStr}{$profitStr}";
             }
@@ -1147,7 +1149,7 @@ class TgWebhookController extends Controller
             $marginGroups = $group->groupBy('is_margin');
             $hasMultipleTypes = $marginGroups->count() > 1;
             foreach ($marginGroups as $marginVal => $mGroup) {
-                $typeTag = $hasMultipleTypes ? ($marginVal ? '(融資)' : '(現股)') : '';
+                $typeTag = $hasMultipleTypes ? ('(' . ($marginVal ? $this->t('holding_margin_tag', $lang) : $this->t('holding_cash_tag', $lang)) . ')') : '';
                 $delButtons[] = ['text' => "💰 賣出 {$stockCode}{$typeTag}", 'callback_data' => "holding_sell_c_{$stockCode}_{$marginVal}"];
             }
 
@@ -1155,28 +1157,28 @@ class TgWebhookController extends Controller
             $groupSummary = '';
             if ($lotCount > 1 && $groupCurrentVal > 0) {
                 $sign         = $groupNetProfit >= 0 ? '+' : '';
-                $groupSummary = "\n   合計現值：NT$" . number_format($groupCurrentVal, 0)
-                              . "　損益：{$sign}NT$" . number_format($groupNetProfit, 0);
+                $groupSummary = "\n   " . $this->t('portfolio_total_val', $lang) . "：NT$" . number_format($groupCurrentVal, 0)
+                              . "　" . $this->t('portfolio_pnl', $lang) . "：{$sign}NT$" . number_format($groupNetProfit, 0);
             }
 
             $lines[] = $groupHeader . "\n" . implode("\n", $lotLines) . $groupSummary;
         }
 
         // 損益摘要
-        $profitStr = "\n\n📊 自備成本：NT$" . number_format($totalSelfCost, 0)
-                   . "　原始市值：NT$" . number_format($totalOriginVal, 0);
+        $profitStr = "\n\n" . $this->t('portfolio_self_cost', $lang) . "：NT$" . number_format($totalSelfCost, 0)
+                   . "　" . $this->t('portfolio_orig_val', $lang) . "：NT$" . number_format($totalOriginVal, 0);
         if ($totalCurrentVal > 0) {
             $netProfit = $totalCurrentVal - $totalOriginVal - $totalTxCost - $totalInterest;
             $roi       = $totalSelfCost > 0 ? ($netProfit / $totalSelfCost * 100) : 0;
             $sign      = $netProfit >= 0 ? '+' : '';
-            $profitStr .= "\n📈 現值合計：NT$" . number_format($totalCurrentVal, 0)
-                        . "\n💸 預估稅費：NT$" . number_format($totalTxCost, 0);
+            $profitStr .= "\n" . $this->t('portfolio_cur_total', $lang) . "：NT$" . number_format($totalCurrentVal, 0)
+                        . "\n" . $this->t('portfolio_est_fees', $lang) . "：NT$" . number_format($totalTxCost, 0);
             if ($totalInterest > 0) {
-                $profitStr .= "\n📋 融資利息：NT$" . number_format($totalInterest, 0)
-                            . "（年利率 " . number_format($marginAnnualRate * 100, 1) . "%）";
+                $profitStr .= "\n" . $this->t('portfolio_margin_int', $lang) . "：NT$" . number_format($totalInterest, 0)
+                            . "（" . $this->t('portfolio_ann_rate', $lang) . " " . number_format($marginAnnualRate * 100, 1) . "%）";
             }
-            $profitStr .= "\n💹 淨損益：{$sign}NT$" . number_format($netProfit, 0)
-                        . "　自備報酬：{$sign}" . number_format($roi, 2) . "%";
+            $profitStr .= "\n" . $this->t('portfolio_net_pnl2', $lang) . "：{$sign}NT$" . number_format($netProfit, 0)
+                        . "　" . $this->t('portfolio_self_roi', $lang) . "：{$sign}" . number_format($roi, 2) . "%";
         }
 
         $today = Carbon::now('Asia/Taipei')->toDateString();
@@ -1212,7 +1214,7 @@ class TgWebhookController extends Controller
             $grandNet += $dayNet;
             $sign  = $dayNet >= 0 ? '+' : '';
             $emoji = $dayNet >= 0 ? '🟢' : '🔴';
-            $settleLines[] = "   ├ {$dateStr} 交割：{$emoji}{$sign}NT$" . number_format($dayNet, 0);
+            $settleLines[] = "   ├ {$dateStr} " . $this->t('portfolio_settle_lbl', $lang) . "：{$emoji}{$sign}NT$" . number_format($dayNet, 0);
         }
 
         // 帳戶資金區塊
@@ -1220,17 +1222,16 @@ class TgWebhookController extends Controller
             $totalCapital = $capital + $totalSelfCost;
             $afterSettle  = $capital + $grandNet;
             $warning      = $afterSettle < 0 ? ' ⚠️' : '';
-            $profitStr   .= "\n\n💰 帳戶總資金：NT$" . number_format($totalCapital, 0)
-                          . "\n   ├ 持股占用：NT$" . number_format($totalSelfCost, 0)
-                          . "\n   ├ 帳戶現金：NT$" . number_format($capital, 0);
+            $profitStr   .= "\n\n" . $this->t('portfolio_total_cap', $lang) . "：NT$" . number_format($totalCapital, 0)
+                          . "\n   ├ " . $this->t('portfolio_holding_cost', $lang) . "：NT$" . number_format($totalSelfCost, 0)
+                          . "\n   ├ " . $this->t('portfolio_cash_lbl', $lang) . "：NT$" . number_format($capital, 0);
             if (!empty($settleLines)) {
-                // 最後一行改成 └
                 $last = count($settleLines) - 1;
                 $settleLines[$last] = str_replace('├', '├', $settleLines[$last]);
                 $profitStr .= "\n" . implode("\n", $settleLines);
-                $profitStr .= "\n   └ 交割後剩餘：NT$" . number_format($afterSettle, 0) . $warning;
+                $profitStr .= "\n   └ " . $this->t('portfolio_post_settle', $lang) . "：NT$" . number_format($afterSettle, 0) . $warning;
             } else {
-                $profitStr .= "\n   └ 剩餘可用：NT$" . number_format($capital, 0);
+                $profitStr .= "\n   └ " . $this->t('portfolio_available', $lang) . "：NT$" . number_format($capital, 0);
             }
         } else {
             $profitStr .= "\n\n" . $this->t('portfolio_no_capital', $lang);
