@@ -24,6 +24,20 @@ php artisan cache:clear    # 清除快取
 php artisan route:list     # 列出所有路由
 ```
 
+## GCP 升級部署指令
+
+每次有 migration 或程式碼異動要升版到 GCP，需在 Docker workspace 容器內執行：
+
+```bash
+# 進入容器執行（本機無 php 指令，需走 Docker）
+docker exec laradock_workspace_1 bash -c "cd /var/www/yamecent-admin && php artisan migrate --force"
+
+# 若需清除快取（config / route / view）
+docker exec laradock_workspace_1 bash -c "cd /var/www/yamecent-admin && php artisan config:clear && php artisan route:clear && php artisan view:clear"
+```
+
+> **注意**：`php artisan migrate --force` 的 `--force` 是 production 環境必要參數（跳過互動確認）。
+
 ## 工作流程規範
 
 - 每次功能完成後，必須自動 commit 並 push 到 git
