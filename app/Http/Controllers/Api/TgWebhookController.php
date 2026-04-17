@@ -231,13 +231,13 @@ class TgWebhookController extends Controller
         $lang = $this->getUserLang($userId);
 
         if ($this->matchesMenuKey($text, 'menu_oil')) {
-            return [$this->buildOilReply(), null];
+            return [$this->buildOilReply($lang), null];
         }
         if ($this->matchesMenuKey($text, 'menu_wtx')) {
-            return [$this->buildWtxReply(), null];
+            return [$this->buildWtxReply($lang), null];
         }
         if ($this->matchesMenuKey($text, 'menu_vix') || str_contains($text, 'VIX')) {
-            return [$this->buildVixReply(), null];
+            return [$this->buildVixReply($lang), null];
         }
         if ($this->matchesMenuKey($text, 'menu_stock')) {
             $this->setState($bot->id, $chatId, 'stock_query');
@@ -314,7 +314,7 @@ class TgWebhookController extends Controller
         }
 
         $this->clearState($bot->id, $chatId);
-        return [$this->buildStockReply($code, $quote), null];
+        return [$this->buildStockReply($code, $quote, $lang), null];
     }
 
     // ─── 持股添加：step1 輸入代號 ─────────────────────────────────
@@ -650,7 +650,7 @@ class TgWebhookController extends Controller
     }
 
     // ─── 回覆組建：油價 ──────────────────────────────────────────
-    private function buildOilReply(): string
+    private function buildOilReply(string $lang = 'zh-Hant'): string
     {
         $latest = OilPrice::where('ticker', 'QA')
             ->whereNotNull('close')
@@ -658,7 +658,7 @@ class TgWebhookController extends Controller
             ->first();
 
         if (!$latest) {
-            return '暫無油價資料';
+            return $this->t('oil_no_data', $lang);
         }
 
         $prev = OilPrice::where('ticker', 'QA')
@@ -673,17 +673,17 @@ class TgWebhookController extends Controller
             $pct   = (float) $prev->close > 0 ? ($diff / (float) $prev->close * 100) : 0;
             $sign  = $diff >= 0 ? '+' : '';
             $arrow = $diff >= 0 ? '📈' : '📉';
-            $changeStr = "\n{$arrow} 5分變化：{$sign}" . number_format($diff, 4) . "（{$sign}" . number_format($pct, 2) . "%）";
+            $changeStr = "\n{$arrow} " . $this->t('reply_change_5m', $lang) . "：{$sign}" . number_format($diff, 4) . "（{$sign}" . number_format($pct, 2) . "%）";
         }
 
         $vix    = OilPrice::where('ticker', 'VIX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
-        $vixStr = $vix ? "\n😨 VIX 恐慌指數：" . number_format((float) $vix->close, 2) : '';
+        $vixStr = $vix ? "\n" . $this->t('reply_vix_label', $lang) . "：" . number_format((float) $vix->close, 2) : '';
 
-        return "🛢 布蘭特原油\n最新價：{$latest->close}{$changeStr}\n🕐 時間：{$latest->candle_at}{$vixStr}";
+        return $this->t('oil_title', $lang) . "\n" . $this->t('oil_latest', $lang) . "：{$latest->close}{$changeStr}\n🕐 " . $this->t('reply_time', $lang) . "：{$latest->candle_at}{$vixStr}";
     }
 
     // ─── 回覆組建：台指 ──────────────────────────────────────────
-    private function buildWtxReply(): string
+    private function buildWtxReply(string $lang = 'zh-Hant'): string
     {
         // 撈最近 6 筆（5 根 K + 1 根用來算最舊那根的變化）
         $rows = OilPrice::where('ticker', 'WTX')
@@ -693,7 +693,7 @@ class TgWebhookController extends Controller
             ->get();
 
         if ($rows->isEmpty()) {
-            return '暫無台指資料';
+            return $this->t('wtx_no_data', $lang);
         }
 
         // 由舊到新排列
@@ -722,16 +722,16 @@ class TgWebhookController extends Controller
         }
 
         $vix    = OilPrice::where('ticker', 'VIX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
-        $vixStr = $vix ? "\n\n😨 VIX 恐慌指數：" . number_format((float) $vix->close, 2) : '';
+        $vixStr = $vix ? "\n\n" . $this->t('reply_vix_label', $lang) . "：" . number_format((float) $vix->close, 2) : '';
 
-        return "📈 台指期貨（近5根K棒）\n"
+        return $this->t('wtx_title', $lang) . "\n"
              . "─────────────────\n"
              . implode("\n", array_reverse($lines))
              . $vixStr;
     }
 
     // ─── 回覆組建：VIX ───────────────────────────────────────────
-    private function buildVixReply(): string
+    private function buildVixReply(string $lang = 'zh-Hant'): string
     {
         $latest = OilPrice::where('ticker', 'VIX')
             ->whereNotNull('close')
@@ -739,7 +739,7 @@ class TgWebhookController extends Controller
             ->first();
 
         if (!$latest) {
-            return '暫無 VIX 資料';
+            return $this->t('vix_no_data', $lang);
         }
 
         $prev = OilPrice::where('ticker', 'VIX')
@@ -754,14 +754,14 @@ class TgWebhookController extends Controller
             $pct   = (float) $prev->close > 0 ? ($diff / (float) $prev->close * 100) : 0;
             $sign  = $diff >= 0 ? '+' : '';
             $arrow = $diff >= 0 ? '📈' : '📉';
-            $changeStr = "\n{$arrow} 5分變化：{$sign}" . number_format($diff, 2) . "（{$sign}" . number_format($pct, 2) . "%）";
+            $changeStr = "\n{$arrow} " . $this->t('reply_change_5m', $lang) . "：{$sign}" . number_format($diff, 2) . "（{$sign}" . number_format($pct, 2) . "%）";
         }
 
-        return "😨 VIX 恐慌指數\n當前：" . number_format((float) $latest->close, 2) . "{$changeStr}\n🕐 時間：{$latest->candle_at}";
+        return $this->t('vix_title', $lang) . "\n" . $this->t('vix_current', $lang) . "：" . number_format((float) $latest->close, 2) . "{$changeStr}\n🕐 " . $this->t('reply_time', $lang) . "：{$latest->candle_at}";
     }
 
     // ─── 回覆組建：台股查詢結果 ───────────────────────────────────
-    private function buildStockReply(string $code, array $quote): string
+    private function buildStockReply(string $code, array $quote, string $lang = 'zh-Hant'): string
     {
         $name  = $quote['name'];
         $price = $quote['price'];
@@ -772,14 +772,14 @@ class TgWebhookController extends Controller
             $pct   = (float) $quote['priceChangePct'];
             $sign  = $diff >= 0 ? '+' : '';
             $arrow = $diff >= 0 ? '📈' : '📉';
-            $changeStr = "\n{$arrow} 漲跌：{$sign}" . number_format($diff, 2) . "（{$sign}" . number_format($pct, 2) . "%）";
+            $changeStr = "\n{$arrow} " . $this->t('stock_change', $lang) . "：{$sign}" . number_format($diff, 2) . "（{$sign}" . number_format($pct, 2) . "%）";
         }
 
         $volumeStr = $quote['volume'] !== null
-            ? "\n📦 成交張數：" . number_format((int) round((float) $quote['volume'] / 1000)) . " 張"
+            ? "\n📦 " . $this->t('stock_volume', $lang) . "：" . number_format((int) round((float) $quote['volume'] / 1000))
             : '';
 
-        $reply = "📊 {$name}（{$code}.TW）\n💰 成交價：{$price}{$changeStr}{$volumeStr}";
+        $reply = "📊 {$name}（{$code}.TW）\n💰 {$price}{$changeStr}{$volumeStr}";
 
         // 三大法人
         $inst = $this->fetchInstitutional($code);
@@ -792,26 +792,29 @@ class TgWebhookController extends Controller
             // 橫條圖：以三者絕對值最大作為基準
             $maxAbs = max(abs($sumForeign), abs($sumTrust), abs($sumDealer), 1);
 
-            $reply .= "\n\n━━ 近10日三大法人買賣超 ━━";
-            $reply .= "\n" . $this->buildInstBar('外資', $sumForeign, $maxAbs);
-            $reply .= "\n" . $this->buildInstBar('投信', $sumTrust,   $maxAbs);
-            $reply .= "\n" . $this->buildInstBar('自營', $sumDealer,  $maxAbs);
+            $reply .= "\n\n━━ " . $this->t('stock_inst_title', $lang) . " ━━";
+            $reply .= "\n" . $this->buildInstBar($this->t('stock_inst_foreign', $lang), $sumForeign, $maxAbs);
+            $reply .= "\n" . $this->buildInstBar($this->t('stock_inst_trust',   $lang), $sumTrust,   $maxAbs);
+            $reply .= "\n" . $this->buildInstBar($this->t('stock_inst_dealer',  $lang), $sumDealer,  $maxAbs);
 
             // 每日明細（緊湊格式）
-            $reply .= "\n\n📅 每日明細";
+            $fLabel = mb_substr($this->t('stock_inst_foreign', $lang), 0, 1);
+            $tLabel = mb_substr($this->t('stock_inst_trust',   $lang), 0, 1);
+            $dLabel = mb_substr($this->t('stock_inst_dealer',  $lang), 0, 1);
+            $reply .= "\n\n📅 " . $this->t('stock_inst_daily', $lang);
             foreach ($rows as $row) {
                 $date = substr($row['date'], 5); // 取 MM/DD
                 $f    = $this->fmtInstCompact($row['foreign'] ?? null);
                 $t    = $this->fmtInstCompact($row['trust']   ?? null);
                 $d    = $this->fmtInstCompact($row['dealer']  ?? null);
-                $reply .= "\n{$date}  外{$f}  信{$t}  營{$d}";
+                $reply .= "\n{$date}  {$fLabel}{$f}  {$tLabel}{$t}  {$dLabel}{$d}";
             }
         }
 
         // 月營收
         $revenues = $this->fetchRevenue($code);
         if ($revenues) {
-            $reply .= "\n\n━━ 近月營收（仟元）━━";
+            $reply .= "\n\n━━ " . $this->t('stock_rev_title', $lang) . " ━━";
             foreach ($revenues as $r) {
                 // 日期格式 "2026-02-01T..."  → "26/02"
                 $d       = explode('-', substr($r['date'], 0, 7));
@@ -824,10 +827,10 @@ class TgWebhookController extends Controller
                 $lastRevK = isset($r['lastYear']['revenue'])
                     ? (int) round((float) $r['lastYear']['revenue'] / 1000)
                     : null;
-                $lastStr = $lastRevK !== null ? "　去年 " . number_format($lastRevK) : '';
+                $lastStr = $lastRevK !== null ? "　" . $this->t('stock_rev_last_yr', $lang) . " " . number_format($lastRevK) : '';
                 $reply .= "\n{$label}  " . number_format($revK)
-                        . "　月{$momArrow}" . number_format(abs($mom), 1) . "%"
-                        . "　年{$yoyArrow}" . number_format(abs($yoy), 1) . "%"
+                        . "　MoM{$momArrow}" . number_format(abs($mom), 1) . "%"
+                        . "　YoY{$yoyArrow}" . number_format(abs($yoy), 1) . "%"
                         . $lastStr;
             }
 
@@ -842,17 +845,17 @@ class TgWebhookController extends Controller
             $accLabel = substr($dParts[0], 2) . '/' . $dParts[1];
             $accArrow = $accYoY >= 0 ? '▲' : '▼';
 
-            $reply .= "\n\n📊 累計（至{$accLabel}）：" . number_format($accK) . "仟";
+            $reply .= "\n\n📊 " . $this->t('stock_rev_acc', $lang, ['label' => $accLabel]) . "：" . number_format($accK) . "K";
             if ($lastAccK !== null) {
-                $reply .= "\n   去年同期：" . number_format($lastAccK) . "仟"
-                        . "　年增{$accArrow}" . number_format(abs($accYoY), 1) . "%";
+                $reply .= "\n   " . $this->t('stock_rev_last_yr_same', $lang) . "：" . number_format($lastAccK) . "K"
+                        . "　" . $this->t('stock_rev_yoy_acc', $lang) . "{$accArrow}" . number_format(abs($accYoY), 1) . "%";
             }
         }
 
         // 最新新聞
         $news = $this->fetchStockNews($code);
         if (!empty($news)) {
-            $reply .= "\n\n━━ 最新消息 ━━";
+            $reply .= "\n\n━━ " . $this->t('stock_news_title', $lang) . " ━━";
             foreach ($news as $i => $n) {
                 $title = htmlspecialchars($n['title'] ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8');
                 $link  = $n['link'] ?? '';
