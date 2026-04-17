@@ -216,11 +216,18 @@ class TgWebhookController extends Controller
         }
         if (str_contains($text, '我的持股')) {
             $member     = Member::where('account', 'tg_' . $userId)->first();
-            $bannerRel  = ($member && $member->banner) ? $member->banner : '/assets/images/login-bg.jpg';
-            $bannerUrl  = rtrim(config('app.url'), '/') . $bannerRel;
+            $bannerPath = ($member && $member->banner)
+                ? public_path($member->banner)
+                : public_path('assets/images/login-bg.jpg');
             [$portfolioText, $portfolioMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
-            // Telegram 隱藏連結技巧：在訊息頂部嵌入圖片預覽，讓圖+文字+按鈕合為一則訊息
-            $portfolioText = '<a href="' . $bannerUrl . '">&#8203;</a>' . $portfolioText;
+            if (file_exists($bannerPath)) {
+                // caption 上限 1024 字元；超過時截斷並補 ...
+                $caption = mb_strlen($portfolioText) <= 1024
+                    ? $portfolioText
+                    : mb_substr($portfolioText, 0, 1021) . '...';
+                $this->sendPhoto($bot->token, $chatId, $bannerPath, $caption, $portfolioMarkup);
+                return [null, null];
+            }
             return [$portfolioText, $portfolioMarkup];
         }
 
