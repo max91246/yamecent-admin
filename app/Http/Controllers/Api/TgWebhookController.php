@@ -214,6 +214,13 @@ class TgWebhookController extends Controller
             $this->setState($bot->id, $chatId, 'stock_query');
             return ["📊 台股查詢\n請輸入股票代號（例如：2317）\n\n輸入「取消」可返回", null];
         }
+        if (str_contains($text, '⚙️ 設置')) {
+            $replyText   = "⚙️ 設置\n\n請選擇要設置的項目：";
+            $replyMarkup = ['inline_keyboard' => [
+                [['text' => '🖼 我的 Banner', 'callback_data' => 'set_banner']],
+            ]];
+            return [$replyText, $replyMarkup];
+        }
         if (str_contains($text, '我的持股')) {
             $member     = Member::where('account', 'tg_' . $userId)->first();
             $bannerPath = ($member && $member->banner)
@@ -1508,7 +1515,8 @@ class TgWebhookController extends Controller
             || str_contains($text, 'VIX')
             || str_contains($text, '恐慌指數')
             || str_contains($text, '台股查詢')
-            || str_contains($text, '我的持股');
+            || str_contains($text, '我的持股')
+            || str_contains($text, '⚙️ 設置');
     }
 
     private function getMainKeyboard(): array
@@ -1517,7 +1525,7 @@ class TgWebhookController extends Controller
             'keyboard' => [
                 [['text' => '🛢 布蘭特原油'], ['text' => '📈 台指期貨']],
                 [['text' => '😨 VIX恐慌指數'], ['text' => '📊 台股查詢']],
-                [['text' => '💼 我的持股']],
+                [['text' => '💼 我的持股'], ['text' => '⚙️ 設置']],
             ],
             'resize_keyboard' => true,
             'persistent'      => true,
