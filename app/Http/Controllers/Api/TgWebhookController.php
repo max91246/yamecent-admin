@@ -956,12 +956,12 @@ class TgWebhookController extends Controller
             $savePath = "{$saveDir}/{$filename}";
             file_put_contents($savePath, $fileRes->body());
 
-            // 4. 更新 Member banner 欄位
+            // 4. 更新 Member banner 欄位（不存在則建立）
             $bannerRelPath = "/uploads/banner/{$dateDir}/{$filename}";
-            $member = Member::where('account', 'tg_' . $userId)->first();
-            if ($member) {
-                $member->update(['banner' => $bannerRelPath]);
-            }
+            Member::updateOrCreate(
+                ['account' => 'tg_' . $userId],
+                ['banner'  => $bannerRelPath]
+            );
 
             // 5. 清除狀態，回覆成功
             $this->clearState($bot->id, $chatId);
