@@ -215,9 +215,13 @@ class TgWebhookController extends Controller
             return ["📊 台股查詢\n請輸入股票代號（例如：2317）\n\n輸入「取消」可返回", null];
         }
         if (str_contains($text, '我的持股')) {
+            $member     = Member::where('account', 'tg_' . $userId)->first();
+            $bannerRel  = ($member && $member->banner) ? $member->banner : '/assets/images/login-bg.jpg';
+            $bannerUrl  = rtrim(config('app.url'), '/') . $bannerRel;
             [$portfolioText, $portfolioMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
-            $this->sendBannerPhoto($bot, $chatId, $userId, $portfolioMarkup);
-            return [$portfolioText, null];
+            // Telegram 隱藏連結技巧：在訊息頂部嵌入圖片預覽，讓圖+文字+按鈕合為一則訊息
+            $portfolioText = '<a href="' . $bannerUrl . '">&#8203;</a>' . $portfolioText;
+            return [$portfolioText, $portfolioMarkup];
         }
 
         // 其他（/start, 任意文字）→ 顯示主選單
