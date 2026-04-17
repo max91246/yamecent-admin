@@ -1,0 +1,95 @@
+<?php
+
+return [
+    // ── 主选单按钮 ────────────────────────────────────────────────
+    'menu_oil'       => '🛢 布兰特原油',
+    'menu_wtx'       => '📈 台指期货',
+    'menu_vix'       => '😨 VIX恐慌指数',
+    'menu_stock'     => '📊 台股查询',
+    'menu_portfolio' => '💼 我的持股',
+    'menu_settings'  => '⚙️ 设置',
+
+    // ── 设置选单 ──────────────────────────────────────────────────
+    'settings_title'  => '⚙️ 设置',
+    'settings_prompt' => '请选择要设置的项目：',
+    'settings_banner' => '🖼 我的 Banner',
+    'settings_lang'   => '🌐 语言',
+
+    // ── 语言选择 ──────────────────────────────────────────────────
+    'lang_title'    => "🌐 语言设置\n\n请选择您的语言：",
+    'lang_zh_hant'  => '繁體中文',
+    'lang_zh_hans'  => '简体中文',
+    'lang_en'       => 'English',
+    'lang_updated'  => '✅ 语言已更新为 简体中文',
+
+    // ── 通用 ──────────────────────────────────────────────────────
+    'cancel'         => '取消',
+    'cancel_aliases' => ['取消', '❌ 取消', '/cancel'],
+    'cancelled'      => '已取消，请选择查询项目：',
+    'main_menu'      => '请选择查询项目：',
+    'cancel_hint'    => '输入「取消」可返回',
+    'cancel_hint_menu' => '输入「取消」可返回主菜单',
+
+    // ── 台股查询 ──────────────────────────────────────────────────
+    'stock_query_prompt'   => "📊 台股查询\n请输入股票代号（例如：2317）\n\n输入「取消」可返回",
+    'stock_not_found'      => '❌ 找不到股票代号「:code」，请重新输入：',
+
+    // ── 持股：添加流程 ────────────────────────────────────────────
+    'holding_add'          => '➕ 添加持股',
+    'holding_add_prompt'   => "➕ 请输入要添加的股票代号\n（例如：2317）\n\n输入「取消」可返回主菜单",
+    'holding_found'        => "✅ 找到：:name（:code）\n💰 当前价：:price\n\n请输入持有【股数】（整股：5张请输入 5000，零股：500股请输入 500）：",
+    'holding_invalid_shares' => '❌ 股数请输入正整数（例如：5000；零股例如：500）：',
+    'holding_margin_prompt'  => '是否融资购买？',
+    'holding_margin_yes'     => '✅ 是（融资）',
+    'holding_margin_no'      => '❌ 否（现股）',
+    'holding_margin_wait'    => "请点选上方按钮选择是否融资：\n\n输入「取消」可返回主菜单",
+    'holding_price_prompt'   => "请输入当时买进的每股价格（元）：\n例如：:name 买 :shares，每股 53.5 就输入 53.5\n\n输入「取消」可返回",
+    'holding_invalid_price'  => '❌ 请输入有效的每股买进价格（例如：53.5）：',
+    'holding_added'          => "✅ 已添加持股：\n📌 :name（:code）\n📦 :shares · :type\n💵 买进价：NT$:buy_price　市值：NT$:market_val\n💰 持有成本：NT$:cost",
+    'holding_margin_tag'     => '融资',
+    'holding_cash_tag'       => '现股',
+    'holding_margin_note'    => '（自备 40%）',
+
+    // ── 持股：卖出流程 ────────────────────────────────────────────
+    'sell_prompt'          => "💰 卖出 :name（:code）:type\n持有：:shares\n\n请输入卖出股数（最多 :max 股）：\n\n输入「取消」可返回",
+    'sell_exceed'          => '❌ 持有只有 :shares，请重新输入：',
+    'sell_price_prompt'    => "请输入每股卖出价格（元）：\n例如：每股 55 就输入 55\n\n输入「取消」可返回",
+    'sell_invalid_price'   => '❌ 请输入有效的每股卖出价格（例如：55）：',
+    'sell_invalid_shares'  => '❌ 请输入有效的卖出股数（正整数）：',
+    'sell_done'            => "📤 卖出完成：\n📌 :name（:code）:shares\n💵 买进均价：NT$:buy_price　卖出：NT$:sell_price\n💸 手续费：NT$:fee　交易税：NT$:tax\n:profit_tag：:sign NT$:profit",
+    'sell_profit'          => '✅ 获利',
+    'sell_loss'            => '❌ 亏损',
+    'sell_btn'             => '💰 卖出 :code',
+    'margin_tag'           => '（融资）',
+
+    // ── 我的持股 ──────────────────────────────────────────────────
+    'portfolio_title'      => '💼 我的持股',
+    'portfolio_empty'      => "💼 我的持股\n\n目前没有持股记录。",
+    'portfolio_btn_add'    => '➕ 添加持股',
+    'portfolio_btn_capital'=> '⚙️ 设定资金',
+    'portfolio_btn_settle' => '📅 交割款查询',
+    'portfolio_no_capital' => '💰 账户资金：未设定（点击⚙️设定资金）',
+
+    // ── 设定资金 ──────────────────────────────────────────────────
+    'capital_mode_prompt'  => "⚙️ 设定资金模式\n\n📌 <b>总资金设置</b>：直接输入您的总资金（含持股部位）\n📌 <b>剩余资金设置</b>：输入账户现金余额，系统自动加上持股成本计算总资金\n",
+    'capital_btn_total'    => '💼 总资金设置',
+    'capital_btn_remain'   => '💵 剩余资金设置',
+    'capital_total_prompt' => "💼 总资金设置\n请输入您的总资金（台币整数，例如：2000000）：\n\n输入「取消」可返回",
+    'capital_remain_prompt'=> "💵 剩余资金设置\n请输入您目前的账户现金余额（台币整数，例如：500000）：\n系统将自动加上持股成本计算总资金\n\n输入「取消」可返回",
+    'capital_invalid'      => '❌ 请输入有效金额（正整数，例如：1500000）：',
+    'capital_set_remain'   => "✅ 剩余可用资金设定为 NT$:capital\n   账户总资金 = NT$:total",
+    'capital_set_total'    => "✅ 账户总资金 NT$:total\n   持股占用 NT$:cost\n   → 剩余可用 NT$:remain",
+    'capital_warning'      => ' ⚠️（持股成本已超过总资金）',
+
+    // ── 交割款 ────────────────────────────────────────────────────
+    'settle_title'         => '📅 交割款查询',
+    'settle_empty'         => "📅 交割款查询\n\n目前无待交割款项。",
+
+    // ── Banner ────────────────────────────────────────────────────
+    'banner_prompt'        => "🖼 设置我的 Banner\n\n请直接发送一张图片作为您的 Banner。\n支持格式：JPG、PNG、GIF\n\n图片将显示在「我的持股」信息上方。\n\n输入「取消」可返回",
+    'banner_wait'          => "🖼 请直接发送一张图片作为 Banner。\n支持格式：JPG、PNG、GIF\n\n输入「取消」可返回",
+    'banner_success'       => '✅ Banner 更新成功！',
+    'banner_get_fail'      => '❌ 无法获取图片，请重新发送。',
+    'banner_download_fail' => '❌ 图片下载失败，请重试。',
+    'banner_update_fail'   => '❌ Banner 更新失败，请稍后重试。',
+];

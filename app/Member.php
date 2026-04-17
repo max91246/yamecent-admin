@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Hash;
 class Member extends Model
 {
     protected $fillable = [
-        'account', 'avatar', 'banner', 'password', 'nickname',
+        'account', 'avatar', 'banner', 'language', 'password', 'nickname',
         'email', 'phone', 'balance', 'is_active', 'can_comment',
         'is_member', 'member_expired_at', 'member_applied_at',
     ];

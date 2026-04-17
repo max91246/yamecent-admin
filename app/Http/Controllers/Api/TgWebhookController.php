@@ -53,15 +53,16 @@ class TgWebhookController extends Controller
             $replyMarkup = null;
 
             $stateObj = $this->getState($bot->id, $chatId);
+            $lang     = $this->getUserLang($userId);
 
             // 融資確認按鈕（狀態機 step3）
             if ($stateObj && $stateObj->state === 'holding_step3') {
-                [$replyText, $replyMarkup] = $this->handleHoldingStep3Callback($bot, $chatId, $data, $stateObj);
+                [$replyText, $replyMarkup] = $this->handleHoldingStep3Callback($bot, $chatId, $data, $stateObj, $lang);
 
             // 添加持股
             } elseif ($data === 'holding_add') {
                 $this->setState($bot->id, $chatId, 'holding_step1');
-                $replyText = "➕ 請輸入要添加的股票代號\n（例如：2317）\n\n輸入「取消」可返回主選單";
+                $replyText = $this->t('holding_add_prompt', $lang);
 
             // 賣出持股 — 進入賣出流程（新格式：holding_sell_c_{code}_{margin}）
             } elseif (str_starts_with($data, 'holding_sell_c_')) {
@@ -77,16 +78,20 @@ class TgWebhookController extends Controller
                 if ($holdings->isNotEmpty()) {
                     $totalShares = $holdings->sum('shares');
                     $stockName   = $holdings->first()->stock_name;
-                    $typeTag     = $isMargin ? '（融資）' : '';
+                    $typeTag     = $isMargin ? $this->t('margin_tag', $lang) : '';
                     $this->setState($bot->id, $chatId, 'sell_step1', [
                         'stock_code' => $stockCode,
                         'is_margin'  => $isMargin,
                     ]);
-                    $replyText = "💰 賣出 {$stockName}（{$stockCode}）{$typeTag}\n"
-                               . "持有：" . $this->sharesDisplay($totalShares) . "\n\n"
-                               . "請輸入賣出股數（最多 {$totalShares} 股）：\n\n輸入「取消」可返回";
+                    $replyText = $this->t('sell_prompt', $lang, [
+                        'name'   => $stockName,
+                        'code'   => $stockCode,
+                        'type'   => $typeTag,
+                        'shares' => $this->sharesDisplay($totalShares),
+                        'max'    => $totalShares,
+                    ]);
                 } else {
-                    [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
+                    [$replyText, $replyMarkup] = $this->buildPortfolioReply($bot->id, $chatId, $lang);
                 }
 
             // 交割款查詢
@@ -95,39 +100,59 @@ class TgWebhookController extends Controller
 
             // 設定資金 — 先選模式
             } elseif ($data === 'set_capital') {
-                $replyText   = "⚙️ 設定資金模式\n\n"
-                             . "📌 <b>總資金設置</b>：直接輸入您的總資金（含持股部位）\n"
-                             . "📌 <b>剩餘資金設置</b>：輸入帳戶現金餘額，系統自動加上持股成本計算總資金\n";
+                $replyText   = $this->t('capital_mode_prompt', $lang);
                 $replyMarkup = ['inline_keyboard' => [[
-                    ['text' => '💼 總資金設置',   'callback_data' => 'set_capital_total'],
-                    ['text' => '💵 剩餘資金設置', 'callback_data' => 'set_capital_remain'],
+                    ['text' => $this->t('capital_btn_total',  $lang), 'callback_data' => 'set_capital_total'],
+                    ['text' => $this->t('capital_btn_remain', $lang), 'callback_data' => 'set_capital_remain'],
                 ]]];
 
             // 設定資金 — 總資金模式
             } elseif ($data === 'set_capital_total') {
                 $this->setState($bot->id, $chatId, 'set_capital_total');
-                $replyText = "💼 總資金設置\n請輸入您的總資金（台幣整數，例如：2000000）：\n\n輸入「取消」可返回";
+                $replyText = $this->t('capital_total_prompt', $lang);
 
             // 設定資金 — 剩餘資金模式
             } elseif ($data === 'set_capital_remain') {
                 $this->setState($bot->id, $chatId, 'set_capital_remain');
-                $replyText = "💵 剩餘資金設置\n請輸入您目前的帳戶現金餘額（台幣整數，例如：500000）：\n系統將自動加上持股成本計算總資金\n\n輸入「取消」可返回";
+                $replyText = $this->t('capital_remain_prompt', $lang);
 
             // 設置選單
             } elseif ($data === 'portfolio_settings') {
-                $replyText   = "⚙️ 設置\n\n請選擇要設置的項目：";
+                $replyText   = $this->t('settings_title', $lang) . "\n\n" . $this->t('settings_prompt', $lang);
                 $replyMarkup = ['inline_keyboard' => [
-                    [['text' => '🖼 我的 Banner', 'callback_data' => 'set_banner']],
+                    [['text' => $this->t('settings_banner', $lang), 'callback_data' => 'set_banner']],
+                    [['text' => $this->t('settings_lang',   $lang), 'callback_data' => 'set_lang']],
                 ]];
 
             // 設置 Banner — 上傳說明
             } elseif ($data === 'set_banner') {
+                $lang = $this->getUserLang($userId);
                 $this->setState($bot->id, $chatId, 'upload_banner');
-                $replyText = "🖼 設置我的 Banner\n\n"
-                           . "請直接發送一張圖片作為您的 Banner。\n"
-                           . "支援格式：JPG、PNG、GIF\n\n"
-                           . "圖片將顯示在「我的持股」資訊上方。\n\n"
-                           . "輸入「取消」可返回";
+                $replyText = $this->t('banner_prompt', $lang);
+
+            // 語系選擇選單
+            } elseif ($data === 'set_lang') {
+                $lang        = $this->getUserLang($userId);
+                $currentLang = $lang;
+                $mark = fn($l) => $currentLang === $l ? ' ✓' : '';
+                $replyText   = $this->t('lang_title', $lang);
+                $replyMarkup = ['inline_keyboard' => [[
+                    ['text' => $this->t('lang_zh_hant', $lang) . $mark('zh-Hant'), 'callback_data' => 'lang_zh-Hant'],
+                    ['text' => $this->t('lang_zh_hans', $lang) . $mark('zh-Hans'), 'callback_data' => 'lang_zh-Hans'],
+                    ['text' => $this->t('lang_en',      $lang) . $mark('en'),      'callback_data' => 'lang_en'],
+                ]]];
+
+            // 語系切換
+            } elseif (str_starts_with($data, 'lang_')) {
+                $newLang = substr($data, 5); // lang_zh-Hant → zh-Hant
+                if (in_array($newLang, ['zh-Hant', 'zh-Hans', 'en'])) {
+                    Member::updateOrCreate(
+                        ['account' => 'tg_' . $userId],
+                        ['language' => $newLang]
+                    );
+                    $replyText   = $this->t('lang_updated', $newLang);
+                    $replyMarkup = $this->getMainKeyboard($newLang);
+                }
 
             }
 
@@ -153,7 +178,8 @@ class TgWebhookController extends Controller
 
                 $stateObj = $this->getState($bot->id, $chatId);
                 if ($stateObj && $stateObj->state === 'upload_banner') {
-                    $result = $this->handleBannerUpload($bot, $chatId, $userId, $msg['photo']);
+                    $lang   = $this->getUserLang($userId);
+                    $result = $this->handleBannerUpload($bot, $chatId, $userId, $msg['photo'], $lang);
                     $this->logMessage($bot->id, $userId, $username, $chatId, $result, 2, 'reply');
                 }
 
@@ -166,10 +192,11 @@ class TgWebhookController extends Controller
             $replyMarkup = null;
 
             // 取消 → 清除狀態，顯示主選單
-            if (in_array($text, ['取消', '❌ 取消', '/cancel'])) {
+            if (in_array($text, ['取消', '❌ 取消', '/cancel', 'cancel'])) {
+                $lang = $this->getUserLang($userId);
                 $this->clearState($bot->id, $chatId);
-                $replyText   = '已取消，請選擇查詢項目：';
-                $replyMarkup = $this->getMainKeyboard();
+                $replyText   = $this->t('cancelled', $lang);
+                $replyMarkup = $this->getMainKeyboard($lang);
 
             } else {
                 $stateObj = $this->getState($bot->id, $chatId);
@@ -201,32 +228,35 @@ class TgWebhookController extends Controller
     // ─── 主選單處理 ──────────────────────────────────────────────
     private function handleMainMenu(TgBot $bot, int $chatId, string $userId, string $text): array
     {
-        if (str_contains($text, '布蘭特原油')) {
+        $lang = $this->getUserLang($userId);
+
+        if ($this->matchesMenuKey($text, 'menu_oil')) {
             return [$this->buildOilReply(), null];
         }
-        if (str_contains($text, '台指期貨')) {
+        if ($this->matchesMenuKey($text, 'menu_wtx')) {
             return [$this->buildWtxReply(), null];
         }
-        if (str_contains($text, 'VIX') || str_contains($text, '恐慌指數')) {
+        if ($this->matchesMenuKey($text, 'menu_vix') || str_contains($text, 'VIX')) {
             return [$this->buildVixReply(), null];
         }
-        if (str_contains($text, '台股查詢')) {
+        if ($this->matchesMenuKey($text, 'menu_stock')) {
             $this->setState($bot->id, $chatId, 'stock_query');
-            return ["📊 台股查詢\n請輸入股票代號（例如：2317）\n\n輸入「取消」可返回", null];
+            return [$this->t('stock_query_prompt', $lang), null];
         }
-        if (str_contains($text, '⚙️ 設置')) {
-            $replyText   = "⚙️ 設置\n\n請選擇要設置的項目：";
+        if ($this->isSettingsText($text)) {
+            $replyText   = $this->t('settings_title', $lang) . "\n\n" . $this->t('settings_prompt', $lang);
             $replyMarkup = ['inline_keyboard' => [
-                [['text' => '🖼 我的 Banner', 'callback_data' => 'set_banner']],
+                [['text' => $this->t('settings_banner', $lang), 'callback_data' => 'set_banner']],
+                [['text' => $this->t('settings_lang', $lang),   'callback_data' => 'set_lang']],
             ]];
             return [$replyText, $replyMarkup];
         }
-        if (str_contains($text, '我的持股')) {
+        if ($this->matchesMenuKey($text, 'menu_portfolio')) {
             $member     = Member::where('account', 'tg_' . $userId)->first();
             $bannerPath = ($member && $member->banner)
                 ? public_path($member->banner)
                 : public_path('assets/images/login-bg.jpg');
-            [$portfolioText, $portfolioMarkup] = $this->buildPortfolioReply($bot->id, $chatId);
+            [$portfolioText, $portfolioMarkup] = $this->buildPortfolioReply($bot->id, $chatId, $lang);
             if (file_exists($bannerPath)) {
                 // caption 上限 1024 字元；超過時截斷並補 ...
                 $caption = mb_strlen($portfolioText) <= 1024
@@ -239,47 +269,48 @@ class TgWebhookController extends Controller
         }
 
         // 其他（/start, 任意文字）→ 顯示主選單
-        return ['請選擇查詢項目：', $this->getMainKeyboard()];
+        return [$this->t('main_menu', $lang), $this->getMainKeyboard($lang)];
     }
 
     // ─── 狀態機分派 ──────────────────────────────────────────────
     private function handleState(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj): array
     {
+        $lang = $this->getUserLang($userId);
         switch ($stateObj->state) {
             case 'stock_query':
-                return $this->handleStockQuery($bot, $chatId, $text);
+                return $this->handleStockQuery($bot, $chatId, $text, $lang);
             case 'holding_step1':
-                return $this->handleHoldingStep1($bot, $chatId, $text, $stateObj);
+                return $this->handleHoldingStep1($bot, $chatId, $text, $stateObj, $lang);
             case 'holding_step2':
-                return $this->handleHoldingStep2($bot, $chatId, $text, $stateObj);
+                return $this->handleHoldingStep2($bot, $chatId, $text, $stateObj, $lang);
             case 'holding_step3':
-                return ["請點選上方按鈕選擇是否融資：\n\n輸入「取消」可返回主選單", null];
+                return [$this->t('holding_margin_wait', $lang), null];
             case 'holding_step4':
-                return $this->handleHoldingStep4($bot, $chatId, $userId, $text, $stateObj);
+                return $this->handleHoldingStep4($bot, $chatId, $userId, $text, $stateObj, $lang);
             case 'sell_step1':
-                return $this->handleSellStep1($bot, $chatId, $userId, $text, $stateObj);
+                return $this->handleSellStep1($bot, $chatId, $userId, $text, $stateObj, $lang);
             case 'sell_step2':
-                return $this->handleSellStep2($bot, $chatId, $userId, $text, $stateObj);
+                return $this->handleSellStep2($bot, $chatId, $userId, $text, $stateObj, $lang);
             case 'set_capital_total':
-                return $this->handleSetCapital($bot, $chatId, $userId, $text, 'total');
+                return $this->handleSetCapital($bot, $chatId, $userId, $text, 'total', $lang);
             case 'set_capital_remain':
-                return $this->handleSetCapital($bot, $chatId, $userId, $text, 'remain');
+                return $this->handleSetCapital($bot, $chatId, $userId, $text, 'remain', $lang);
             case 'upload_banner':
-                return ["🖼 請直接發送一張圖片作為 Banner。\n支援格式：JPG、PNG、GIF\n\n輸入「取消」可返回", null];
+                return [$this->t('banner_wait', $lang), null];
             default:
                 $this->clearState($bot->id, $chatId);
-                return ['請選擇查詢項目：', $this->getMainKeyboard()];
+                return [$this->t('main_menu', $lang), $this->getMainKeyboard($lang)];
         }
     }
 
     // ─── 台股查詢 ─────────────────────────────────────────────────
-    private function handleStockQuery(TgBot $bot, int $chatId, string $text): array
+    private function handleStockQuery(TgBot $bot, int $chatId, string $text, string $lang = 'zh-Hant'): array
     {
         $code  = strtoupper(preg_replace('/[^a-zA-Z0-9]/', '', $text));
         $quote = $this->fetchStockQuote($code);
 
         if (!$quote) {
-            return ["❌ 找不到股票代號「{$text}」，請重新輸入：\n\n輸入「取消」可返回", null];
+            return [$this->t('stock_not_found', $lang, ['code' => $text]), null];
         }
 
         $this->clearState($bot->id, $chatId);
@@ -287,13 +318,13 @@ class TgWebhookController extends Controller
     }
 
     // ─── 持股添加：step1 輸入代號 ─────────────────────────────────
-    private function handleHoldingStep1(TgBot $bot, int $chatId, string $text, TgState $stateObj): array
+    private function handleHoldingStep1(TgBot $bot, int $chatId, string $text, TgState $stateObj, string $lang = 'zh-Hant'): array
     {
         $code  = strtoupper(preg_replace('/[^a-zA-Z0-9]/', '', $text));
         $quote = $this->fetchStockQuote($code);
 
         if (!$quote) {
-            return ["❌ 找不到股票代號「{$text}」，請重新輸入：\n\n輸入「取消」可返回", null];
+            return [$this->t('stock_not_found', $lang, ['code' => $text]), null];
         }
 
         $this->setState($bot->id, $chatId, 'holding_step2', [
@@ -302,16 +333,16 @@ class TgWebhookController extends Controller
         ]);
 
         return [
-            "✅ 找到：{$quote['name']}（{$code}）\n💰 當前價：{$quote['price']}\n\n請輸入持有【股數】（整股：5張請輸入 5000，零股：500股請輸入 500）：",
+            $this->t('holding_found', $lang, ['name' => $quote['name'], 'code' => $code, 'price' => $quote['price']]),
             null,
         ];
     }
 
     // ─── 持股添加：step2 輸入張數 ─────────────────────────────────
-    private function handleHoldingStep2(TgBot $bot, int $chatId, string $text, TgState $stateObj): array
+    private function handleHoldingStep2(TgBot $bot, int $chatId, string $text, TgState $stateObj, string $lang = 'zh-Hant'): array
     {
         if (!ctype_digit($text) || (int) $text <= 0) {
-            return ['❌ 股數請輸入正整數（例如：5000；零股例如：500）：', null];
+            return [$this->t('holding_invalid_shares', $lang), null];
         }
 
         $data           = $stateObj->state_data ?? [];
@@ -320,38 +351,38 @@ class TgWebhookController extends Controller
 
         $inlineKeyboard = [
             'inline_keyboard' => [[
-                ['text' => '✅ 是（融資）', 'callback_data' => 'margin_yes'],
-                ['text' => '❌ 否（現股）', 'callback_data' => 'margin_no'],
+                ['text' => $this->t('holding_margin_yes', $lang), 'callback_data' => 'margin_yes'],
+                ['text' => $this->t('holding_margin_no',  $lang), 'callback_data' => 'margin_no'],
             ]],
         ];
 
-        return ["是否融資購買？", $inlineKeyboard];
+        return [$this->t('holding_margin_prompt', $lang), $inlineKeyboard];
     }
 
     // ─── 持股添加：step3 融資確認（callback）────────────────────────
-    private function handleHoldingStep3Callback(TgBot $bot, int $chatId, string $data, TgState $stateObj): array
+    private function handleHoldingStep3Callback(TgBot $bot, int $chatId, string $data, TgState $stateObj, string $lang = 'zh-Hant'): array
     {
         if (!in_array($data, ['margin_yes', 'margin_no'])) {
             return [null, null];
         }
 
-        $stateData             = $stateObj->state_data ?? [];
+        $stateData              = $stateObj->state_data ?? [];
         $stateData['is_margin'] = ($data === 'margin_yes') ? 1 : 0;
         $this->setState($bot->id, $chatId, 'holding_step4', $stateData);
 
         $name   = $stateData['name']   ?? '';
         $shares = $stateData['shares'] ?? 0;
 
-        return ["請輸入當時買進的每股價格（元）：\n例如：{$name} 買 " . $this->sharesDisplay((int)$shares) . "，每股 53.5 就輸入 53.5\n\n輸入「取消」可返回", null];
+        return [$this->t('holding_price_prompt', $lang, ['name' => $name, 'shares' => $this->sharesDisplay((int)$shares)]), null];
     }
 
     // ─── 持股添加：step4 輸入買進價格，自動計算成本 ─────────────────
-    private function handleHoldingStep4(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj): array
+    private function handleHoldingStep4(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj, string $lang = 'zh-Hant'): array
     {
         $buyPrice = (float) str_replace([',', '，'], '', $text);
 
         if ($buyPrice <= 0) {
-            return ['❌ 請輸入有效的每股買進價格（例如：53.5）：', null];
+            return [$this->t('holding_invalid_price', $lang), null];
         }
 
         $data      = $stateObj->state_data ?? [];
@@ -395,25 +426,28 @@ class TgWebhookController extends Controller
 
         $this->clearState($bot->id, $chatId);
 
-        $marginTag = $isMargin ? '融資' : '現股';
-        $confirm   = "✅ 已添加持股：\n"
-                   . "📌 {$data['name']}（{$data['code']}）\n"
-                   . "📦 " . $this->sharesDisplay($shares) . " · {$marginTag}\n"
-                   . "💵 買進價：NT$" . $buyPrice . "　市值：NT$" . number_format($marketVal, 0) . "\n"
-                   . "💰 持有成本：NT$" . number_format($cost, 0)
-                   . ($isMargin ? "（自備 40%）" : '');
+        $marginTag = $isMargin ? $this->t('holding_margin_tag', $lang) : $this->t('holding_cash_tag', $lang);
+        $confirm   = $this->t('holding_added', $lang, [
+            'name'       => $data['name'],
+            'code'       => $data['code'],
+            'shares'     => $this->sharesDisplay($shares),
+            'type'       => $marginTag,
+            'buy_price'  => $buyPrice,
+            'market_val' => number_format($marketVal, 0),
+            'cost'       => number_format($cost, 0),
+        ]) . ($isMargin ? $this->t('holding_margin_note', $lang) : '');
 
         // 先送確認訊息，再回傳持股列表
         $this->sendMessage($bot->token, $chatId, $confirm);
 
-        return $this->buildPortfolioReply($bot->id, $chatId);
+        return $this->buildPortfolioReply($bot->id, $chatId, $lang);
     }
 
     // ─── 賣出：step1 輸入賣出張數 ────────────────────────────────
-    private function handleSellStep1(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj): array
+    private function handleSellStep1(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj, string $lang = 'zh-Hant'): array
     {
         if (!ctype_digit($text) || (int) $text <= 0) {
-            return ['❌ 請輸入有效的賣出股數（正整數）：', null];
+            return [$this->t('sell_invalid_shares', $lang), null];
         }
 
         $data      = $stateObj->state_data ?? [];
@@ -426,31 +460,27 @@ class TgWebhookController extends Controller
 
         if ($holdings->isEmpty()) {
             $this->clearState($bot->id, $chatId);
-            return $this->buildPortfolioReply($bot->id, $chatId);
+            return $this->buildPortfolioReply($bot->id, $chatId, $lang);
         }
 
         $totalShares = $holdings->sum('shares');
         $sellShares  = (int) $text;
         if ($sellShares > $totalShares) {
-            return ["❌ 持有只有 " . $this->sharesDisplay($totalShares) . "，請重新輸入：", null];
+            return [$this->t('sell_exceed', $lang, ['shares' => $this->sharesDisplay($totalShares)]), null];
         }
 
         $data['sell_shares'] = $sellShares;
         $this->setState($bot->id, $chatId, 'sell_step2', $data);
 
-        return [
-            "請輸入每股賣出價格（元）：\n"
-            . "例如：每股 55 就輸入 55\n\n輸入「取消」可返回",
-            null,
-        ];
+        return [$this->t('sell_price_prompt', $lang), null];
     }
 
     // ─── 賣出：step2 輸入賣出價格，計算盈虧 ──────────────────────
-    private function handleSellStep2(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj): array
+    private function handleSellStep2(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj, string $lang = 'zh-Hant'): array
     {
         $sellPrice = (float) str_replace([',', '，'], '', $text);
         if ($sellPrice <= 0) {
-            return ['❌ 請輸入有效的每股賣出價格（例如：55）：', null];
+            return [$this->t('sell_invalid_price', $lang), null];
         }
 
         $data     = $stateObj->state_data ?? [];
@@ -464,7 +494,7 @@ class TgWebhookController extends Controller
 
         if ($holdings->isEmpty()) {
             $this->clearState($bot->id, $chatId);
-            return $this->buildPortfolioReply($bot->id, $chatId);
+            return $this->buildPortfolioReply($bot->id, $chatId, $lang);
         }
 
         $sellShares = (int) $data['sell_shares'];
@@ -541,25 +571,31 @@ class TgWebhookController extends Controller
         $this->clearState($bot->id, $chatId);
 
         $sign      = $profit >= 0 ? '+' : '';
-        $profitTag = $profit >= 0 ? '✅ 獲利' : '❌ 虧損';
-        $confirm   = "📤 賣出完成：\n"
-                   . "📌 {$stockName}（{$stockCode}）" . $this->sharesDisplay($sellShares) . "\n"
-                   . "💵 買進均價：NT$" . $avgBuyPrice . "　賣出：NT$" . $sellPrice . "\n"
-                   . "💸 手續費：NT$" . number_format($buyFee + $sellFee, 0)
-                   . "　交易稅：NT$" . number_format($sellTax, 0) . "\n"
-                   . "{$profitTag}：{$sign}NT$" . number_format($profit, 0);
+        $profitTag = $profit >= 0 ? $this->t('sell_profit', $lang) : $this->t('sell_loss', $lang);
+        $confirm   = $this->t('sell_done', $lang, [
+            'name'       => $stockName,
+            'code'       => $stockCode,
+            'shares'     => $this->sharesDisplay($sellShares),
+            'buy_price'  => $avgBuyPrice,
+            'sell_price' => $sellPrice,
+            'fee'        => number_format($buyFee + $sellFee, 0),
+            'tax'        => number_format($sellTax, 0),
+            'profit_tag' => $profitTag,
+            'sign'       => $sign,
+            'profit'     => number_format($profit, 0),
+        ]);
 
         $this->sendMessage($bot->token, $chatId, $confirm);
 
-        return $this->buildPortfolioReply($bot->id, $chatId);
+        return $this->buildPortfolioReply($bot->id, $chatId, $lang);
     }
 
     // ─── 設定資金總額（total=直接設定 / remain=剩餘+持股成本反推）──
-    private function handleSetCapital(TgBot $bot, int $chatId, string $userId, string $text, string $mode = 'total'): array
+    private function handleSetCapital(TgBot $bot, int $chatId, string $userId, string $text, string $mode = 'total', string $lang = 'zh-Hant'): array
     {
         $input = (float) str_replace([',', '，', '$', 'NT$', ' '], '', $text);
         if ($input <= 0) {
-            return ['❌ 請輸入有效金額（正整數，例如：1500000）：', null];
+            return [$this->t('capital_invalid', $lang), null];
         }
 
         // wallet.capital 是 running balance（剩餘現金），不是總資金
@@ -571,16 +607,20 @@ class TgWebhookController extends Controller
 
         if ($mode === 'remain') {
             $capital = $input;
-            $note    = "✅ 剩餘可用資金設定為 NT$" . number_format($capital, 0)
-                     . "\n   帳戶總資金 = NT$" . number_format($capital + $selfCostSum, 0);
+            $note    = $this->t('capital_set_remain', $lang, [
+                'capital' => number_format($capital, 0),
+                'total'   => number_format($capital + $selfCostSum, 0),
+            ]);
         } else {
             // 總資金模式：換算成剩餘現金存入（= total - 已佔用持股成本）
             $capital = $input - $selfCostSum;
-            $note    = "✅ 帳戶總資金 NT$" . number_format($input, 0)
-                     . "\n   持股占用 NT$" . number_format($selfCostSum, 0)
-                     . "\n   → 剩餘可用 NT$" . number_format($capital, 0);
+            $note    = $this->t('capital_set_total', $lang, [
+                'total'  => number_format($input, 0),
+                'cost'   => number_format($selfCostSum, 0),
+                'remain' => number_format($capital, 0),
+            ]);
             if ($capital < 0) {
-                $note .= " ⚠️（持股成本已超過總資金）";
+                $note .= $this->t('capital_warning', $lang);
             }
         }
 
@@ -592,7 +632,7 @@ class TgWebhookController extends Controller
         $this->clearState($bot->id, $chatId);
         $this->sendMessage($bot->token, $chatId, $note);
 
-        return $this->buildPortfolioReply($bot->id, $chatId);
+        return $this->buildPortfolioReply($bot->id, $chatId, $lang);
     }
 
     // ─── 計算 T+2 交割日（跳過周末，不處理國定假日）────────────
@@ -913,7 +953,7 @@ class TgWebhookController extends Controller
     }
 
     // ─── Banner 上傳處理 ────────────────────────────────────────────
-    private function handleBannerUpload(TgBot $bot, int $chatId, string $userId, array $photos): string
+    private function handleBannerUpload(TgBot $bot, int $chatId, string $userId, array $photos, string $lang = 'zh-Hant'): string
     {
         // Telegram 回傳多個尺寸，取最大的（最後一個）
         $photo  = end($photos);
@@ -927,7 +967,7 @@ class TgWebhookController extends Controller
 
             $fileData = $res->json();
             if (!($fileData['ok'] ?? false)) {
-                $this->sendMessage($bot->token, $chatId, '❌ 無法取得圖片，請重新發送。');
+                $this->sendMessage($bot->token, $chatId, $this->t('banner_get_fail', $lang));
                 return '❌ getFile 失敗';
             }
 
@@ -942,7 +982,7 @@ class TgWebhookController extends Controller
             $fileRes  = Http::timeout(30)->get($fileUrl);
 
             if (!$fileRes->ok()) {
-                $this->sendMessage($bot->token, $chatId, '❌ 圖片下載失敗，請重試。');
+                $this->sendMessage($bot->token, $chatId, $this->t('banner_download_fail', $lang));
                 return '❌ 圖片下載失敗';
             }
 
@@ -967,7 +1007,7 @@ class TgWebhookController extends Controller
             $this->clearState($bot->id, $chatId);
 
             // 發送新 banner 預覽
-            $this->sendPhoto($bot->token, $chatId, $savePath, '✅ Banner 更新成功！');
+            $this->sendPhoto($bot->token, $chatId, $savePath, $this->t('banner_success', $lang));
 
             return '✅ Banner 更新成功';
 
@@ -976,24 +1016,24 @@ class TgWebhookController extends Controller
                 'chat_id' => $chatId,
                 'error'   => $e->getMessage(),
             ]);
-            $this->sendMessage($bot->token, $chatId, '❌ Banner 更新失敗，請稍後重試。');
+            $this->sendMessage($bot->token, $chatId, $this->t('banner_update_fail', $lang));
             return '❌ Banner 更新失敗：' . $e->getMessage();
         }
     }
 
     // ─── 回覆組建：我的持股 ───────────────────────────────────────
-    private function buildPortfolioReply(int $botId, int $chatId): array
+    private function buildPortfolioReply(int $botId, int $chatId, string $lang = 'zh-Hant'): array
     {
         $holdings = TgHolding::where('bot_id', $botId)
             ->where('tg_chat_id', $chatId)
             ->get();
 
-        $addButton  = [['text' => '➕ 添加持股', 'callback_data' => 'holding_add']];
-        $capitalBtn = [['text' => '⚙️ 設定資金', 'callback_data' => 'set_capital']];
+        $addButton  = [['text' => $this->t('portfolio_btn_add',     $lang), 'callback_data' => 'holding_add']];
+        $capitalBtn = [['text' => $this->t('portfolio_btn_capital',  $lang), 'callback_data' => 'set_capital']];
 
         if ($holdings->isEmpty()) {
             return [
-                "💼 我的持股\n\n目前沒有持股記錄。",
+                $this->t('portfolio_empty', $lang),
                 ['inline_keyboard' => [$addButton, $capitalBtn]],
             ];
         }
@@ -1190,13 +1230,13 @@ class TgWebhookController extends Controller
                 $profitStr .= "\n   └ 剩餘可用：NT$" . number_format($capital, 0);
             }
         } else {
-            $profitStr .= "\n\n💰 帳戶資金：未設定（點擊⚙️設定資金）";
+            $profitStr .= "\n\n" . $this->t('portfolio_no_capital', $lang);
         }
 
-        $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr;
+        $text = $this->t('portfolio_title', $lang) . "\n\n" . implode("\n\n", $lines) . $profitStr;
 
         // Inline keyboard：添加 + 設定資金 + 交割款查詢 + 賣出（每排最多2個）
-        $settleQueryBtn = [['text' => '📅 交割款查詢', 'callback_data' => 'view_settlements']];
+        $settleQueryBtn = [['text' => $this->t('portfolio_btn_settle', $lang), 'callback_data' => 'view_settlements']];
         $inlineRows = [$addButton, $capitalBtn, $settleQueryBtn];
         foreach (array_chunk($delButtons, 2) as $row) {
             $inlineRows[] = $row;
@@ -1479,6 +1519,25 @@ class TgWebhookController extends Controller
         }
     }
 
+    // ─── 語系 Helper ─────────────────────────────────────────────
+    private function getUserLang(string $userId): string
+    {
+        $member = Member::where('account', 'tg_' . $userId)->first();
+        return $member->language ?? 'zh-Hant';
+    }
+
+    private function t(string $key, string $lang, array $replace = []): string
+    {
+        $value = trans('tg.' . $key, [], $lang);
+        if (is_array($value)) {
+            return $value[0] ?? $key;
+        }
+        foreach ($replace as $k => $v) {
+            $value = str_replace(':' . $k, $v, $value);
+        }
+        return $value;
+    }
+
     // ─── 狀態管理 ────────────────────────────────────────────────
     private function getState(int $botId, int $chatId): ?TgState
     {
@@ -1505,24 +1564,46 @@ class TgWebhookController extends Controller
     }
 
     // ─── 輔助 ────────────────────────────────────────────────────
-    private function isMainMenuText(string $text): bool
+    private function matchesMenuKey(string $text, string $key): bool
     {
-        return str_contains($text, '布蘭特原油')
-            || str_contains($text, '台指期貨')
-            || str_contains($text, 'VIX')
-            || str_contains($text, '恐慌指數')
-            || str_contains($text, '台股查詢')
-            || str_contains($text, '我的持股')
-            || str_contains($text, '⚙️ 設置');
+        foreach (['zh-Hant', 'zh-Hans', 'en'] as $locale) {
+            if (str_contains($text, $this->t($key, $locale))) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    private function getMainKeyboard(): array
+    private function isSettingsText(string $text): bool
+    {
+        foreach (['zh-Hant', 'zh-Hans', 'en'] as $locale) {
+            if (str_contains($text, $this->t('menu_settings', $locale))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function isMainMenuText(string $text): bool
+    {
+        foreach (['menu_oil', 'menu_wtx', 'menu_vix', 'menu_stock', 'menu_portfolio', 'menu_settings'] as $key) {
+            if ($this->matchesMenuKey($text, $key)) {
+                return true;
+            }
+        }
+        if (str_contains($text, 'VIX')) {
+            return true;
+        }
+        return false;
+    }
+
+    private function getMainKeyboard(string $lang = 'zh-Hant'): array
     {
         return [
             'keyboard' => [
-                [['text' => '🛢 布蘭特原油'], ['text' => '📈 台指期貨']],
-                [['text' => '😨 VIX恐慌指數'], ['text' => '📊 台股查詢']],
-                [['text' => '💼 我的持股'], ['text' => '⚙️ 設置']],
+                [['text' => $this->t('menu_oil', $lang)], ['text' => $this->t('menu_wtx', $lang)]],
+                [['text' => $this->t('menu_vix', $lang)], ['text' => $this->t('menu_stock', $lang)]],
+                [['text' => $this->t('menu_portfolio', $lang)], ['text' => $this->t('menu_settings', $lang)]],
             ],
             'resize_keyboard' => true,
             'persistent'      => true,

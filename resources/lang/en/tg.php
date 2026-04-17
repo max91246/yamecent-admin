@@ -1,0 +1,95 @@
+<?php
+
+return [
+    // ── Main menu buttons ─────────────────────────────────────────
+    'menu_oil'       => '🛢 Brent Crude',
+    'menu_wtx'       => '📈 TAIEX Futures',
+    'menu_vix'       => '😨 VIX Index',
+    'menu_stock'     => '📊 Stock Search',
+    'menu_portfolio' => '💼 My Portfolio',
+    'menu_settings'  => '⚙️ Settings',
+
+    // ── Settings menu ─────────────────────────────────────────────
+    'settings_title'  => '⚙️ Settings',
+    'settings_prompt' => 'Choose a setting:',
+    'settings_banner' => '🖼 My Banner',
+    'settings_lang'   => '🌐 Language',
+
+    // ── Language selection ────────────────────────────────────────
+    'lang_title'    => "🌐 Language Settings\n\nChoose your language:",
+    'lang_zh_hant'  => '繁體中文',
+    'lang_zh_hans'  => '简体中文',
+    'lang_en'       => 'English',
+    'lang_updated'  => '✅ Language updated to English',
+
+    // ── General ───────────────────────────────────────────────────
+    'cancel'         => 'cancel',
+    'cancel_aliases' => ['cancel', '取消', '❌ 取消', '/cancel'],
+    'cancelled'      => 'Cancelled. Choose an option:',
+    'main_menu'      => 'Choose an option:',
+    'cancel_hint'    => 'Type "cancel" to go back',
+    'cancel_hint_menu' => 'Type "cancel" to return to main menu',
+
+    // ── Stock search ──────────────────────────────────────────────
+    'stock_query_prompt'   => "📊 Stock Search\nEnter a stock code (e.g. 2317)\n\nType \"cancel\" to go back",
+    'stock_not_found'      => '❌ Stock ":code" not found. Please try again:',
+
+    // ── Portfolio: add holding ────────────────────────────────────
+    'holding_add'          => '➕ Add Holding',
+    'holding_add_prompt'   => "➕ Enter the stock code to add\n(e.g. 2317)\n\nType \"cancel\" to return to main menu",
+    'holding_found'        => "✅ Found: :name (:code)\n💰 Current price: :price\n\nEnter number of shares (e.g. 5000 for 5 lots, 500 for odd shares):",
+    'holding_invalid_shares' => '❌ Please enter a positive integer for shares (e.g. 5000):',
+    'holding_margin_prompt'  => 'Is this a margin purchase?',
+    'holding_margin_yes'     => '✅ Yes (Margin)',
+    'holding_margin_no'      => '❌ No (Cash)',
+    'holding_margin_wait'    => "Please tap a button above to choose margin or cash:\n\nType \"cancel\" to return to main menu",
+    'holding_price_prompt'   => "Enter the buy price per share (TWD):\ne.g. :name buying :shares at 53.5 → enter 53.5\n\nType \"cancel\" to go back",
+    'holding_invalid_price'  => '❌ Please enter a valid buy price per share (e.g. 53.5):',
+    'holding_added'          => "✅ Holding added:\n📌 :name (:code)\n📦 :shares · :type\n💵 Buy price: NT$:buy_price  Market value: NT$:market_val\n💰 Cost basis: NT$:cost",
+    'holding_margin_tag'     => 'Margin',
+    'holding_cash_tag'       => 'Cash',
+    'holding_margin_note'    => ' (40% self-funded)',
+
+    // ── Portfolio: sell ───────────────────────────────────────────
+    'sell_prompt'          => "💰 Sell :name (:code) :type\nHeld: :shares\n\nEnter shares to sell (max :max):\n\nType \"cancel\" to go back",
+    'sell_exceed'          => '❌ You only hold :shares. Please re-enter:',
+    'sell_price_prompt'    => "Enter the sell price per share (TWD):\ne.g. 55 per share → enter 55\n\nType \"cancel\" to go back",
+    'sell_invalid_price'   => '❌ Please enter a valid sell price (e.g. 55):',
+    'sell_invalid_shares'  => '❌ Please enter a valid number of shares (positive integer):',
+    'sell_done'            => "📤 Sold:\n📌 :name (:code) :shares\n💵 Avg buy: NT$:buy_price  Sold: NT$:sell_price\n💸 Fees: NT$:fee  Tax: NT$:tax\n:profit_tag: :sign NT$:profit",
+    'sell_profit'          => '✅ Profit',
+    'sell_loss'            => '❌ Loss',
+    'sell_btn'             => '💰 Sell :code',
+    'margin_tag'           => ' (Margin)',
+
+    // ── My Portfolio ──────────────────────────────────────────────
+    'portfolio_title'      => '💼 My Portfolio',
+    'portfolio_empty'      => "💼 My Portfolio\n\nNo holdings yet.",
+    'portfolio_btn_add'    => '➕ Add Holding',
+    'portfolio_btn_capital'=> '⚙️ Set Capital',
+    'portfolio_btn_settle' => '📅 Settlements',
+    'portfolio_no_capital' => '💰 Account balance: not set (tap ⚙️ Set Capital)',
+
+    // ── Set capital ───────────────────────────────────────────────
+    'capital_mode_prompt'  => "⚙️ Set Capital Mode\n\n📌 <b>Total Capital</b>: Enter your total account value (including holdings)\n📌 <b>Available Cash</b>: Enter your current cash balance, system will add holding costs\n",
+    'capital_btn_total'    => '💼 Total Capital',
+    'capital_btn_remain'   => '💵 Available Cash',
+    'capital_total_prompt' => "💼 Total Capital\nEnter your total capital (TWD integer, e.g. 2000000):\n\nType \"cancel\" to go back",
+    'capital_remain_prompt'=> "💵 Available Cash\nEnter your current cash balance (TWD integer, e.g. 500000):\nThe system will add holding costs to calculate total capital.\n\nType \"cancel\" to go back",
+    'capital_invalid'      => '❌ Please enter a valid amount (positive integer, e.g. 1500000):',
+    'capital_set_remain'   => "✅ Available cash set to NT$:capital\n   Total capital = NT$:total",
+    'capital_set_total'    => "✅ Total capital NT$:total\n   Holdings: NT$:cost\n   → Available cash: NT$:remain",
+    'capital_warning'      => ' ⚠️ (Holdings exceed total capital)',
+
+    // ── Settlements ───────────────────────────────────────────────
+    'settle_title'         => '📅 Settlement',
+    'settle_empty'         => "📅 Settlement\n\nNo pending settlements.",
+
+    // ── Banner ────────────────────────────────────────────────────
+    'banner_prompt'        => "🖼 Set My Banner\n\nSend an image to use as your banner.\nSupported formats: JPG, PNG, GIF\n\nThe image will appear above your portfolio.\n\nType \"cancel\" to go back",
+    'banner_wait'          => "🖼 Please send an image as your Banner.\nSupported: JPG, PNG, GIF\n\nType \"cancel\" to go back",
+    'banner_success'       => '✅ Banner updated!',
+    'banner_get_fail'      => '❌ Could not retrieve image. Please try again.',
+    'banner_download_fail' => '❌ Image download failed. Please try again.',
+    'banner_update_fail'   => '❌ Banner update failed. Please try again later.',
+];
