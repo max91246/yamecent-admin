@@ -991,12 +991,10 @@ class TgWebhookController extends Controller
         $addButton  = [['text' => '➕ 添加持股', 'callback_data' => 'holding_add']];
         $capitalBtn = [['text' => '⚙️ 設定資金', 'callback_data' => 'set_capital']];
 
-        $settingsBtn = [['text' => '⚙️ 設置', 'callback_data' => 'portfolio_settings']];
-
         if ($holdings->isEmpty()) {
             return [
                 "💼 我的持股\n\n目前沒有持股記錄。",
-                ['inline_keyboard' => [$addButton, $capitalBtn, $settingsBtn]],
+                ['inline_keyboard' => [$addButton, $capitalBtn]],
             ];
         }
 
@@ -1197,10 +1195,9 @@ class TgWebhookController extends Controller
 
         $text = "💼 我的持股\n\n" . implode("\n\n", $lines) . $profitStr;
 
-        // Inline keyboard：添加 + 設定資金 + 交割款查詢 + 設置 + 賣出（每排最多2個）
+        // Inline keyboard：添加 + 設定資金 + 交割款查詢 + 賣出（每排最多2個）
         $settleQueryBtn = [['text' => '📅 交割款查詢', 'callback_data' => 'view_settlements']];
-        $settingsBtn    = [['text' => '⚙️ 設置', 'callback_data' => 'portfolio_settings']];
-        $inlineRows = [$addButton, $capitalBtn, $settleQueryBtn, $settingsBtn];
+        $inlineRows = [$addButton, $capitalBtn, $settleQueryBtn];
         foreach (array_chunk($delButtons, 2) as $row) {
             $inlineRows[] = $row;
         }
