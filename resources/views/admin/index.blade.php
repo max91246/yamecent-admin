@@ -191,28 +191,36 @@
         <li class="nav-item dropdown">
           <a class="nav-link count-indicator dropdown-toggle" id="messageDropdown" href="#" data-toggle="dropdown" aria-expanded="false">
             <i class="mdi mdi-email-outline"></i>
-            <span class="count-symbol bg-warning"></span>
+            @if($unrepliedCount > 0)
+              <span class="count-symbol bg-warning"></span>
+            @endif
           </a>
           <div class="dropdown-menu dropdown-menu-right navbar-dropdown preview-list" aria-labelledby="messageDropdown">
-            <h6 class="p-3 mb-0">未读来信</h6>
-
-
+            <h6 class="p-3 mb-0">未回覆留言
+              @if($unrepliedCount > 0)
+                <span class="badge badge-warning ml-1">{{ $unrepliedCount }}</span>
+              @endif
+            </h6>
             <div class="dropdown-divider"></div>
-            <a class="dropdown-item preview-item">
+            @forelse($unrepliedComments as $comment)
+            <a class="dropdown-item preview-item" target="main" href="/admin/comment/list">
               <div class="preview-thumbnail">
-                <img src="/assets/images/faces/face4.jpg" alt="image" class="profile-pic">
+                <img src="{{ $comment->member->avatar ?? '/assets/images/faces/face4.jpg' }}" alt="image" class="profile-pic">
               </div>
               <div class="preview-item-content d-flex align-items-start flex-column justify-content-center">
-                <h6 class="preview-subject ellipsis mb-1 font-weight-normal">Mark send you a message</h6>
-                <p class="text-gray mb-0">
-                  1 Minutes ago
-                </p>
+                <h6 class="preview-subject ellipsis mb-1 font-weight-normal">{{ $comment->member->nickname ?? '未知用戶' }}</h6>
+                <p class="text-gray mb-0 ellipsis" style="max-width:180px;">{{ $comment->content }}</p>
+                <p class="text-gray mb-0">{{ $comment->created_at->diffForHumans() }}</p>
               </div>
             </a>
-
-
             <div class="dropdown-divider"></div>
-            <h6 class="p-3 mb-0 text-center">查看全部</h6>
+            @empty
+            <div class="dropdown-item text-center text-gray py-2">暫無未回覆留言</div>
+            <div class="dropdown-divider"></div>
+            @endforelse
+            <a class="dropdown-item" target="main" href="/admin/comment/list">
+              <h6 class="p-0 mb-0 text-center w-100">查看全部</h6>
+            </a>
           </div>
         </li>
 
@@ -220,30 +228,38 @@
         <li class="nav-item dropdown">
           <a class="nav-link count-indicator dropdown-toggle" id="notificationDropdown" href="#" data-toggle="dropdown">
             <i class="mdi mdi-bell-outline"></i>
-            <span class="count-symbol bg-danger"></span>
+            @if($pendingMemberCount > 0)
+              <span class="count-symbol bg-danger"></span>
+            @endif
           </a>
           <div class="dropdown-menu dropdown-menu-right navbar-dropdown preview-list" aria-labelledby="notificationDropdown">
-            <h6 class="p-3 mb-0">系统消息</h6>
-
-
+            <h6 class="p-3 mb-0">系統消息
+              @if($pendingMemberCount > 0)
+                <span class="badge badge-danger ml-1">{{ $pendingMemberCount }}</span>
+              @endif
+            </h6>
             <div class="dropdown-divider"></div>
-            <a class="dropdown-item preview-item">
+            @forelse($pendingMembers as $member)
+            <a class="dropdown-item preview-item" target="main" href="/admin/member/list">
               <div class="preview-thumbnail">
-                <div class="preview-icon bg-success">
-                  <i class="mdi mdi-calendar"></i>
+                <div class="preview-icon bg-warning">
+                  <i class="mdi mdi-account-plus"></i>
                 </div>
               </div>
               <div class="preview-item-content d-flex align-items-start flex-column justify-content-center">
-                <h6 class="preview-subject font-weight-normal mb-1">Event today</h6>
-                <p class="text-gray ellipsis mb-0">
-                  Just a reminder that you have an event today
-                </p>
+                <h6 class="preview-subject font-weight-normal mb-1">會員申請待審</h6>
+                <p class="text-gray ellipsis mb-0">{{ $member->nickname }}（{{ $member->account }}）</p>
+                <p class="text-gray mb-0">{{ $member->member_applied_at->diffForHumans() }}</p>
               </div>
             </a>
-
-
             <div class="dropdown-divider"></div>
-            <h6 class="p-3 mb-0 text-center">查看全部</h6>
+            @empty
+            <div class="dropdown-item text-center text-gray py-2">暫無待處理事項</div>
+            <div class="dropdown-divider"></div>
+            @endforelse
+            <a class="dropdown-item" target="main" href="/admin/member/list">
+              <h6 class="p-0 mb-0 text-center w-100">查看全部</h6>
+            </a>
           </div>
         </li>
 

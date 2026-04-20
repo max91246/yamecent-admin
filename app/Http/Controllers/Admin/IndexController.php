@@ -18,7 +18,32 @@ class IndexController extends Controller
     {
         $admin    = session('admin');
         $menuList = $admin->getMenus();
-        return view('admin.index', ['menu' => $menuList]);
+
+        // 📧 未讀信息：未回覆留言
+        $unrepliedComments = ArticleComment::with('member:id,nickname,avatar')
+            ->whereNull('admin_reply')
+            ->latest()
+            ->limit(5)
+            ->get();
+        $unrepliedCount = ArticleComment::whereNull('admin_reply')->count();
+
+        // 🔔 系統消息：會員申請待審
+        $pendingMembers = Member::whereNotNull('member_applied_at')
+            ->where('is_member', 0)
+            ->latest('member_applied_at')
+            ->limit(5)
+            ->get();
+        $pendingMemberCount = Member::whereNotNull('member_applied_at')
+            ->where('is_member', 0)
+            ->count();
+
+        return view('admin.index', [
+            'menu'               => $menuList,
+            'unrepliedComments'  => $unrepliedComments,
+            'unrepliedCount'     => $unrepliedCount,
+            'pendingMembers'     => $pendingMembers,
+            'pendingMemberCount' => $pendingMemberCount,
+        ]);
     }
     public function console()
     {
