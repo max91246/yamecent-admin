@@ -252,17 +252,22 @@ class TgWebhookController extends Controller
             return [$replyText, $replyMarkup];
         }
         if ($this->matchesMenuKey($text, 'menu_portfolio')) {
-            $member     = Member::where('account', 'tg_' . $userId)->first();
-            $bannerPath = ($member && $member->banner)
-                ? public_path($member->banner)
-                : public_path('assets/images/login-bg.jpg');
+            $member  = Member::where('account', 'tg_' . $userId)->first();
+            $banner  = $member->banner ?? null;
             [$portfolioText, $portfolioMarkup] = $this->buildPortfolioReply($bot->id, $chatId, $lang);
-            if (file_exists($bannerPath)) {
-                // caption 上限 1024 字元；超過時截斷並補 ...
-                $caption = mb_strlen($portfolioText) <= 1024
-                    ? $portfolioText
-                    : mb_substr($portfolioText, 0, 1021) . '...';
-                $this->sendPhoto($bot->token, $chatId, $bannerPath, $caption, $portfolioMarkup);
+            // caption 上限 1024 字元；超過時截斷並補 ...
+            $caption = mb_strlen($portfolioText) <= 1024
+                ? $portfolioText
+                : mb_substr($portfolioText, 0, 1021) . '...';
+            $sent = $this->sendBannerByValue($bot->token, $chatId, $banner, $caption, $portfolioMarkup);
+            if (!$sent) {
+                // banner 無法顯示（換 bot 或無設定），改用預設圖
+                $defaultPath = public_path('assets/images/login-bg.jpg');
+                if (file_exists($defaultPath)) {
+                    $this->sendPhoto($bot->token, $chatId, $defaultPath, $caption, $portfolioMarkup);
+                    return [null, null];
+                }
+            } else {
                 return [null, null];
             }
             return [$portfolioText, $portfolioMarkup];
@@ -946,71 +951,92 @@ class TgWebhookController extends Controller
     private function sendBannerPhoto(TgBot $bot, int $chatId, string $userId, ?array $replyMarkup = null): void
     {
         $member = Member::where('account', 'tg_' . $userId)->first();
-        $bannerPath = $member && $member->banner
-            ? public_path($member->banner)
-            : public_path('assets/images/login-bg.jpg');
+        $banner = $member->banner ?? null;
 
-        if (file_exists($bannerPath)) {
-            $this->sendPhoto($bot->token, $chatId, $bannerPath, '', $replyMarkup);
+        $sent = $this->sendBannerByValue($bot->token, $chatId, $banner, '', $replyMarkup);
+
+        if (!$sent) {
+            $defaultPath = public_path('assets/images/login-bg.jpg');
+            if (file_exists($defaultPath)) {
+                $this->sendPhoto($bot->token, $chatId, $defaultPath, '', $replyMarkup);
+            }
+        }
+    }
+
+    // ─── 統一 Banner 發送：file_id / 舊路徑，失敗回傳 false ──────────
+    // $bannerValue 可能是 TG file_id（新）或 /uploads/... 路徑（舊）
+    private function sendBannerByValue(string $token, $chatId, ?string $bannerValue, string $caption = '', ?array $replyMarkup = null): bool
+    {
+        if (!$bannerValue) {
+            return false;
+        }
+
+        // 舊格式：本地路徑
+        if (str_starts_with($bannerValue, '/')) {
+            $path = public_path($bannerValue);
+            if (file_exists($path)) {
+                $this->sendPhoto($token, $chatId, $path, $caption, $replyMarkup);
+                return true;
+            }
+            return false;
+        }
+
+        // 新格式：TG file_id
+        return $this->sendPhotoById($token, $chatId, $bannerValue, $caption, $replyMarkup);
+    }
+
+    // ─── 用 file_id 發送圖片，失敗回傳 false ─────────────────────────
+    private function sendPhotoById(string $token, $chatId, string $fileId, string $caption = '', ?array $replyMarkup = null): bool
+    {
+        try {
+            $params = [
+                'chat_id'    => $chatId,
+                'photo'      => $fileId,
+                'parse_mode' => 'HTML',
+            ];
+            if ($caption) {
+                $params['caption'] = $caption;
+            }
+            if ($replyMarkup) {
+                $params['reply_markup'] = json_encode($replyMarkup);
+            }
+
+            $res  = Http::timeout(30)->post("https://api.telegram.org/bot{$token}/sendPhoto", $params);
+            $body = $res->json();
+
+            Log::channel('tg_webhook')->info('[TG Webhook] sendPhotoById 回應', [
+                'chat_id' => $chatId,
+                'ok'      => $body['ok'] ?? false,
+            ]);
+
+            return $body['ok'] ?? false;
+        } catch (\Exception $e) {
+            Log::channel('tg_webhook')->warning('[TG Webhook] sendPhotoById 失敗，將 fallback 預設圖', [
+                'chat_id' => $chatId,
+                'error'   => $e->getMessage(),
+            ]);
+            return false;
         }
     }
 
     // ─── Banner 上傳處理 ────────────────────────────────────────────
     private function handleBannerUpload(TgBot $bot, int $chatId, string $userId, array $photos, string $lang = 'zh-Hant'): string
     {
-        // Telegram 回傳多個尺寸，取最大的（最後一個）
-        $photo  = end($photos);
+        // Telegram 回傳多個尺寸，取 file_size 最大的；若無 file_size 則取最後一個
+        $photo  = collect($photos)->sortByDesc('file_size')->first() ?? end($photos);
         $fileId = $photo['file_id'];
 
         try {
-            // 1. 取得檔案路徑
-            $res = Http::timeout(10)->get("https://api.telegram.org/bot{$bot->token}/getFile", [
-                'file_id' => $fileId,
-            ]);
-
-            $fileData = $res->json();
-            if (!($fileData['ok'] ?? false)) {
-                $this->sendMessage($bot->token, $chatId, $this->t('banner_get_fail', $lang));
-                return '❌ getFile 失敗';
-            }
-
-            $filePath = $fileData['result']['file_path'];
-            $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif'])) {
-                $ext = 'jpg';
-            }
-
-            // 2. 下載圖片
-            $fileUrl  = "https://api.telegram.org/file/bot{$bot->token}/{$filePath}";
-            $fileRes  = Http::timeout(30)->get($fileUrl);
-
-            if (!$fileRes->ok()) {
-                $this->sendMessage($bot->token, $chatId, $this->t('banner_download_fail', $lang));
-                return '❌ 圖片下載失敗';
-            }
-
-            // 3. 存檔到 public/uploads/banner/{YYYYMMDD}/
-            $dateDir  = date('Ymd');
-            $saveDir  = public_path("uploads/banner/{$dateDir}");
-            if (!is_dir($saveDir)) {
-                mkdir($saveDir, 0755, true);
-            }
-            $filename = uniqid() . '.' . $ext;
-            $savePath = "{$saveDir}/{$filename}";
-            file_put_contents($savePath, $fileRes->body());
-
-            // 4. 更新 Member banner 欄位（不存在則建立）
-            $bannerRelPath = "/uploads/banner/{$dateDir}/{$filename}";
+            // 直接存 file_id，不下載到本地
             Member::updateOrCreate(
                 ['account' => 'tg_' . $userId],
-                ['banner'  => $bannerRelPath]
+                ['banner'  => $fileId]
             );
 
-            // 5. 清除狀態，回覆成功
             $this->clearState($bot->id, $chatId);
 
-            // 發送新 banner 預覽
-            $this->sendPhoto($bot->token, $chatId, $savePath, $this->t('banner_success', $lang));
+            // 用 file_id 回傳預覽
+            $this->sendPhotoById($bot->token, $chatId, $fileId, $this->t('banner_success', $lang));
 
             return '✅ Banner 更新成功';
 
