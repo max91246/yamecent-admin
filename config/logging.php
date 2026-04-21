@@ -83,6 +83,41 @@ return [
             'level'  => 'debug',
             'days'   => 14,
         ],
+
+        'oil_price' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/oil-price.log'),
+            'level'  => 'debug',
+            'days'   => 14,
+        ],
+
+        'tw_index' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/tw-index.log'),
+            'level'  => 'debug',
+            'days'   => 14,
+        ],
+
+        'notify_holdings' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/notify-holdings.log'),
+            'level'  => 'debug',
+            'days'   => 14,
+        ],
+
+        'settle_payments' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/settle-payments.log'),
+            'level'  => 'debug',
+            'days'   => 14,
+        ],
+
+        'scrape_wantgoo' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/scrape-wantgoo.log'),
+            'level'  => 'debug',
+            'days'   => 14,
+        ],
     ],
 
 ];

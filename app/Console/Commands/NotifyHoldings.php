@@ -7,6 +7,7 @@ use App\TgHolding;
 use GuzzleHttp\Client;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class NotifyHoldings extends Command
 {
@@ -27,10 +28,12 @@ class NotifyHoldings extends Command
 
         if ($users->isEmpty()) {
             $this->line('  [持股通知] 無持股記錄，略過');
+            Log::channel('notify_holdings')->info('無持股記錄，略過');
             return 0;
         }
 
         $this->line("  [持股通知] 共 {$users->count()} 組用戶，閾值 ±{$threshold}%");
+        Log::channel('notify_holdings')->info('開始持股通知', ['users' => $users->count(), 'threshold' => $threshold]);
 
         foreach ($users as $user) {
             $bot = TgBot::find($user->bot_id);
@@ -99,6 +102,10 @@ class NotifyHoldings extends Command
                  . implode("\n\n", $alerts);
 
             $this->warn("  [持股通知] chat_id={$user->tg_chat_id} 觸發 " . count($alerts) . " 筆");
+            Log::channel('notify_holdings')->warning('持股告警推送', [
+                'chat_id' => $user->tg_chat_id,
+                'count'   => count($alerts),
+            ]);
 
             if ($this->option('dry-run')) {
                 $this->line($msg);
@@ -108,6 +115,7 @@ class NotifyHoldings extends Command
         }
 
         $this->info('  [持股通知] 完成');
+        Log::channel('notify_holdings')->info('持股通知完成');
         return 0;
     }
 

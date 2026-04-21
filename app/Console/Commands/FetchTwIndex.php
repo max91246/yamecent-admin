@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use GuzzleHttp\Client;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class FetchTwIndex extends Command
 {
@@ -33,11 +34,13 @@ class FetchTwIndex extends Command
 
         if ($twPrice === null) {
             $this->line('  [台指] 取得失敗或休市，略過');
+            Log::channel('tw_index')->warning('台指取得失敗或休市');
             return 0;
         }
 
         $this->saveTwIndexPrice($twPrice, $twRefreshedAt);
         $this->line(sprintf('  [台指] 現價 %.0f（%s）', $twPrice, $twRefreshedAt ?? 'N/A'));
+        Log::channel('tw_index')->info('台指現價已存入', ['price' => $twPrice, 'refreshed_at' => $twRefreshedAt]);
 
         // ── 2. 抓取 VIX ─────────────────────────────────────────
         [$vixPrice, $vixTime] = $this->fetchVix();
@@ -65,6 +68,11 @@ class FetchTwIndex extends Command
         $alertPoints = (int) getConfig('wtx_alert_points', 50);
 
         $this->warn(sprintf('  [台指告警] %s %s %s點', $alert['arrow'], $alert['direction'], $alert['pointsFmt']));
+        Log::channel('tw_index')->warning('台指1分震盪告警觸發', [
+            'direction' => $alert['direction'],
+            'points'    => $alert['pointsFmt'],
+            'price'     => $twPrice,
+        ]);
 
         $msg = "🚨 <b>台指期貨 1分震盪</b>\n"
              . "💹 當前：<b>" . number_format($twPrice, 0) . "</b>（{$alert['currTime']}）\n"

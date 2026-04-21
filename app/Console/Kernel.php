@@ -27,34 +27,29 @@ class Kernel extends ConsoleKernel
         // 每小時爬取玩股網精選文章第 1 頁
         $schedule->command('scrape:wantgoo --page=1')
                  ->everySixHours()
-                 ->withoutOverlapping()
-                 ->appendOutputTo(storage_path('logs/scrape-wantgoo.log'));
+                 ->withoutOverlapping();
 
         // 每 5 分鐘獲取布蘭特原油最新價格並推送 Telegram（台指告警已移至 fetch:tw-index）
         $schedule->command('fetch:oil-price')
                  ->everyFiveMinutes()
                  ->withoutOverlapping()
-                 ->runInBackground()
-                 ->appendOutputTo(storage_path('logs/oil-price.log'));
+                 ->runInBackground();
 
         // 每分鐘抓取台指期 / VIX，5分鐘震盪 ≥ 50 點時告警
         $schedule->command('fetch:tw-index')
                  ->everyMinute()
                  ->withoutOverlapping()
-                 ->runInBackground()
-                 ->appendOutputTo(storage_path('logs/tw-index.log'));
+                 ->runInBackground();
 
         // 每日 00:00 結算當日到期的 T+2 交割款
         $schedule->command('settle:payments')
-                 ->dailyAt('00:00')
-                 ->appendOutputTo(storage_path('logs/settle-payments.log'));
+                 ->dailyAt('00:00');
 
         // 每日 14:00（台股收盤後）審視持股，漲跌超過閾值時推送通知
         $schedule->command('notify:holdings')
                  ->timezone('Asia/Taipei')
                  ->dailyAt('14:00')
-                 ->withoutOverlapping()
-                 ->appendOutputTo(storage_path('logs/notify-holdings.log'));
+                 ->withoutOverlapping();
     }
 
     /**

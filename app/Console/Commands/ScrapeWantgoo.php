@@ -6,6 +6,7 @@ use App\Article;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class ScrapeWantgoo extends Command
 {
@@ -36,11 +37,13 @@ class ScrapeWantgoo extends Command
         $page    = (int) $this->option('page');
         $listUrl = sprintf(self::LIST_TPL, $page);
         $this->info("正在透過 FlareSolverr 爬取第 {$page} 頁列表...");
+        Log::channel('scrape_wantgoo')->info("開始爬取玩股網", ['page' => $page]);
 
         $articles = $this->flare($client, $listUrl);
 
         if ($articles === null || !is_array($articles) || empty($articles)) {
             $this->error('列表取得失敗或為空，請確認 FlareSolverr 容器正在執行。');
+            Log::channel('scrape_wantgoo')->error('列表取得失敗或為空', ['page' => $page]);
             return 1;
         }
 
@@ -122,6 +125,7 @@ class ScrapeWantgoo extends Command
 
         $this->line(str_repeat('─', 62));
         $this->info("爬取完成。已新增 {$saved} 篇，略過 {$skipped} 篇。");
+        Log::channel('scrape_wantgoo')->info('爬取完成', ['page' => $page, 'saved' => $saved, 'skipped' => $skipped]);
 
         return 0;
     }

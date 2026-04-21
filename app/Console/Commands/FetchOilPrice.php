@@ -6,6 +6,7 @@ use App\OilPrice;
 use App\Services\OilNewsService;
 use GuzzleHttp\Client;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class FetchOilPrice extends Command
 {
@@ -26,12 +27,14 @@ class FetchOilPrice extends Command
 
     public function handle()
     {
+        Log::channel('oil_price')->info('開始獲取布蘭特原油（' . self::TICKER . '）5分K');
         $this->info('正在獲取布蘭特原油（' . self::TICKER . '）最新價格...');
 
         [$price, $lastCandle, $allCandles] = $this->fetchPrice();
 
         if ($price === null) {
             $this->line('[ERROR] 無法解析價格，請加 --debug 查看原始回應。');
+            Log::channel('oil_price')->error('無法解析價格');
             return 1;
         }
 
@@ -51,6 +54,7 @@ class FetchOilPrice extends Command
         // ── 1. 存入 DB（補寫今天所有 K 棒，避免因時序漏掉）────────
         $newCount = $this->saveAllCandles($allCandles);
         $this->line("  [DB] 本次新寫入 {$newCount} 根 K 棒");
+        Log::channel('oil_price')->info('K棒寫入完成', ['new_candles' => $newCount, 'price' => $price, 'candle_at' => $candleAt]);
 
         // ── 無新資料 = 休市或資料未更新，略過後續所有處理 ──────
         if ($newCount === 0) {
@@ -98,6 +102,11 @@ class FetchOilPrice extends Command
             $msg = "🚨 <b>市場告警</b>\n";
 
             $this->warn('  [原油5分告警] 觸發！' . $alert5m['arrow'] . $alert5m['direction'] . ' 振幅 ' . $alert5m['pctFmt']);
+            Log::channel('oil_price')->warning('原油5分震盪告警觸發', [
+                'direction' => $alert5m['direction'],
+                'amplitude' => $alert5m['pctFmt'],
+                'price'     => $price,
+            ]);
             $msg .= "\n━━ 🛢 布蘭特原油 5分震盪 ━━\n"
                   . "💰 當前：<b>{$price}</b>（{$candleAt}）\n"
                   . "{$alert5m['arrow']} <b>方向：{$alert5m['direction']}</b>　收盤 {$alert5m['prevClose']} → <b>{$alert5m['currClose']}</b>（<b>{$alert5m['closePctFmt']}</b> / {$alert5m['closeDiffFmt']}）\n"
