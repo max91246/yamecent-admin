@@ -143,6 +143,31 @@
     .page-title-icon {
       background: linear-gradient(135deg, #1a3a6e, #2563a8) !important;
     }
+
+    /* Pagination */
+    .pagination {
+      margin-bottom: 0;
+    }
+    .page-item .page-link {
+      background-color: #111628 !important;
+      border-color: rgba(100, 160, 255, 0.2) !important;
+      color: #63b3ed !important;
+    }
+    .page-item .page-link:hover {
+      background-color: rgba(100, 160, 255, 0.12) !important;
+      border-color: rgba(100, 160, 255, 0.4) !important;
+      color: #90cdf4 !important;
+    }
+    .page-item.active .page-link {
+      background-color: #2563a8 !important;
+      border-color: #2563a8 !important;
+      color: #fff !important;
+    }
+    .page-item.disabled .page-link {
+      background-color: #0d1224 !important;
+      border-color: rgba(100, 160, 255, 0.1) !important;
+      color: #4a5568 !important;
+    }
   </style>
 </head>
 <body>
