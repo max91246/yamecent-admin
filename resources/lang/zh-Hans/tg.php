@@ -49,6 +49,7 @@ return [
     'holding_margin_tag'     => '融资',
     'holding_cash_tag'       => '现股',
     'holding_margin_note'    => '（自备 40%）',
+    'holding_disposal_note'  => "\n⚠️ 此股为处置股，买进款项已立即从账户扣除（不适用 T+2）",
 
     // ── 持股：卖出流程 ────────────────────────────────────────────
     'sell_prompt'          => "💰 卖出 :name（:code）:type\n持有：:shares\n\n请输入卖出股数（最多 :max 股）：\n\n输入「取消」可返回",

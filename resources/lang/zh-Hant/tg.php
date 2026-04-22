@@ -49,6 +49,7 @@ return [
     'holding_margin_tag'     => '融資',
     'holding_cash_tag'       => '現股',
     'holding_margin_note'    => '（自備 40%）',
+    'holding_disposal_note'  => "\n⚠️ 此股為處置股，買進款項已立即從帳戶扣除（不適用 T+2）",
 
     // ── 持股：賣出流程 ────────────────────────────────────────────
     'sell_prompt'          => "💰 賣出 :name（:code）:type\n持有：:shares\n\n請輸入賣出股數（最多 :max 股）：\n\n輸入「取消」可返回",

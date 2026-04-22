@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\DisposalStock;
 use App\Member;
 use App\OilPrice;
 use App\TgBot;
@@ -410,24 +411,47 @@ class TgWebhookController extends Controller
             'buy_price'  => $buyPrice,
         ]);
 
-        // 建立 T+2 交割記錄（不立即扣款，由每日 settle:payments cron 處理）
-        // 現股：交割全額市值 + 手續費
-        // 融資：交割自備款（40%）+ 手續費
+        // 判斷是否為處置股：處置股買進立即扣款，一般股票 T+2
+        $isDisposal = DisposalStock::isDisposed($data['code']);
         $buyFee     = (int) ceil($marketVal * 0.001425);
         $settleAmt  = $cost + $buyFee;  // $cost 已是現股=全額 / 融資=40%
-        $settleDate = $this->calcSettleDate(Carbon::now('Asia/Taipei'));
-        TgSettlement::create([
-            'bot_id'            => $bot->id,
-            'tg_chat_id'        => $chatId,
-            'tg_user_id'        => $userId,
-            'stock_code'        => $data['code'],
-            'stock_name'        => $data['name'],
-            'shares'            => $shares,
-            'buy_price'         => $buyPrice,
-            'settlement_amount' => $settleAmt,
-            'settle_date'       => $settleDate->toDateString(),
-            'is_settled'        => 0,
-        ]);
+
+        if ($isDisposal) {
+            // 處置股：立即扣款並標記已完成
+            $today = Carbon::now('Asia/Taipei')->toDateString();
+            TgSettlement::create([
+                'bot_id'            => $bot->id,
+                'tg_chat_id'        => $chatId,
+                'tg_user_id'        => $userId,
+                'stock_code'        => $data['code'],
+                'stock_name'        => $data['name'],
+                'shares'            => $shares,
+                'buy_price'         => $buyPrice,
+                'settlement_amount' => $settleAmt,
+                'settle_date'       => $today,
+                'is_settled'        => 1,
+            ]);
+            // 直接從 wallet 扣除
+            $wallet = TgWallet::where('bot_id', $bot->id)->where('tg_chat_id', $chatId)->first();
+            if ($wallet) {
+                $wallet->decrement('capital', $settleAmt);
+            }
+        } else {
+            // 一般股票：T+2 交割，由 settle:payments cron 每日處理
+            $settleDate = $this->calcSettleDate(Carbon::now('Asia/Taipei'));
+            TgSettlement::create([
+                'bot_id'            => $bot->id,
+                'tg_chat_id'        => $chatId,
+                'tg_user_id'        => $userId,
+                'stock_code'        => $data['code'],
+                'stock_name'        => $data['name'],
+                'shares'            => $shares,
+                'buy_price'         => $buyPrice,
+                'settlement_amount' => $settleAmt,
+                'settle_date'       => $settleDate->toDateString(),
+                'is_settled'        => 0,
+            ]);
+        }
 
         $this->clearState($bot->id, $chatId);
 
@@ -440,7 +464,8 @@ class TgWebhookController extends Controller
             'buy_price'  => $buyPrice,
             'market_val' => number_format($marketVal, 0),
             'cost'       => number_format($cost, 0),
-        ]) . ($isMargin ? $this->t('holding_margin_note', $lang) : '');
+        ]) . ($isMargin ? $this->t('holding_margin_note', $lang) : '')
+           . ($isDisposal ? $this->t('holding_disposal_note', $lang) : '');
 
         // 先送確認訊息，再回傳持股列表
         $this->sendMessage($bot->token, $chatId, $confirm);
@@ -1414,7 +1439,16 @@ class TgWebhookController extends Controller
                 ],
             ]);
 
-            $data  = json_decode((string) $res->getBody(), true);
+            $rawBody = (string) $res->getBody();
+            $data    = json_decode($rawBody, true);
+
+            // 暫時 debug：印出完整 raw response（查處置股欄位用）
+            Log::channel('tg_webhook')->debug('[fetchStockQuote] raw response', [
+                'code' => $code,
+                'url'  => $url,
+                'raw'  => $rawBody,
+            ]);
+
             $chart = $data['data'][0]['chart'] ?? null;
 
             if (!$chart) {

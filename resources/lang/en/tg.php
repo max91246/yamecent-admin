@@ -49,6 +49,7 @@ return [
     'holding_margin_tag'     => 'Margin',
     'holding_cash_tag'       => 'Cash',
     'holding_margin_note'    => ' (40% self-funded)',
+    'holding_disposal_note'  => "\n⚠️ Disposal stock: payment deducted immediately (T+2 does not apply)",
 
     // ── Portfolio: sell ───────────────────────────────────────────
     'sell_prompt'          => "💰 Sell :name (:code) :type\nHeld: :shares\n\nEnter shares to sell (max :max):\n\nType \"cancel\" to go back",
