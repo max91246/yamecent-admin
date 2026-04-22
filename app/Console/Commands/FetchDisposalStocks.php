@@ -114,7 +114,7 @@ class FetchDisposalStocks extends Command
                 'end_date'   => $d->end_date->toDateString(),
                 'reason'     => $d->reason,
                 'market'     => $d->market,
-            ]), $ttl);
+            ], JSON_UNESCAPED_UNICODE), $ttl);
         }
 
         Cache::put('disposal:cache_ready', 1, $ttl);

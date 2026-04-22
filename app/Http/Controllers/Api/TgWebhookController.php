@@ -709,7 +709,7 @@ class TgWebhookController extends Controller
                 'reason'     => $disposal->reason,
                 'market'     => $disposal->market,
             ];
-            Cache::put($key, json_encode($data), $ttl);
+            Cache::put($key, json_encode($data, JSON_UNESCAPED_UNICODE), $ttl);
             return $data;
         }
 
