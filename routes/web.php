@@ -108,6 +108,9 @@ Route::group([
         $route->get('tg-holding/list',           'Admin\TgHoldingController@holdingList');
         $route->get('tg-holding/user/{chatId}',  'Admin\TgHoldingController@userDetail');
         $route->get('tg-holding/trade-list',     'Admin\TgHoldingController@tradeList');
+
+        // 處置股查詢
+        $route->get('disposal-stock/list', 'Admin\DisposalStockController@index');
     });
 
 });

@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
             RevenueUrlConfigSeeder::class,
             MarginRateConfigSeeder::class,
             AlertThresholdConfigSeeder::class,
+            DisposalUrlConfigSeeder::class,
         ]);
     }
 }

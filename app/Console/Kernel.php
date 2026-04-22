@@ -50,6 +50,12 @@ class Kernel extends ConsoleKernel
                  ->timezone('Asia/Taipei')
                  ->dailyAt('14:00')
                  ->withoutOverlapping();
+
+        // 每日 08:00 抓取 TPEX + TWSE 最新處置股名單
+        $schedule->command('fetch:disposal-stocks')
+                 ->timezone('Asia/Taipei')
+                 ->dailyAt('08:00')
+                 ->withoutOverlapping();
     }
 
     /**
