@@ -23,6 +23,14 @@ class FetchDisposalStocks extends Command
 
         Log::channel('tg_webhook')->info('[處置股] 開始抓取處置股資訊');
 
+        // ── 0. 清除已到期的舊處置記錄 ───────────────────────────
+        $today   = Carbon::now('Asia/Taipei')->toDateString();
+        $deleted = DisposalStock::where('end_date', '<', $today)->delete();
+        if ($deleted > 0) {
+            $this->info("已清除 {$deleted} 筆過期處置記錄。");
+            Log::channel('tg_webhook')->info('[處置股] 清除過期記錄', ['deleted' => $deleted]);
+        }
+
         // ── 1. TPEX 上櫃 ────────────────────────────────────────
         $tpexUrl = rtrim(getConfig('tpex_disposal_url'), '/');
         $this->info('抓取 TPEX 上櫃處置股...');
