@@ -1,6 +1,6 @@
 # Yamecent Admin
 
-一套基於 Laravel 7 的後台管理系統，整合 REST API、Telegram 機器人互動、股票持倉追蹤與市場告警功能。
+一套基於 Laravel 8 的後台管理系統，整合 REST API、Telegram 機器人互動、股票持倉追蹤與市場告警功能。
 
 > 本專案由 **max91246** 與 **Claude（Anthropic）** 協作完成。
 > 從需求討論、架構設計、程式碼實作到部署除錯，全程以 Vibe Coding 方式推進——
@@ -12,7 +12,7 @@
 
 | 項目 | 版本/說明 |
 |------|-----------|
-| 後端框架 | Laravel 7 |
+| 後端框架 | Laravel 8 |
 | 前端 SPA | Vue 3 |
 | 認證 | JWT（7 天有效） |
 | 部署環境 | Docker（Laradock）|
@@ -35,6 +35,7 @@
 | 權限管理 | `/admin/permission/*` |
 | 選單管理 | `/admin/menu/*` |
 | 系統設定 | `/admin/config/*` |
+| 系統日誌（Log Viewer） | `/log-viewer`（僅超級管理員） |
 
 ### 內容管理
 
@@ -61,6 +62,13 @@
 | 訊息記錄查詢 | `GET /admin/tg-message/list` |
 | 用戶持股查詢（以用戶為單位） | `GET /admin/tg-holding/list` |
 | 交易歷史查詢（含損益） | `GET /admin/tg-holding/trade-list` |
+
+### 控制台通知
+
+頂部導覽列即時顯示：
+
+- 📩 **未回覆留言數**：點開展示最新 5 筆，連結至留言管理
+- 🔔 **待審核會籍申請數**：點開展示最新 5 筆，連結至會員管理
 
 ---
 
@@ -275,17 +283,45 @@ POST /api/auth/login
 
 ---
 
+### TG Banner 圖片儲存
+
+Banner 圖片採用 **Telegram file_id** 儲存，不在本地磁碟留存副本：
+
+- 上傳時呼叫 `getFile` 取得 `file_id` 直接存入 DB
+- 推送時以 `sendPhoto` + `file_id` 發送，無需下載再上傳
+- 若 bot 更換導致 `file_id` 失效，自動 fallback 至預設圖片（`login-bg.jpg`）
+- 舊版路徑格式（`/uploads/...`）向下相容
+
+---
+
 ### 市場告警（排程自動推送）
 
 | 排程 | 指令 | 說明 |
 |------|------|------|
 | 每 5 分鐘 | `fetch:oil-price` | 布蘭特原油，振幅 ≥ 1% 推送告警 |
-| 每分鐘 | `fetch:tw-index` | 台指期（1分K），5分鐘漲跌 ≥ 50 點推送告警 |
+| 每分鐘 | `fetch:tw-index` | 台指期（1分K），1分鐘漲跌 ≥ 50 點推送告警 |
 | 每日 00:00 | `settle:payments` | 結算 T+2 到期交割款 |
 | 每日 14:00 | `notify:holdings` | 台股收盤後推送持股漲跌通知 |
 | 每 6 小時 | `scrape:wantgoo` | 爬取玩股網精選文章 |
 
 > 若無新 K 棒寫入（休市或資料未更新），自動跳過全部處理。
+
+---
+
+## Log 系統
+
+採用 `opcodesio/log-viewer` 套件，後台入口：`/log-viewer`（僅超級管理員可存取）。
+
+各排程指令均輸出至獨立 daily channel，保留 14 天：
+
+| Channel | 檔案 | 記錄內容 |
+| ------- | ---- | -------- |
+| `oil_price` | `logs/oil-price-YYYY-MM-DD.log` | K棒寫入數、告警觸發、錯誤 |
+| `tw_index` | `logs/tw-index-YYYY-MM-DD.log` | 台指現價、1分震盪告警、錯誤 |
+| `notify_holdings` | `logs/notify-holdings-YYYY-MM-DD.log` | 通知筆數、告警推送 |
+| `settle_payments` | `logs/settle-payments-YYYY-MM-DD.log` | 每筆結算金額、完成統計 |
+| `scrape_wantgoo` | `logs/scrape-wantgoo-YYYY-MM-DD.log` | 新增/略過篇數、錯誤 |
+| `tg_webhook` | `logs/tg-webhook-YYYY-MM-DD.log` | Webhook 收發事件 |
 
 ---
 
@@ -342,7 +378,7 @@ docker compose exec -it workspace bash
 
 # 4. 安裝依賴
 cd /var/www/yamecent-admin
-composer install --ignore-platform-reqs
+composer install --no-dev --optimize-autoloader
 
 # 5. 環境設定
 cp .env.example .env
@@ -358,13 +394,17 @@ php artisan config:cache
 ### 升級部署
 
 ```bash
+cd ~/laradock
+docker compose exec -it workspace bash
+
 cd /var/www/yamecent-admin
 git pull
-php artisan migrate
-php artisan config:cache
+composer install --no-dev --optimize-autoloader
+php artisan migrate --force
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
 ```
-
-> `db:seed` 所有 Seeder 均有冪等保護，重複執行安全。
 
 ### HTTPS 設定（Let's Encrypt）
 
@@ -390,6 +430,7 @@ CACHE_DRIVER=redis
 REDIS_HOST=redis
 REDIS_PASSWORD=your_redis_password
 REDIS_DB=1
+LOG_VIEWER_ENABLED=true
 ```
 
 ### 排程設定（Crontab）
@@ -415,12 +456,15 @@ app/
 │       └── ScrapeWantgoo.php          # 玩股網文章爬蟲
 ├── Http/Controllers/
 │   ├── Admin/                         # 後台控制器
+│   │   ├── IndexController.php        # 控制台（含通知資料）
 │   │   ├── TgBotController.php
 │   │   ├── TgMessageController.php
 │   │   └── TgHoldingController.php
 │   └── Api/
 │       ├── TgWebhookController.php    # TG Webhook 主控制器
 │       └── TgAuthController.php      # Telegram Mini App 登入
+├── Providers/
+│   └── AppServiceProvider.php        # Log Viewer 存取授權
 ├── TgBot.php
 ├── TgMessage.php
 ├── TgState.php
@@ -428,9 +472,12 @@ app/
 ├── TgHoldingTrade.php
 ├── TgWallet.php
 └── TgSettlement.php
+config/
+├── logging.php                        # 含 6 個自訂 Log channel
+└── log-viewer.php                     # Log Viewer 設定
 database/
 ├── migrations/
-└── seeds/
+└── seeders/
 routes/
 ├── web.php                            # 後台路由
 └── api.php                            # API 路由
@@ -447,3 +494,5 @@ routes/
 1. `CheckSession` 中間件 — 驗證 Session 是否存在登入資訊
 2. `Rbac` 中間件 — 從 Session 取得 AdminUser，比對當前路由是否在授權範圍內
 3. 通過後進入對應 Controller 方法，取得該用戶的選單集合傳至 View
+
+Log Viewer 另有獨立的 `LogViewer::auth()` 守衛，限制僅超級管理員（`hasSuperRole()`）可存取。
