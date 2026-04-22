@@ -171,7 +171,12 @@
                                         @forelse($holdings as $row)
                                         @php $lots = intdiv($row->shares, 1000); $odd = $row->shares % 1000; @endphp
                                         <tr>
-                                            <td>{{ $row->stock_name }}（{{ $row->stock_code }}）</td>
+                                            <td>
+                                                {{ $row->stock_name }}（{{ $row->stock_code }}）
+                                                @if(isset($disposalCodes[$row->stock_code]))
+                                                    <span class="badge badge-danger ml-1">⚠️ 處置股</span>
+                                                @endif
+                                            </td>
                                             <td>{{ number_format($row->shares) }}股
                                                 @if($lots > 0)（{{ $lots }}張@if($odd > 0) {{ $odd }}零股@endif）@endif
                                             </td>

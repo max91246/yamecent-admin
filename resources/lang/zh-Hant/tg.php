@@ -139,6 +139,9 @@ return [
     'stock_rev_last_yr_same' => '去年同期',
     'stock_rev_yoy_acc'      => '年增',
     'stock_news_title'       => '最新消息',
+    'stock_disposal_tag'     => '⚠️ 處置股',
+    'stock_disposal_period'  => '處置期間',
+    'stock_disposal_reason'  => '原因',
 
     // ── Banner ────────────────────────────────────────────────────
     'banner_prompt'        => "🖼 設置我的 Banner\n\n請直接發送一張圖片作為您的 Banner。\n支援格式：JPG、PNG、GIF\n\n圖片將顯示在「我的持股」資訊上方。\n\n輸入「取消」可返回",

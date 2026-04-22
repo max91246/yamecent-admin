@@ -139,6 +139,9 @@ return [
     'stock_rev_last_yr_same' => '去年同期',
     'stock_rev_yoy_acc'      => '年增',
     'stock_news_title'       => '最新消息',
+    'stock_disposal_tag'     => '⚠️ 处置股',
+    'stock_disposal_period'  => '处置期间',
+    'stock_disposal_reason'  => '原因',
 
     // ── Banner ────────────────────────────────────────────────────
     'banner_prompt'        => "🖼 设置我的 Banner\n\n请直接发送一张图片作为您的 Banner。\n支持格式：JPG、PNG、GIF\n\n图片将显示在「我的持股」信息上方。\n\n输入「取消」可返回",

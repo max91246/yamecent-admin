@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class FetchDisposalStocks extends Command
@@ -73,7 +74,45 @@ class FetchDisposalStocks extends Command
         $this->info("完成。新增 {$saved} 筆，略過 {$skip} 筆（已存在）。");
         Log::channel('tg_webhook')->info('[處置股] 抓取完成', ['saved' => $saved, 'skip' => $skip]);
 
+        // ── 寫入 Redis Cache ─────────────────────────────────────
+        $this->populateRedisCache();
+
         return 0;
+    }
+
+    /**
+     * 把今日有效的處置股全部寫入 Redis。
+     * key: disposal:{stock_code}  value: JSON 資料
+     * key: disposal:cache_ready   value: 1（旗標）
+     * TTL: 到今天 07:59（因為 08:00 會重新抓取）
+     */
+    private function populateRedisCache(): void
+    {
+        $now    = Carbon::now('Asia/Taipei');
+        $expire = $now->copy()->startOfDay()->setTime(7, 59, 0);
+        if ($expire->lte($now)) {
+            $expire->addDay();
+        }
+        $ttl = max(60, (int) $now->diffInSeconds($expire));
+
+        $actives = DisposalStock::where('end_date', '>=', $now->toDateString())->get();
+
+        // 先清掉舊有的旗標，再重寫
+        Cache::forget('disposal:cache_ready');
+
+        foreach ($actives as $d) {
+            Cache::put('disposal:' . $d->stock_code, json_encode([
+                'start_date' => $d->start_date->toDateString(),
+                'end_date'   => $d->end_date->toDateString(),
+                'reason'     => $d->reason,
+                'market'     => $d->market,
+            ]), $ttl);
+        }
+
+        Cache::put('disposal:cache_ready', 1, $ttl);
+
+        $this->info("Redis Cache 已更新，共 {$actives->count()} 筆有效處置股，TTL {$ttl}s（到 {$expire->format('Y-m-d H:i')}）。");
+        Log::channel('tg_webhook')->info('[處置股] Redis cache 更新完成', ['count' => $actives->count(), 'ttl' => $ttl]);
     }
 
     /**

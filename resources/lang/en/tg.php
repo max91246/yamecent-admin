@@ -139,6 +139,9 @@ return [
     'stock_rev_last_yr_same' => 'Last yr',
     'stock_rev_yoy_acc'      => 'YoY',
     'stock_news_title'       => 'Latest News',
+    'stock_disposal_tag'     => '⚠️ Disposal Stock',
+    'stock_disposal_period'  => 'Disposal Period',
+    'stock_disposal_reason'  => 'Reason',
 
     // ── Banner ────────────────────────────────────────────────────
     'banner_prompt'        => "🖼 Set My Banner\n\nSend an image to use as your banner.\nSupported formats: JPG, PNG, GIF\n\nThe image will appear above your portfolio.\n\nType \"cancel\" to go back",

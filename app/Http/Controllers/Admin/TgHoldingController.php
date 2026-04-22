@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\DisposalStock;
 use App\TgBot;
 use App\TgHolding;
 use App\TgHoldingTrade;
@@ -96,6 +97,14 @@ class TgHoldingController extends Controller
         $settleBuy   = $settlements->where('direction', 'buy')->sum('settlement_amount');
         $settleSell  = $settlements->where('direction', 'sell')->sum('settlement_amount');
 
+        // 取得目前持股中有哪些是處置股
+        $holdingCodes = $holdings->pluck('stock_code')->unique()->toArray();
+        $disposalCodes = DisposalStock::whereIn('stock_code', $holdingCodes)
+            ->where('end_date', '>=', now()->toDateString())
+            ->pluck('stock_code')
+            ->flip()
+            ->toArray();
+
         return view('admin.tg_user_detail', [
             'chatId'      => $chatId,
             'wallet'      => $wallet,
@@ -107,10 +116,11 @@ class TgHoldingController extends Controller
             'tradeWin'    => $tradeWin,
             'tradeWinPct' => $tradeTotal > 0 ? round($tradeWin / $tradeTotal * 100) : 0,
             'tradeProfit' => $tradeProfit,
-            'settleBuy'   => $settleBuy,
-            'settleSell'  => $settleSell,
-            'settleNet'   => $settleSell - $settleBuy,
-            'bots'        => TgBot::orderBy('id')->get(['id', 'name']),
+            'settleBuy'    => $settleBuy,
+            'settleSell'   => $settleSell,
+            'settleNet'    => $settleSell - $settleBuy,
+            'bots'         => TgBot::orderBy('id')->get(['id', 'name']),
+            'disposalCodes' => $disposalCodes,
         ]);
     }
 

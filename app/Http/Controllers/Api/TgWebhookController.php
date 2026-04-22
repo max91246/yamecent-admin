@@ -412,7 +412,7 @@ class TgWebhookController extends Controller
         ]);
 
         // 判斷是否為處置股：處置股買進立即扣款，一般股票 T+2
-        $isDisposal = DisposalStock::isDisposed($data['code']);
+        $isDisposal = $this->isDisposedCached($data['code']);
         $buyFee     = (int) ceil($marketVal * 0.001425);
         $settleAmt  = $cost + $buyFee;  // $cost 已是現股=全額 / 融資=40%
 
@@ -666,6 +666,56 @@ class TgWebhookController extends Controller
     }
 
     // ─── 計算 T+2 交割日（跳過周末，不處理國定假日）────────────
+    // ─── 處置股 Redis Cache 查詢 ────────────────────────────────
+    /**
+     * 從 Redis 判斷該股票是否為處置股。
+     * cache_ready 旗標存在時直接信任 Redis，不查 DB。
+     * 旗標不存在（首次或過期）則 fallback 至 DB，並順帶寫入 cache。
+     */
+    private function isDisposedCached(string $code): bool
+    {
+        return $this->getDisposalCached($code) !== null;
+    }
+
+    /**
+     * 取得處置股 Cache 資料（陣列）或 null（非處置股）。
+     */
+    private function getDisposalCached(string $code): ?array
+    {
+        $key = 'disposal:' . $code;
+
+        if (Cache::has('disposal:cache_ready')) {
+            // Cache 已就緒：key 存在代表處置中，不存在代表非處置股
+            $raw = Cache::get($key);
+            return $raw ? json_decode($raw, true) : null;
+        }
+
+        // Cache 尚未建立：fallback 至 DB，並寫入 cache（TTL 到今天 07:59）
+        $now    = Carbon::now('Asia/Taipei');
+        $expire = $now->copy()->startOfDay()->setTime(7, 59, 0);
+        if ($expire->lte($now)) {
+            $expire->addDay();
+        }
+        $ttl = max(60, (int) $now->diffInSeconds($expire));
+
+        $disposal = DisposalStock::where('stock_code', $code)
+            ->where('end_date', '>=', $now->toDateString())
+            ->first();
+
+        if ($disposal) {
+            $data = [
+                'start_date' => $disposal->start_date->toDateString(),
+                'end_date'   => $disposal->end_date->toDateString(),
+                'reason'     => $disposal->reason,
+                'market'     => $disposal->market,
+            ];
+            Cache::put($key, json_encode($data), $ttl);
+            return $data;
+        }
+
+        return null;
+    }
+
     private function calcSettleDate(\Carbon\Carbon $tradeDate): \Carbon\Carbon
     {
         $d    = $tradeDate->copy()->startOfDay();
@@ -809,7 +859,12 @@ class TgWebhookController extends Controller
             ? "\n📦 " . $this->t('stock_volume', $lang) . "：" . number_format((int) round((float) $quote['volume'] / 1000))
             : '';
 
-        $reply = "📊 {$name}（{$code}.TW）\n💰 {$price}{$changeStr}{$volumeStr}";
+        // 處置股標記（優先從 Redis 取，避免每次查 DB）
+        $disposalData = $this->getDisposalCached($code);
+        $isDisposal   = $disposalData !== null;
+        $disposalTag  = $isDisposal ? ' ' . $this->t('stock_disposal_tag', $lang) : '';
+
+        $reply = "📊 {$name}（{$code}.TW）{$disposalTag}\n💰 {$price}{$changeStr}{$volumeStr}";
 
         // 三大法人
         $inst = $this->fetchInstitutional($code);
@@ -895,6 +950,15 @@ class TgWebhookController extends Controller
                 } else {
                     $reply .= "\n" . ($i + 1) . ". {$title}\n   🕐 {$n['date']}";
                 }
+            }
+        }
+
+        // 處置股資訊區塊
+        if ($isDisposal && $disposalData) {
+            $reply .= "\n\n━━ " . $this->t('stock_disposal_tag', $lang) . " ━━";
+            $reply .= "\n📅 " . $this->t('stock_disposal_period', $lang) . "：{$disposalData['start_date']} ~ {$disposalData['end_date']}";
+            if (!empty($disposalData['reason'])) {
+                $reply .= "\n📋 " . $this->t('stock_disposal_reason', $lang) . "：{$disposalData['reason']}";
             }
         }
 
@@ -1133,8 +1197,11 @@ class TgWebhookController extends Controller
             $totalShares = $group->sum('shares');
             $lotCount   = $group->count();
 
+            // 處置股標記（從 Redis cache 取）
+            $disposalTag = $this->isDisposedCached($stockCode) ? ' ' . $this->t('stock_disposal_tag', $lang) : '';
+
             // 分組標頭
-            $groupHeader = "📌 {$firstName}（{$stockCode}）" . $this->t('portfolio_total_label', $lang) . " " . $this->sharesDisplay($totalShares);
+            $groupHeader = "📌 {$firstName}（{$stockCode}）{$disposalTag}" . $this->t('portfolio_total_label', $lang) . " " . $this->sharesDisplay($totalShares);
             if ($curPriceStr) {
                 $groupHeader .= "\n   {$curPriceStr}";
             }
