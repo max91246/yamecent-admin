@@ -1509,13 +1509,6 @@ class TgWebhookController extends Controller
             $rawBody = (string) $res->getBody();
             $data    = json_decode($rawBody, true);
 
-            // 暫時 debug：印出完整 raw response（查處置股欄位用）
-            Log::channel('tg_webhook')->debug('[fetchStockQuote] raw response', [
-                'code' => $code,
-                'url'  => $url,
-                'raw'  => $rawBody,
-            ]);
-
             $chart = $data['data'][0]['chart'] ?? null;
 
             if (!$chart) {
