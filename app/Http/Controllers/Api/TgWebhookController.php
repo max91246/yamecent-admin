@@ -231,17 +231,11 @@ class TgWebhookController extends Controller
     {
         $lang = $this->getUserLang($userId);
 
-        if ($this->matchesMenuKey($text, 'menu_oil')) {
-            return [$this->buildOilReply($lang), null];
-        }
         if ($this->matchesMenuKey($text, 'menu_wtx')) {
             return [$this->buildWtxReply($lang), null];
         }
-        if ($this->matchesMenuKey($text, 'menu_vix') || str_contains($text, 'VIX')) {
-            return [$this->buildVixReply($lang), null];
-        }
-        if ($this->matchesMenuKey($text, 'menu_gold')) {
-            return [$this->buildGoldReply($lang), null];
+        if ($this->matchesMenuKey($text, 'menu_hedge')) {
+            return [$this->buildHedgeReply($lang), null];
         }
         if ($this->matchesMenuKey($text, 'menu_stock')) {
             $this->setState($bot->id, $chatId, 'stock_query');
@@ -871,6 +865,48 @@ class TgWebhookController extends Controller
         }
 
         return $this->t('gold_title', $lang) . "\n" . $this->t('gold_current', $lang) . "：" . number_format((float) $latest->close, 2) . "{$changeStr}\n🕐 " . $this->t('reply_time', $lang) . "：{$latest->candle_at}";
+    }
+
+    // ─── 回覆組建：避險商品（油價 + VIX + 黃金）────────────────────
+    private function buildHedgeReply(string $lang = 'zh-Hant'): string
+    {
+        $blocks = [];
+
+        foreach (['QA' => 'oil', 'VIX' => 'vix', 'GOLD' => 'gold'] as $ticker => $type) {
+            $latest = OilPrice::where('ticker', $ticker)
+                ->whereNotNull('close')
+                ->orderBy('candle_at', 'desc')
+                ->first();
+
+            if (!$latest) {
+                continue;
+            }
+
+            $prev = OilPrice::where('ticker', $ticker)
+                ->whereNotNull('close')
+                ->where('candle_at', '<', $latest->candle_at)
+                ->orderBy('candle_at', 'desc')
+                ->first();
+
+            $changeStr = '';
+            if ($prev) {
+                $diff  = (float) $latest->close - (float) $prev->close;
+                $pct   = (float) $prev->close > 0 ? ($diff / (float) $prev->close * 100) : 0;
+                $sign  = $diff >= 0 ? '+' : '';
+                $arrow = $diff >= 0 ? '📈' : '📉';
+                $changeStr = "　{$arrow} {$sign}" . number_format($diff, 2) . "（{$sign}" . number_format($pct, 2) . "%）";
+            }
+
+            $title   = $this->t("{$type}_title", $lang);
+            $current = $this->t("{$type}_current", $lang);
+            $blocks[] = "━━ {$title} ━━\n{$current}：<b>" . number_format((float) $latest->close, 2) . "</b>{$changeStr}\n🕐 {$latest->candle_at}";
+        }
+
+        if (empty($blocks)) {
+            return '暫無避險商品資料';
+        }
+
+        return implode("\n\n", $blocks);
     }
 
     // ─── 回覆組建：台股查詢結果 ───────────────────────────────────
@@ -1743,13 +1779,10 @@ class TgWebhookController extends Controller
 
     private function isMainMenuText(string $text): bool
     {
-        foreach (['menu_oil', 'menu_wtx', 'menu_vix', 'menu_gold', 'menu_stock', 'menu_portfolio', 'menu_settings'] as $key) {
+        foreach (['menu_hedge', 'menu_wtx', 'menu_stock', 'menu_portfolio', 'menu_settings'] as $key) {
             if ($this->matchesMenuKey($text, $key)) {
                 return true;
             }
-        }
-        if (str_contains($text, 'VIX')) {
-            return true;
         }
         return false;
     }
@@ -1758,8 +1791,7 @@ class TgWebhookController extends Controller
     {
         return [
             'keyboard' => [
-                [['text' => $this->t('menu_oil', $lang)], ['text' => $this->t('menu_wtx', $lang)]],
-                [['text' => $this->t('menu_vix', $lang)], ['text' => $this->t('menu_gold', $lang)]],
+                [['text' => $this->t('menu_wtx', $lang)], ['text' => $this->t('menu_hedge', $lang)]],
                 [['text' => $this->t('menu_stock', $lang)], ['text' => $this->t('menu_portfolio', $lang)]],
                 [['text' => $this->t('menu_settings', $lang)]],
             ],

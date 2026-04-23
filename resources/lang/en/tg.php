@@ -2,10 +2,8 @@
 
 return [
     // ── Main menu buttons ─────────────────────────────────────────
-    'menu_oil'       => '🛢 Brent Crude',
+    'menu_hedge'     => '🛡 Hedge Assets',
     'menu_wtx'       => '📈 TAIEX Futures',
-    'menu_vix'       => '😨 VIX Index',
-    'menu_gold'      => '🥇 Gold',
     'menu_stock'     => '📊 Stock Search',
     'menu_portfolio' => '💼 My Portfolio',
     'menu_settings'  => '⚙️ Settings',

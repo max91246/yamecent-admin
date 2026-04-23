@@ -2,10 +2,8 @@
 
 return [
     // ── 主选单按钮 ────────────────────────────────────────────────
-    'menu_oil'       => '🛢 布兰特原油',
+    'menu_hedge'     => '🛡 避险商品指数',
     'menu_wtx'       => '📈 台指期货',
-    'menu_vix'       => '😨 VIX恐慌指数',
-    'menu_gold'      => '🥇 黄金指数',
     'menu_stock'     => '📊 台股查询',
     'menu_portfolio' => '💼 我的持股',
     'menu_settings'  => '⚙️ 设置',
