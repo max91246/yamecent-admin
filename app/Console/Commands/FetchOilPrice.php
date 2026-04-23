@@ -22,6 +22,7 @@ class FetchOilPrice extends Command
     const TICKER         = 'QA';
     const TW_TICKER      = 'WTX';
     const VIX_TICKER     = 'VIX';
+    const GOLD_TICKER    = 'GOLD';
 
     // 告警閾值（已移至 admin_configs，使用 getConfig() 動態讀取）
 
@@ -78,6 +79,15 @@ class FetchOilPrice extends Command
             $this->line("  [VIX] 當前：{$vixPrice}（更新：{$vixTime}）");
         } else {
             $this->line('  [VIX] 取得失敗，略過');
+        }
+
+        // ── 4. 抓取黃金期貨並存 DB ───────────────────────────────
+        [$goldPrice, $goldTime] = $this->fetchGold();
+        if ($goldPrice !== null) {
+            $this->saveGoldPrice($goldPrice, $goldTime);
+            $this->line("  [黃金] 當前：{$goldPrice}（更新：{$goldTime}）");
+        } else {
+            $this->line('  [黃金] 取得失敗，略過');
         }
 
         // ── 4. 測試強制推送 ───────────────────────────────────────
@@ -177,6 +187,64 @@ class FetchOilPrice extends Command
         $refreshedAt = date('Y-m-d H:i:s', $ts);
 
         return [$price, $refreshedAt];
+    }
+
+    // ────────────────────────────────────────────────────────────
+    //  抓取黃金期貨現價（Yahoo Finance GC=F）
+    //  回傳 [price, refreshedAt(台北時間字串)] 或 [null, null]
+    // ────────────────────────────────────────────────────────────
+    private function fetchGold(): array
+    {
+        $client = new Client(['timeout' => 10]);
+        try {
+            $res = $client->get(getConfig('gold_api_url'), [
+                'query' => [
+                    'interval'       => '5m',
+                    'range'          => '1d',
+                    'includePrePost' => 'true',
+                    'lang'           => 'zh-Hant-HK',
+                    'region'         => 'HK',
+                ],
+                'headers' => [
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'Accept'     => 'application/json, text/plain, */*',
+                ],
+            ]);
+        } catch (\Exception $e) {
+            $this->line('[ERROR] 黃金 HTTP 失敗：' . $e->getMessage());
+            return [null, null];
+        }
+
+        $data = json_decode((string) $res->getBody(), true);
+        $meta = $data['chart']['result'][0]['meta'] ?? null;
+
+        if (!$meta || !isset($meta['regularMarketPrice'])) {
+            return [null, null];
+        }
+
+        $price       = (float) $meta['regularMarketPrice'];
+        $ts          = $meta['regularMarketTime'] ?? time();
+        $refreshedAt = date('Y-m-d H:i:s', $ts);
+
+        return [$price, $refreshedAt];
+    }
+
+    // ────────────────────────────────────────────────────────────
+    //  儲存黃金現價（對齊 5 分鐘窗口）
+    // ────────────────────────────────────────────────────────────
+    private function saveGoldPrice(float $price, ?string $refreshedAt): void
+    {
+        if ($refreshedAt !== null) {
+            $ts       = strtotime($refreshedAt);
+            $candleAt = date('Y-m-d H:i:s', (int) (floor($ts / 300) * 300));
+        } else {
+            $candleAt = date('Y-m-d H:i:s', (int) (floor(time() / 300) * 300));
+        }
+
+        OilPrice::updateOrCreate(
+            ['ticker' => self::GOLD_TICKER, 'candle_at' => $candleAt],
+            ['timeframe' => 'i5', 'close' => $price]
+        );
     }
 
     // ────────────────────────────────────────────────────────────

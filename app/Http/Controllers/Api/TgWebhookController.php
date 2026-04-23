@@ -240,6 +240,9 @@ class TgWebhookController extends Controller
         if ($this->matchesMenuKey($text, 'menu_vix') || str_contains($text, 'VIX')) {
             return [$this->buildVixReply($lang), null];
         }
+        if ($this->matchesMenuKey($text, 'menu_gold')) {
+            return [$this->buildGoldReply($lang), null];
+        }
         if ($this->matchesMenuKey($text, 'menu_stock')) {
             $this->setState($bot->id, $chatId, 'stock_query');
             return [$this->t('stock_query_prompt', $lang), null];
@@ -838,6 +841,36 @@ class TgWebhookController extends Controller
         }
 
         return $this->t('vix_title', $lang) . "\n" . $this->t('vix_current', $lang) . "：" . number_format((float) $latest->close, 2) . "{$changeStr}\n🕐 " . $this->t('reply_time', $lang) . "：{$latest->candle_at}";
+    }
+
+    // ─── 回覆組建：黃金 ──────────────────────────────────────────
+    private function buildGoldReply(string $lang = 'zh-Hant'): string
+    {
+        $latest = OilPrice::where('ticker', 'GOLD')
+            ->whereNotNull('close')
+            ->orderBy('candle_at', 'desc')
+            ->first();
+
+        if (!$latest) {
+            return $this->t('gold_no_data', $lang);
+        }
+
+        $prev = OilPrice::where('ticker', 'GOLD')
+            ->whereNotNull('close')
+            ->where('candle_at', '<', $latest->candle_at)
+            ->orderBy('candle_at', 'desc')
+            ->first();
+
+        $changeStr = '';
+        if ($prev) {
+            $diff  = (float) $latest->close - (float) $prev->close;
+            $pct   = (float) $prev->close > 0 ? ($diff / (float) $prev->close * 100) : 0;
+            $sign  = $diff >= 0 ? '+' : '';
+            $arrow = $diff >= 0 ? '📈' : '📉';
+            $changeStr = "\n{$arrow} " . $this->t('reply_change_5m', $lang) . "：{$sign}" . number_format($diff, 2) . "（{$sign}" . number_format($pct, 2) . "%）";
+        }
+
+        return $this->t('gold_title', $lang) . "\n" . $this->t('gold_current', $lang) . "：" . number_format((float) $latest->close, 2) . "{$changeStr}\n🕐 " . $this->t('reply_time', $lang) . "：{$latest->candle_at}";
     }
 
     // ─── 回覆組建：台股查詢結果 ───────────────────────────────────
@@ -1710,7 +1743,7 @@ class TgWebhookController extends Controller
 
     private function isMainMenuText(string $text): bool
     {
-        foreach (['menu_oil', 'menu_wtx', 'menu_vix', 'menu_stock', 'menu_portfolio', 'menu_settings'] as $key) {
+        foreach (['menu_oil', 'menu_wtx', 'menu_vix', 'menu_gold', 'menu_stock', 'menu_portfolio', 'menu_settings'] as $key) {
             if ($this->matchesMenuKey($text, $key)) {
                 return true;
             }
@@ -1726,8 +1759,9 @@ class TgWebhookController extends Controller
         return [
             'keyboard' => [
                 [['text' => $this->t('menu_oil', $lang)], ['text' => $this->t('menu_wtx', $lang)]],
-                [['text' => $this->t('menu_vix', $lang)], ['text' => $this->t('menu_stock', $lang)]],
-                [['text' => $this->t('menu_portfolio', $lang)], ['text' => $this->t('menu_settings', $lang)]],
+                [['text' => $this->t('menu_vix', $lang)], ['text' => $this->t('menu_gold', $lang)]],
+                [['text' => $this->t('menu_stock', $lang)], ['text' => $this->t('menu_portfolio', $lang)]],
+                [['text' => $this->t('menu_settings', $lang)]],
             ],
             'resize_keyboard' => true,
             'persistent'      => true,
