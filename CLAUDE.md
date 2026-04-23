@@ -26,14 +26,21 @@ php artisan route:list     # 列出所有路由
 
 ## GCP 升級部署指令
 
-每次有 migration 或程式碼異動要升版到 GCP，需在 Docker workspace 容器內執行：
+GCP 專案目錄在 `/var/www`（非 `/var/www/yamecent-admin`）。
+`git pull` 在容器外執行，`php artisan` 需進入容器內執行，兩步驟分開：
 
 ```bash
-# 進入容器執行（本機無 php 指令，需走 Docker）
-docker exec laradock_workspace_1 bash -c "cd /var/www/yamecent-admin && php artisan migrate --force"
+# Step 1：在 Host（容器外）拉取最新代碼
+cd ~/www/yamecent-admin && git pull
+
+# Step 2：進入 workspace 容器
+cd ~/laradock && docker compose exec -it workspace bash
+
+# Step 3：容器內執行 artisan 指令
+php artisan migrate --force
 
 # 若需清除快取（config / route / view）
-docker exec laradock_workspace_1 bash -c "cd /var/www/yamecent-admin && php artisan config:clear && php artisan route:clear && php artisan view:clear"
+php artisan config:clear && php artisan route:clear && php artisan view:clear
 ```
 
 > **注意**：`php artisan migrate --force` 的 `--force` 是 production 環境必要參數（跳過互動確認）。
