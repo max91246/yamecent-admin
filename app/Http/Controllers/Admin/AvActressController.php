@@ -8,6 +8,46 @@ use Illuminate\Http\Request;
 
 class AvActressController extends Controller
 {
+    /**
+     * AV 速報：依出道年份 / 爬取時間呈現最新出道女優
+     */
+    public function news(Request $request)
+    {
+        $period = $request->input('period', 'year'); // month / quarter / year / all
+        $now    = now();
+
+        $query = AvActress::query()->whereNotNull('debut_year');
+
+        switch ($period) {
+            case 'month':
+                // 本月爬取的新人
+                $query->whereMonth('created_at', $now->month)
+                      ->whereYear('created_at', $now->year);
+                break;
+            case 'quarter':
+                // 本季爬取的新人
+                $quarterStart = $now->copy()->firstOfQuarter();
+                $query->where('created_at', '>=', $quarterStart);
+                break;
+            case 'year':
+                $query->where('debut_year', $now->year);
+                break;
+        }
+
+        $list = $query->orderBy('created_at', 'desc')->orderBy('id', 'desc')
+                      ->paginate(24)->appends($request->query());
+
+        // 統計
+        $stats = [
+            'month'   => AvActress::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->count(),
+            'quarter' => AvActress::where('created_at', '>=', $now->copy()->firstOfQuarter())->count(),
+            'year'    => AvActress::where('debut_year', $now->year)->count(),
+            'total'   => AvActress::count(),
+        ];
+
+        return view('admin.av_news', compact('list', 'period', 'stats'));
+    }
+
     public function index(Request $request)
     {
         $query = AvActress::query();
