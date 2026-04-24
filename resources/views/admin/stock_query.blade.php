@@ -252,7 +252,7 @@
         data.forEach((d, i) => {
             const x      = toX(i);
             const isUp   = d.close >= d.open;
-            const color  = isUp ? '#68d391' : '#fc8181';
+            const color  = isUp ? '#fc8181' : '#68d391';
             const bodyTop    = toY(Math.max(d.open, d.close));
             const bodyBottom = toY(Math.min(d.open, d.close));
             const bodyH      = Math.max(1, bodyBottom - bodyTop);
@@ -450,7 +450,7 @@
                 const prev  = data.history[i + 1];
                 const diff  = prev ? (d.close - prev.close) : 0;
                 const sign  = diff >= 0 ? '+' : '';
-                const cls   = diff > 0 ? 'inst-pos' : diff < 0 ? 'inst-neg' : '';
+                const cls   = diff > 0 ? 'inst-neg' : diff < 0 ? 'inst-pos' : '';
                 historyBody.innerHTML += `<tr>
                     <td>${d.date}</td>
                     <td class="text-right">${fmtNum(d.open, 2)}</td>
