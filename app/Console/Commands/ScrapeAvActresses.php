@@ -92,15 +92,22 @@ class ScrapeAvActresses extends Command
     {
         try {
             $res  = $this->client->post($this->flareSolverrUrl, [
-                'json' => ['cmd' => 'request.get', 'url' => $url, 'maxTimeout' => 25000],
+                'json' => ['cmd' => 'request.get', 'url' => $url, 'maxTimeout' => 30000],
             ]);
             $body = json_decode((string) $res->getBody(), true);
-            if (($body['status'] ?? '') !== 'ok') {
+            $status = $body['status'] ?? 'unknown';
+            if ($status !== 'ok') {
+                $this->warn("    FlareSolverr status: {$status} | " . ($body['message'] ?? ''));
+                return null;
+            }
+            $code = $body['solution']['status'] ?? 0;
+            if ($code !== 200) {
+                $this->warn("    HTTP {$code}");
                 return null;
             }
             return $body['solution']['response'] ?? null;
         } catch (\Exception $e) {
-            $this->warn("請求失敗：" . $e->getMessage());
+            $this->warn("    請求異常：" . $e->getMessage());
             return null;
         }
     }
@@ -171,32 +178,32 @@ class ScrapeAvActresses extends Command
 
         $result = [];
 
-        // 找包含身高/三圍/生日的區塊
-        $nodes = $xpath->query('//div[contains(@class,"text-secondary") or contains(@class,"font-medium") or contains(@class,"gap")]');
-        $combinedText = '';
-        foreach ($nodes as $node) {
-            $t = trim($node->textContent);
-            if (strlen($t) > 3 && strlen($t) < 300) {
-                $combinedText .= ' ' . $t;
-            }
+        // 資料在 class="text-nord9" 的 div 內的 <p> 標籤
+        // 格式：<p>163cm / 35E - 23 - 33</p><p>1988-05-24 (37歲)</p>
+        $infoDiv = $xpath->query('//div[contains(@class,"text-nord9")]//p');
+        $texts   = [];
+        foreach ($infoDiv as $p) {
+            $t = trim($p->textContent);
+            if ($t) $texts[] = $t;
         }
+        $combinedText = implode(' ', $texts);
 
         // 身高：163cm
         if (preg_match('/(\d{3})\s*cm/i', $combinedText, $m)) {
             $result['height'] = (int) $m[1];
         }
 
-        // 三圍：35E - 23 - 33 或 85-58-88
+        // 三圍：35E - 23 - 33（用 / 或 - 分隔）
+        // 格式：163cm / 35E - 23 - 33
         if (preg_match('/(\d{2,3}[A-Za-z]?)\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})/', $combinedText, $m)) {
             $result['bust']  = $m[1];
             $result['waist'] = (int) $m[2];
             $result['hip']   = (int) $m[3];
         }
 
-        // 生日：1988-05-24 或 1988/05/24
-        if (preg_match('/(\d{4})[-\/](\d{2})[-\/](\d{2})/', $combinedText, $m)) {
+        // 生日：1988-05-24
+        if (preg_match('/(\d{4})-(\d{2})-(\d{2})/', $combinedText, $m)) {
             $result['birthday'] = "{$m[1]}-{$m[2]}-{$m[3]}";
-            $result['debut_year'] = null; // MissAV 不直接顯示出道年，後續可補
         }
 
         return $result;
