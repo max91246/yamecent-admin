@@ -157,7 +157,7 @@ class StockQueryController extends Controller
             'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'Accept'     => 'application/json, text/plain, */*',
         ];
-        $query = ['interval' => '1d', 'range' => '3mo'];
+        $query = ['interval' => '1d', 'range' => '1mo'];
 
         // 上市用 .TW，上櫃用 .TWO，自動 fallback
         $symbol = null;
@@ -204,7 +204,7 @@ class StockQueryController extends Controller
                 ];
             }
 
-            return array_slice(array_reverse($candles), 0, 30);
+            return array_slice(array_reverse($candles), 0, 22);
         } catch (\Exception $e) {
             return [];
         }

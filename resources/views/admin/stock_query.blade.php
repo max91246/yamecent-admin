@@ -87,7 +87,7 @@
                 <div class="col-lg-12 grid-margin">
                     <div class="card">
                         <div class="card-body">
-                            <h4 class="card-title">近30個交易日股價走勢</h4>
+                            <h4 class="card-title">近22個交易日股價走勢</h4>
                             <canvas id="priceChart" style="width:100%; height:420px;"></canvas>
                             <div class="table-responsive mt-3">
                                 <table class="table table-sm table-hover">
@@ -215,116 +215,103 @@
         ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, W, H);
 
-        const data = [...rawData].reverse(); // 舊→新
+        const data = [...rawData].reverse();
         const n    = data.length;
 
-        // 版面分割：固定 X 軸標籤區 24px，其餘分 K 線 / gap / 成交量
-        const padL   = 62, padR = 16;
+        // 版面：Y 軸留 68px，右留 20px，上留 16px，底留 24px 給 X 標籤
+        const padL = 68, padR = 20, padT = 16, padB = 24;
         const chartW = W - padL - padR;
-        const xLabelH = 24;
-        const kT      = 16;
-        const vB      = H - xLabelH;       // 成交量區底部（固定留 xLabelH 給日期）
-        const gapH    = 8;
-        const volRatio = 0.28;
-        const usable  = vB - kT;
-        const kH      = Math.floor(usable * (1 - volRatio) - gapH / 2);
-        const kB      = kT + kH;
-        const vT      = kB + gapH;
-        const vH      = vB - vT;
+        const totalInner = H - padT - padB;
+        const gapH   = 8;
+        const kH     = Math.floor(totalInner * 0.68);
+        const vH     = totalInner - kH - gapH;
+        const kT = padT, kB = kT + kH;
+        const vT = kB + gapH, vB = vT + vH;
 
-        const toX = i => padL + (i + 0.5) * (chartW / n);
-        const candleW = Math.max(3, Math.floor(chartW / n * 0.65));
+        const slotW   = chartW / n;
+        const toX     = i => padL + slotW * i + slotW / 2;
+        const candleW = Math.max(4, Math.floor(slotW * 0.6));
 
-        // 限制繪製範圍，防止最右 K 棒超出邊界
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(padL, 0, chartW, H);
-        ctx.clip();
-
-        // ── K 線價格範圍 ──
+        // ── 範圍計算 ──
         const allPrices = data.flatMap(d => [d.high, d.low]);
-        const minP = Math.min(...allPrices);
-        const maxP = Math.max(...allPrices);
-        const pRange   = maxP - minP || 1;
-        const yMin = minP - pRange * 0.05;
-        const yMax = maxP + pRange * 0.05;
+        const minP = Math.min(...allPrices), maxP = Math.max(...allPrices);
+        const pr   = maxP - minP || 1;
+        const yMin = minP - pr * 0.05, yMax = maxP + pr * 0.05;
         const toKY = p => kT + kH - ((p - yMin) / (yMax - yMin)) * kH;
 
-        // ── 成交量範圍（90 百分位截頂，避免單一爆量壓縮其他柱子）──
-        const vols     = [...data.map(d => d.volume)].sort((a, b) => a - b);
-        const p90Idx   = Math.floor(vols.length * 0.9);
-        const volCap   = vols[p90Idx] || vols[vols.length - 1] || 1;
-        const toVH = v => Math.max(2, Math.min((v / volCap) * vH, vH));
+        const sortedVol = [...data.map(d => d.volume)].sort((a, b) => a - b);
+        const volCap    = sortedVol[Math.floor(sortedVol.length * 0.9)] || 1;
+        const toVH = v  => Math.max(2, Math.min((v / volCap) * vH, vH));
 
-        // ── 格線（K 線區）──
+        // ── 1. Y 軸標籤（畫在 clip 外，所以先畫）──
+        ctx.font      = '11px sans-serif';
+        ctx.textAlign = 'right';
+        for (let g = 0; g <= 5; g++) {
+            const price = yMax - (g / 5) * (yMax - yMin);
+            const y     = kT + (g / 5) * kH;
+            ctx.fillStyle = '#718096';
+            ctx.fillText(price.toFixed(1), padL - 6, y + 4);
+        }
+        ctx.font      = '10px sans-serif';
+        ctx.fillStyle = '#4a5568';
+        ctx.fillText((volCap / 1000).toFixed(0) + 'K', padL - 6, vT + 10);
+        ctx.fillText((volCap / 2000).toFixed(0) + 'K', padL - 6, vT + vH / 2 + 4);
+
+        // ── 2. 格線（在 clip 內）──
+        ctx.save();
+        ctx.beginPath(); ctx.rect(padL, padT, chartW, H - padT); ctx.clip();
+
         ctx.strokeStyle = 'rgba(100,160,255,0.07)';
         ctx.lineWidth   = 1;
         for (let g = 0; g <= 5; g++) {
             const y = kT + (g / 5) * kH;
             ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke();
-            const price = yMax - (g / 5) * (yMax - yMin);
-            ctx.fillStyle = '#718096';
-            ctx.font      = '11px sans-serif';
-            ctx.textAlign = 'right';
-            ctx.fillText(price.toFixed(1), padL - 5, y + 4);
         }
-
-        // ── 格線（成交量區）──
         for (let g = 0; g <= 2; g++) {
             const y = vT + (g / 2) * vH;
-            ctx.strokeStyle = 'rgba(100,160,255,0.07)';
             ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke();
         }
-        // 成交量區標題 + Y 軸標籤
-        ctx.fillStyle = '#4a5568';
-        ctx.font      = '10px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText('VOL', padL + 4, vT + 12);
-        ctx.textAlign = 'right';
-        ctx.fillText((volCap / 1000).toFixed(0) + 'K', padL - 5, vT + 10);
-        ctx.fillText((volCap / 2000).toFixed(0) + 'K', padL - 5, vT + vH / 2 + 4);
 
-        // ── 分隔線 ──
-        ctx.strokeStyle = 'rgba(100,160,255,0.15)';
-        ctx.lineWidth   = 1;
+        // 分隔線
+        ctx.strokeStyle = 'rgba(100,160,255,0.2)';
         ctx.beginPath(); ctx.moveTo(padL, vT - 2); ctx.lineTo(padL + chartW, vT - 2); ctx.stroke();
 
-        // ── 繪製每根 K 棒 + 成交量 ──
+        // VOL 標題
+        ctx.fillStyle = '#4a5568'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+        ctx.fillText('VOL', padL + 4, vT + 12);
+
+        // ── 3. K 棒 + 成交量 ──
         data.forEach((d, i) => {
-            const x     = toX(i);
-            const isUp  = d.close >= d.open;
-            const color = isUp ? '#fc8181' : '#68d391';
+            const x    = toX(i);
+            const isUp = d.close >= d.open;
+            const col  = isUp ? '#fc8181' : '#68d391';
 
             // 影線
-            ctx.strokeStyle = color;
-            ctx.lineWidth   = 1;
-            ctx.beginPath();
-            ctx.moveTo(x, toKY(d.high));
-            ctx.lineTo(x, toKY(d.low));
-            ctx.stroke();
+            ctx.strokeStyle = col; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(x, toKY(d.high)); ctx.lineTo(x, toKY(d.low)); ctx.stroke();
 
             // 實體
-            const bodyTop = toKY(Math.max(d.open, d.close));
-            const bodyH   = Math.max(1, toKY(Math.min(d.open, d.close)) - bodyTop);
-            ctx.fillStyle = color;
-            ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
+            const bTop = toKY(Math.max(d.open, d.close));
+            const bH   = Math.max(1, toKY(Math.min(d.open, d.close)) - bTop);
+            ctx.fillStyle = col;
+            ctx.fillRect(x - candleW / 2, bTop, candleW, bH);
 
             // 成交量柱
             const barH = toVH(d.volume);
-            ctx.fillStyle = isUp ? 'rgba(252,129,129,0.7)' : 'rgba(104,211,145,0.7)';
+            ctx.fillStyle = isUp ? 'rgba(252,129,129,0.75)' : 'rgba(104,211,145,0.75)';
             ctx.fillRect(x - candleW / 2, vB - barH, candleW, barH);
-
-            // X 軸日期（每隔幾天顯示一次避免擠）
-            const step = n > 20 ? 5 : n > 10 ? 3 : 1;
-            if (i % step === 0) {
-                ctx.fillStyle  = '#718096';
-                ctx.font       = '10px sans-serif';
-                ctx.textAlign  = 'center';
-                ctx.fillText(d.date.substring(5), x, H - 6);
-            }
         });
 
-        ctx.restore(); // 解除 clip
+        ctx.restore();
+
+        // ── 4. X 軸日期（clip 解除後畫，確保不被截）──
+        const step = n > 15 ? 4 : n > 8 ? 2 : 1;
+        ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#718096';
+        data.forEach((d, i) => {
+            if (i % step === 0) {
+                ctx.fillText(d.date.substring(5), toX(i), H - 6);
+            }
+        });
     }
 
     document.getElementById('stockCode').addEventListener('keydown', e => {
