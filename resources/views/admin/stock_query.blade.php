@@ -235,6 +235,12 @@
         const toX = i => padL + (i + 0.5) * (chartW / n);
         const candleW = Math.max(3, Math.floor(chartW / n * 0.65));
 
+        // 限制繪製範圍，防止最右 K 棒超出邊界
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(padL, 0, chartW, H);
+        ctx.clip();
+
         // ── K 線價格範圍 ──
         const allPrices = data.flatMap(d => [d.high, d.low]);
         const minP = Math.min(...allPrices);
@@ -317,6 +323,8 @@
                 ctx.fillText(d.date.substring(5), x, H - 6);
             }
         });
+
+        ctx.restore(); // 解除 clip
     }
 
     document.getElementById('stockCode').addEventListener('keydown', e => {
