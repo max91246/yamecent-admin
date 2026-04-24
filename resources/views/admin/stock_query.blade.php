@@ -57,6 +57,31 @@
                 </div>
             </div>
 
+            {{-- 處置股警示 --}}
+            <div class="row" id="disposalRow" style="display:none;">
+                <div class="col-lg-12 grid-margin">
+                    <div class="card" style="border-color: rgba(252,129,129,0.4) !important; background: rgba(252,129,129,0.05) !important;">
+                        <div class="card-body py-3">
+                            <h5 class="mb-2" style="color:#fc8181;">⚠️ 處置股警示</h5>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <span class="text-muted small">市場</span>
+                                    <div id="disposalMarket" style="color:#e2e8f0;"></div>
+                                </div>
+                                <div class="col-md-4">
+                                    <span class="text-muted small">處置期間</span>
+                                    <div id="disposalPeriod" style="color:#e2e8f0;"></div>
+                                </div>
+                                <div class="col-md-4">
+                                    <span class="text-muted small">原因</span>
+                                    <div id="disposalReason" style="color:#e2e8f0;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {{-- 三大法人 + 營收 --}}
             <div class="row">
                 {{-- 三大法人 --}}
@@ -153,6 +178,16 @@
         if (e.key === 'Enter') doQuery();
     });
 
+    // 從 URL 參數自動帶入並查詢
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
+        if (code) {
+            document.getElementById('stockCode').value = code;
+            doQuery();
+        }
+    });
+
     function doQuery() {
         const code = document.getElementById('stockCode').value.trim();
         if (!code) return;
@@ -218,6 +253,20 @@
 
         document.getElementById('stockVolume').textContent =
             q.volume ? '成交量：' + fmtNum(Math.round(q.volume / 1000)) + ' 張' : '';
+
+        // 處置股
+        const disposalRow = document.getElementById('disposalRow');
+        if (data.disposal) {
+            const d = data.disposal;
+            document.getElementById('disposalBadge').style.display = 'inline-block';
+            document.getElementById('disposalMarket').textContent  = d.market === 'twse' ? '上市（TWSE）' : '上櫃（TPEX）';
+            document.getElementById('disposalPeriod').textContent  = d.start_date + ' ～ ' + d.end_date;
+            document.getElementById('disposalReason').textContent  = d.reason || '-';
+            disposalRow.style.display = 'block';
+        } else {
+            document.getElementById('disposalBadge').style.display = 'none';
+            disposalRow.style.display = 'none';
+        }
 
         // 三大法人
         const instBody = document.getElementById('instBody');

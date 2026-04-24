@@ -74,7 +74,11 @@
                                                 <td>{{ $row->id }}</td>
                                                 <td>{{ optional(collect($bots)->firstWhere('id', $row->bot_id))->name ?? $row->bot_id }}</td>
                                                 <td>{{ $row->tg_chat_id }}</td>
-                                                <td>{{ $row->stock_name }}（{{ $row->stock_code }}）</td>
+                                                <td>
+                                                    <a href="{{ url('admin/stock-query') }}?code={{ $row->stock_code }}" style="color:#63b3ed; text-decoration:none;">
+                                                        {{ $row->stock_name }}（{{ $row->stock_code }}）
+                                                    </a>
+                                                </td>
                                                 <td>{{ $row->sell_shares }} 張</td>
                                                 <td>
                                                     @if($row->is_margin)

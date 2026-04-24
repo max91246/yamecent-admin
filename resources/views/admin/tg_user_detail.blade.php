@@ -172,7 +172,9 @@
                                         @php $lots = intdiv($row->shares, 1000); $odd = $row->shares % 1000; @endphp
                                         <tr>
                                             <td>
-                                                {{ $row->stock_name }}（{{ $row->stock_code }}）
+                                                <a href="{{ url('admin/stock-query') }}?code={{ $row->stock_code }}" style="color:#63b3ed; text-decoration:none;">
+                                                    {{ $row->stock_name }}（{{ $row->stock_code }}）
+                                                </a>
                                                 @if(isset($disposalCodes[$row->stock_code]))
                                                     <span class="badge badge-danger ml-1">⚠️ 處置股</span>
                                                 @endif
@@ -230,7 +232,11 @@
                                             $profitPct = $buyVal > 0 ? round($row->profit / $buyVal * 100, 2) : null;
                                         @endphp
                                         <tr>
-                                            <td>{{ $row->stock_name }}（{{ $row->stock_code }}）</td>
+                                            <td>
+                                                <a href="{{ url('admin/stock-query') }}?code={{ $row->stock_code }}" style="color:#63b3ed; text-decoration:none;">
+                                                    {{ $row->stock_name }}（{{ $row->stock_code }}）
+                                                </a>
+                                            </td>
                                             <td>{{ number_format($row->sell_shares) }}股
                                                 @if($tLots > 0)（{{ $tLots }}張@if($tOdd > 0) {{ $tOdd }}零股@endif）@endif
                                             </td>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\DisposalStock;
 use App\Http\Controllers\Controller;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
@@ -31,6 +32,7 @@ class StockQueryController extends Controller
         $institutional = $this->fetchInstitutional($code);
         $revenues      = $this->fetchRevenue($code);
         $news          = $this->fetchNews($code);
+        $disposal      = $this->getDisposal($code);
 
         return response()->json([
             'code'          => $code,
@@ -38,6 +40,7 @@ class StockQueryController extends Controller
             'institutional' => $institutional,
             'revenues'      => $revenues,
             'news'          => $news,
+            'disposal'      => $disposal,
         ]);
     }
 
@@ -143,6 +146,28 @@ class StockQueryController extends Controller
         } catch (\Exception $e) {
             return null;
         }
+    }
+
+    private function getDisposal(string $code): ?array
+    {
+        $key = 'disposal:' . $code;
+        if (Cache::has('disposal:cache_ready')) {
+            $raw = Cache::get($key);
+            return $raw ? json_decode($raw, true) : null;
+        }
+
+        $record = DisposalStock::where('stock_code', $code)
+            ->where('end_date', '>=', now()->toDateString())
+            ->first();
+
+        if (!$record) return null;
+
+        return [
+            'start_date' => $record->start_date->toDateString(),
+            'end_date'   => $record->end_date->toDateString(),
+            'reason'     => $record->reason,
+            'market'     => $record->market,
+        ];
     }
 
     private function fetchNews(string $code): array

@@ -67,7 +67,11 @@
                                                         <span class="badge badge-primary">上市</span>
                                                     @endif
                                                 </td>
-                                                <td><strong>{{ $row->stock_code }}</strong></td>
+                                                <td>
+                                                    <a href="{{ url('admin/stock-query') }}?code={{ $row->stock_code }}" style="color:#63b3ed; text-decoration:none; font-weight:600;">
+                                                        {{ $row->stock_code }}
+                                                    </a>
+                                                </td>
                                                 <td>{{ $row->stock_name }}</td>
                                                 <td>{{ $row->announced_date->format('Y-m-d') }}</td>
                                                 <td>{{ $row->start_date->format('Y-m-d') }}</td>
