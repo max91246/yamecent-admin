@@ -56,8 +56,13 @@ return [
         ],
 
         'admin' => [
-            'driver' => 'local',
-            'root' => public_path('uploads'),
+            'driver'     => 'local',
+            'root'       => public_path('uploads'),
+            'visibility' => 'public',
+            'permissions' => [
+                'file' => ['public' => 0644, 'private' => 0600],
+                'dir'  => ['public' => 0755, 'private' => 0700],
+            ],
         ],
 
         's3' => [
