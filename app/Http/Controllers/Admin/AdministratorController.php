@@ -375,6 +375,11 @@ class AdministratorController extends Controller
             $role = AdminRole::find($roleId);
             $admin->roles()->attach($role);
         });
+        // 若修改的是當前登入帳號，同步更新 session
+        $sessionAdmin = $request->session()->get('admin');
+        if ($sessionAdmin && $sessionAdmin->id == $admin->id) {
+            $request->session()->put('admin', $admin->fresh());
+        }
         return $this->json(200, '修改成功');
 
     }
