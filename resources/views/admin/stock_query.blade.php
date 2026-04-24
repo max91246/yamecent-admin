@@ -244,9 +244,11 @@
         const yMax = maxP + pRange * 0.05;
         const toKY = p => kT + kH - ((p - yMin) / (yMax - yMin)) * kH;
 
-        // ── 成交量範圍 ──
-        const maxVol = Math.max(...data.map(d => d.volume), 1);
-        const toVH = v => Math.max(1, (v / maxVol) * vH);
+        // ── 成交量範圍（90 百分位截頂，避免單一爆量壓縮其他柱子）──
+        const vols     = [...data.map(d => d.volume)].sort((a, b) => a - b);
+        const p90Idx   = Math.floor(vols.length * 0.9);
+        const volCap   = vols[p90Idx] || vols[vols.length - 1] || 1;
+        const toVH = v => Math.max(2, Math.min((v / volCap) * vH, vH));
 
         // ── 格線（K 線區）──
         ctx.strokeStyle = 'rgba(100,160,255,0.07)';
@@ -267,11 +269,14 @@
             ctx.strokeStyle = 'rgba(100,160,255,0.07)';
             ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke();
         }
-        // 成交量 Y 軸最大值標籤
+        // 成交量區標題 + Y 軸標籤
         ctx.fillStyle = '#4a5568';
         ctx.font      = '10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('VOL', padL + 4, vT + 12);
         ctx.textAlign = 'right';
-        ctx.fillText((maxVol / 1000).toFixed(0) + 'K', padL - 5, vT + 10);
+        ctx.fillText((volCap / 1000).toFixed(0) + 'K', padL - 5, vT + 10);
+        ctx.fillText((volCap / 2000).toFixed(0) + 'K', padL - 5, vT + vH / 2 + 4);
 
         // ── 分隔線 ──
         ctx.strokeStyle = 'rgba(100,160,255,0.15)';
