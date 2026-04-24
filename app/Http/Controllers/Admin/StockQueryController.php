@@ -152,26 +152,32 @@ class StockQueryController extends Controller
 
     private function fetchPriceHistory(string $code): array
     {
-        $symbol = $code . '.TW';
-        $url    = "https://query1.finance.yahoo.com/v8/finance/chart/{$symbol}";
+        $client  = new Client(['timeout' => 10]);
+        $headers = [
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept'     => 'application/json, text/plain, */*',
+        ];
+        $query = ['interval' => '1d', 'range' => '1mo'];
+
+        // 上市用 .TW，上櫃用 .TWO，自動 fallback
+        $symbol = null;
+        foreach ([$code . '.TW', $code . '.TWO'] as $try) {
+            try {
+                $res    = $client->get("https://query2.finance.yahoo.com/v8/finance/chart/{$try}", ['query' => $query, 'headers' => $headers]);
+                $data   = json_decode((string) $res->getBody(), true);
+                if (!empty($data['chart']['result'][0]['timestamp'])) {
+                    $symbol = $try;
+                    break;
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+
+        if (!$symbol) return [];
 
         try {
-            $client = new Client(['timeout' => 10]);
-            $res    = $client->get($url, [
-                'query' => [
-                    'interval'       => '1d',
-                    'range'          => '1mo',
-                    'region'         => 'TW',
-                    'lang'           => 'zh-Hant-TW',
-                    'includePrePost' => 'false',
-                ],
-                'headers' => [
-                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                    'Referer'    => "https://tw.stock.yahoo.com/quote/{$symbol}",
-                    'Accept'     => 'application/json, text/plain, */*',
-                ],
-            ]);
-
+            $res    = $client->get("https://query2.finance.yahoo.com/v8/finance/chart/{$symbol}", ['query' => $query, 'headers' => $headers]);
             $data   = json_decode((string) $res->getBody(), true);
             $result = $data['chart']['result'][0] ?? null;
             if (!$result) return [];
