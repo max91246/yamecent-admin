@@ -88,7 +88,7 @@
                     <div class="card">
                         <div class="card-body">
                             <h4 class="card-title">近10個交易日股價走勢</h4>
-                            <canvas id="priceChart" height="80"></canvas>
+                            <canvas id="priceChart" style="width:100%; height:260px;"></canvas>
                             <div class="table-responsive mt-3">
                                 <table class="table table-sm table-hover">
                                     <thead>
@@ -201,7 +201,81 @@
 
 <script>
     const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
-    let priceChartInstance = null;
+    function drawCandlesticks(canvasId, rawData) {
+        const canvas = document.getElementById(canvasId);
+        const dpr    = window.devicePixelRatio || 1;
+        const W      = canvas.offsetWidth;
+        const H      = 260;
+        canvas.width  = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width  = W + 'px';
+        canvas.style.height = H + 'px';
+
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, W, H);
+
+        const data   = [...rawData].reverse(); // 舊→新
+        const n      = data.length;
+        const padL   = 58, padR = 16, padT = 16, padB = 40;
+        const chartW = W - padL - padR;
+        const chartH = H - padT - padB;
+
+        const allPrices = data.flatMap(d => [d.high, d.low]);
+        const minP = Math.min(...allPrices);
+        const maxP = Math.max(...allPrices);
+        const range = maxP - minP || 1;
+        const pricePad = range * 0.05;
+        const yMin = minP - pricePad;
+        const yMax = maxP + pricePad;
+
+        const toY = p => padT + chartH - ((p - yMin) / (yMax - yMin)) * chartH;
+        const toX = i => padL + (i + 0.5) * (chartW / n);
+
+        // 格線
+        ctx.strokeStyle = 'rgba(100,160,255,0.08)';
+        ctx.lineWidth   = 1;
+        const gridLines = 5;
+        for (let g = 0; g <= gridLines; g++) {
+            const y = padT + (g / gridLines) * chartH;
+            ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke();
+            const price = yMax - (g / gridLines) * (yMax - yMin);
+            ctx.fillStyle = '#718096';
+            ctx.font      = '11px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(price.toFixed(1), padL - 5, y + 4);
+        }
+
+        // K 棒
+        const candleW = Math.max(4, Math.floor(chartW / n * 0.6));
+
+        data.forEach((d, i) => {
+            const x      = toX(i);
+            const isUp   = d.close >= d.open;
+            const color  = isUp ? '#68d391' : '#fc8181';
+            const bodyTop    = toY(Math.max(d.open, d.close));
+            const bodyBottom = toY(Math.min(d.open, d.close));
+            const bodyH      = Math.max(1, bodyBottom - bodyTop);
+
+            // 影線
+            ctx.strokeStyle = color;
+            ctx.lineWidth   = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, toY(d.high));
+            ctx.lineTo(x, toY(d.low));
+            ctx.stroke();
+
+            // 實體
+            ctx.fillStyle = color;
+            ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
+
+            // 日期 X 軸
+            ctx.fillStyle  = '#718096';
+            ctx.font       = '10px sans-serif';
+            ctx.textAlign  = 'center';
+            ctx.fillText(d.date.substring(5), x, H - 10);
+        });
+    }
 
     document.getElementById('stockCode').addEventListener('keydown', e => {
         if (e.key === 'Enter') doQuery();
@@ -388,37 +462,8 @@
                 </tr>`;
             });
 
-            // Chart.js 折線圖（舊→新）
-            const sorted = [...data.history].reverse();
-            const labels = sorted.map(d => d.date.substring(5));
-            const closes = sorted.map(d => d.close);
-
-            if (priceChartInstance) priceChartInstance.destroy();
-            priceChartInstance = new Chart(document.getElementById('priceChart'), {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [{
-                        label: '收盤價',
-                        data: closes,
-                        borderColor: '#63b3ed',
-                        backgroundColor: 'rgba(99,179,237,0.08)',
-                        borderWidth: 2,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#63b3ed',
-                        fill: true,
-                        tension: 0.3,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { labels: { color: '#a0aec0' } } },
-                    scales: {
-                        x: { ticks: { color: '#718096' }, grid: { color: 'rgba(100,160,255,0.08)' } },
-                        y: { ticks: { color: '#718096' }, grid: { color: 'rgba(100,160,255,0.08)' } },
-                    }
-                }
-            });
+            // K 線圖（純 canvas）
+            drawCandlesticks('priceChart', data.history);
         } else {
             historyRow.style.display = 'none';
         }
