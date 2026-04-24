@@ -119,6 +119,9 @@ Route::group([
         // AV 女優
         $route->get('av/actresses', 'Admin\AvActressController@index');
         $route->get('av/news',      'Admin\AvActressController@news');
+
+        // AV 新片速報
+        $route->get('av/videos',    'Admin\AvVideoController@news');
     });
 
 });

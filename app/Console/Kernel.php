@@ -62,6 +62,12 @@ class Kernel extends ConsoleKernel
                  ->timezone('Asia/Taipei')
                  ->dailyAt('01:00')
                  ->withoutOverlapping();
+
+        // 每日 01:30 / 13:30 爬取 MissAV 新片（前 3 頁）
+        $schedule->command('scrape:av-videos --pages=3 --list=new')
+                 ->timezone('Asia/Taipei')
+                 ->twiceDaily(1, 13)
+                 ->withoutOverlapping();
     }
 
     /**
