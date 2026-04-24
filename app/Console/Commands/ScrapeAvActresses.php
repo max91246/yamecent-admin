@@ -46,19 +46,20 @@ class ScrapeAvActresses extends Command
             $this->line("  找到 " . count($cards) . " 位女優");
 
             foreach ($cards as $card) {
-                $detail = $this->fetchActressDetail($card['slug']);
-                if (!$detail) {
-                    $fail++;
-                    continue;
-                }
-
-                $data = array_merge($card, $detail);
-
-                $exists = AvActress::where('missav_slug', $data['slug'])->exists();
+                $exists = AvActress::where('missav_slug', $card['slug'])->exists();
                 if ($exists) {
                     $skip++;
                     continue;
                 }
+
+                // 嘗試取詳細資料，失敗不阻止存入
+                $detail = $this->fetchActressDetail($card['slug']) ?? [];
+                if (empty($detail)) {
+                    $fail++;
+                    $this->warn("  [詳細取得失敗] {$card['name']}，僅存基本資料");
+                }
+
+                $data = array_merge($card, $detail);
 
                 AvActress::create([
                     'name'        => $data['name'],
