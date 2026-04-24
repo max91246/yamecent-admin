@@ -44,6 +44,7 @@
                         <div class="mb-2">
                             @if($actress->image_url)
                                 <img src="{{ $actress->image_url }}" alt="{{ $actress->name }}"
+                                     referrerpolicy="no-referrer"
                                      style="width:80px;height:80px;border-radius:50%;object-fit:cover;object-position:top;">
                             @else
                                 <div style="width:80px;height:80px;border-radius:50%;background:#1a3a6e;display:inline-flex;align-items:center;justify-content:center;">
