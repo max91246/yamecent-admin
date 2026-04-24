@@ -37,7 +37,7 @@ class TgBotController extends Controller
     {
         $name     = trim($request->input('name', ''));
         $token    = trim($request->input('token', ''));
-        $type     = (int) $request->input('type', 1);
+        $type     = $request->input('type', 'stock');
         $isActive = (int) $request->input('is_active', 1);
         $remark   = trim($request->input('remark', ''));
 
@@ -76,7 +76,7 @@ class TgBotController extends Controller
         $bot      = TgBot::findOrFail($id);
         $name     = trim($request->input('name', ''));
         $token    = trim($request->input('token', ''));
-        $type     = (int) $request->input('type', 1);
+        $type     = $request->input('type', 'stock');
         $isActive = (int) $request->input('is_active', 1);
         $remark   = trim($request->input('remark', ''));
 
