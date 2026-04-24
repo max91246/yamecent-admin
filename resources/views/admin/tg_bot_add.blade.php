@@ -22,7 +22,8 @@
                                 <div class="form-group">
                                     <label>類型</label>
                                     <select class="form-control" name="type">
-                                        <option value="1">指數查詢</option>
+                                        <option value="stock">📈 股票指數</option>
+                                        <option value="av">🔞 AV 查詢</option>
                                     </select>
                                 </div>
 
