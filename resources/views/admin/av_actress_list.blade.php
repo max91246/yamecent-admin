@@ -16,17 +16,80 @@
             <div class="col-lg-12 grid-margin">
                 <div class="card">
                     <div class="card-body py-3">
-                        <form method="GET" action="" class="d-flex align-items-center flex-wrap" style="gap:8px;">
-                            <input type="text" name="name" class="form-control form-control-sm" style="width:200px;"
-                                   placeholder="搜尋姓名" value="{{ request('name') }}">
-                            <select name="is_active" class="form-control form-control-sm" style="width:120px;">
-                                <option value="">全部狀態</option>
-                                <option value="1" {{ request('is_active') === '1' ? 'selected' : '' }}>在役</option>
-                                <option value="0" {{ request('is_active') === '0' ? 'selected' : '' }}>引退</option>
-                            </select>
-                            <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
-                            <a href="{{ url()->current() }}" class="btn btn-sm btn-secondary">重置</a>
-                            <span class="text-muted small ml-2">共 {{ $list->total() }} 筆</span>
+                        <form method="GET" action="">
+                            <div class="row" style="gap:0;">
+                                {{-- 第一行 --}}
+                                <div class="col-md-2 mb-2">
+                                    <input type="text" name="name" class="form-control form-control-sm"
+                                           placeholder="姓名搜尋" value="{{ request('name') }}">
+                                </div>
+                                <div class="col-md-2 mb-2">
+                                    <select name="is_active" class="form-control form-control-sm">
+                                        <option value="">全部狀態</option>
+                                        <option value="1" {{ request('is_active') === '1' ? 'selected' : '' }}>在役</option>
+                                        <option value="0" {{ request('is_active') === '0' ? 'selected' : '' }}>引退</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2 mb-2">
+                                    <select name="debut_year" class="form-control form-control-sm">
+                                        <option value="">出道年份</option>
+                                        @for($y = 2026; $y >= 2000; $y--)
+                                            <option value="{{ $y }}" {{ request('debut_year') == $y ? 'selected' : '' }}>{{ $y }}</option>
+                                        @endfor
+                                    </select>
+                                </div>
+                                <div class="col-md-2 mb-2">
+                                    <select name="cup" class="form-control form-control-sm">
+                                        <option value="">罩杯</option>
+                                        @foreach(['A','B','C','D','E','F','G','H','I','J','K'] as $c)
+                                            <option value="{{ $c }}" {{ request('cup') === $c ? 'selected' : '' }}>{{ $c }} 罩</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mt-1">
+                                <div class="col-md-3 mb-2">
+                                    <div class="d-flex align-items-center" style="gap:6px;">
+                                        <span class="text-muted small" style="white-space:nowrap;">身高</span>
+                                        <select name="height_min" class="form-control form-control-sm">
+                                            <option value="">最低</option>
+                                            @for($h = 145; $h <= 175; $h += 5)
+                                                <option value="{{ $h }}" {{ request('height_min') == $h ? 'selected' : '' }}>{{ $h }}cm</option>
+                                            @endfor
+                                        </select>
+                                        <span class="text-muted">~</span>
+                                        <select name="height_max" class="form-control form-control-sm">
+                                            <option value="">最高</option>
+                                            @for($h = 145; $h <= 175; $h += 5)
+                                                <option value="{{ $h }}" {{ request('height_max') == $h ? 'selected' : '' }}>{{ $h }}cm</option>
+                                            @endfor
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-2">
+                                    <div class="d-flex align-items-center" style="gap:6px;">
+                                        <span class="text-muted small" style="white-space:nowrap;">腰圍</span>
+                                        <select name="waist_min" class="form-control form-control-sm">
+                                            <option value="">最小</option>
+                                            @for($w = 48; $w <= 70; $w += 2)
+                                                <option value="{{ $w }}" {{ request('waist_min') == $w ? 'selected' : '' }}>{{ $w }}</option>
+                                            @endfor
+                                        </select>
+                                        <span class="text-muted">~</span>
+                                        <select name="waist_max" class="form-control form-control-sm">
+                                            <option value="">最大</option>
+                                            @for($w = 48; $w <= 70; $w += 2)
+                                                <option value="{{ $w }}" {{ request('waist_max') == $w ? 'selected' : '' }}>{{ $w }}</option>
+                                            @endfor
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-auto mb-2">
+                                    <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
+                                    <a href="{{ url()->current() }}" class="btn btn-sm btn-secondary ml-1">重置</a>
+                                    <span class="text-muted small ml-2">共 {{ $list->total() }} 筆</span>
+                                </div>
+                            </div>
                         </form>
                     </div>
                 </div>
