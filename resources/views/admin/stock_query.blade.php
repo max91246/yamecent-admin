@@ -204,7 +204,7 @@
     function drawCandlesticks(canvasId, rawData) {
         const canvas = document.getElementById(canvasId);
         const dpr    = window.devicePixelRatio || 1;
-        const W      = canvas.offsetWidth;
+        const W      = canvas.parentElement.clientWidth || canvas.offsetWidth || 800;
         const H      = 260;
         canvas.width  = W * dpr;
         canvas.height = H * dpr;
@@ -462,8 +462,8 @@
                 </tr>`;
             });
 
-            // K 線圖（純 canvas）
-            drawCandlesticks('priceChart', data.history);
+            // K 線圖（純 canvas）— defer 一幀確保 display:block 已生效
+            requestAnimationFrame(() => drawCandlesticks('priceChart', data.history));
         } else {
             historyRow.style.display = 'none';
         }
