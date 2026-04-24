@@ -46,35 +46,33 @@ class ScrapeAvActresses extends Command
             $this->line("  找到 " . count($cards) . " 位女優");
 
             foreach ($cards as $card) {
-                $exists = AvActress::where('missav_slug', $card['slug'])->exists();
-                if ($exists) {
-                    $skip++;
-                    continue;
-                }
-
-                // 嘗試取詳細資料，失敗不阻止存入
-                $detail = $this->fetchActressDetail($card['slug']) ?? [];
+                // 嘗試取詳細資料
+                $detail = $this->fetchActressDetail($card['detail_url']) ?? [];
                 if (empty($detail)) {
                     $fail++;
-                    $this->warn("  [詳細取得失敗] {$card['name']}，僅存基本資料");
+                    $this->warn("  [詳細取得失敗] {$card['name']}");
                 }
 
-                $data = array_merge($card, $detail);
+                $data    = array_merge($card, $detail);
+                $payload = [
+                    'name'       => $data['name'],
+                    'image_url'  => $data['image_url'] ?? null,
+                    'height'     => $data['height'] ?? null,
+                    'bust'       => $data['bust'] ?? null,
+                    'waist'      => $data['waist'] ?? null,
+                    'hip'        => $data['hip'] ?? null,
+                    'birthday'   => $data['birthday'] ?? null,
+                    'debut_year' => $data['debut_year'] ?? null,
+                    'is_active'  => true,
+                ];
 
-                AvActress::create([
-                    'name'        => $data['name'],
-                    'missav_slug' => $data['slug'],
-                    'image_url'   => $data['image_url'] ?? null,
-                    'height'      => $data['height'] ?? null,
-                    'bust'        => $data['bust'] ?? null,
-                    'waist'       => $data['waist'] ?? null,
-                    'hip'         => $data['hip'] ?? null,
-                    'birthday'    => $data['birthday'] ?? null,
-                    'debut_year'  => $data['debut_year'] ?? null,
-                    'is_active'   => true,
-                ]);
+                $isNew = !AvActress::where('missav_slug', $data['slug'])->exists();
+                AvActress::updateOrCreate(
+                    ['missav_slug' => $data['slug']],
+                    $payload
+                );
 
-                $this->line("  [新增] {$data['name']}");
+                $this->line('  [' . ($isNew ? '新增' : '更新') . "] {$data['name']}");
                 $saved++;
 
                 sleep(1);
@@ -141,19 +139,25 @@ class ScrapeAvActresses extends Command
             // 頭像
             $imageUrl = $img->length ? $img->item(0)->getAttribute('src') : null;
 
+            // 保留完整 detail URL（含語言前綴，如 /dm248/actresses/波多野結衣）
+            $detailUrl = str_starts_with($href, 'http')
+                ? $href
+                : 'https://missav.ws' . $href;
+
             $results[] = [
-                'name'      => $name,
-                'slug'      => $slug,
-                'image_url' => $imageUrl,
+                'name'       => $name,
+                'slug'       => $slug,
+                'image_url'  => $imageUrl,
+                'detail_url' => $detailUrl,
             ];
         }
 
         return $results;
     }
 
-    private function fetchActressDetail(string $slug): ?array
+    private function fetchActressDetail(string $detailUrl): ?array
     {
-        $url  = 'https://missav.ws/actresses/' . rawurlencode($slug);
+        $url  = $detailUrl;
         $html = $this->fetchHtml($url);
         if (!$html) {
             return null;
