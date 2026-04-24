@@ -111,6 +111,10 @@ Route::group([
 
         // 處置股查詢
         $route->get('disposal-stock/list', 'Admin\DisposalStockController@index');
+
+        // 台股查詢
+        $route->get('stock-query',          'Admin\StockQueryController@index');
+        $route->post('stock-query/search',  'Admin\StockQueryController@query');
     });
 
 });
