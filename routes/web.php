@@ -115,6 +115,9 @@ Route::group([
         // 台股查詢
         $route->get('stock-query',          'Admin\StockQueryController@index');
         $route->post('stock-query/search',  'Admin\StockQueryController@query');
+
+        // AV 女優
+        $route->get('av/actresses', 'Admin\AvActressController@index');
     });
 
 });
