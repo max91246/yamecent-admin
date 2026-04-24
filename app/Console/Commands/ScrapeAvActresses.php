@@ -10,9 +10,13 @@ use Illuminate\Support\Facades\Log;
 class ScrapeAvActresses extends Command
 {
     protected $signature   = 'scrape:av-actresses
-                              {--pages=5 : 爬取頁數（每頁約 20 筆）}
-                              {--delay=3 : 每頁請求間隔秒數}';
-    protected $description = '從 MissAV 爬取 AV 女優資料存入 ya_av_actresses';
+                              {--pages=5   : 爬取頁數（每頁約 24 筆）}
+                              {--delay=3   : 每頁請求間隔秒數}
+                              {--new-only  : 只爬第 1 頁新人（排程用）}';
+    protected $description = '從 MissAV 爬取 AV 女優資料（按出道日期排序）';
+
+    private const BASE      = 'https://missav.ai';
+    private const LIST_URL  = 'https://missav.ai/actresses?sort=debut&page=';
 
     private Client $client;
     private string $flareSolverrUrl;
@@ -26,17 +30,16 @@ class ScrapeAvActresses extends Command
         }
 
         $this->client = new Client(['timeout' => 60]);
-        $maxPages     = (int) $this->option('pages');
-        $delay        = (int) $this->option('delay');
-        $saved = $skip = $fail = 0;
+        $maxPages = $this->option('new-only') ? 1 : (int) $this->option('pages');
+        $delay    = (int) $this->option('delay');
+        $saved = $updated = $fail = 0;
 
-        $this->info("開始爬取 MissAV 女優，共 {$maxPages} 頁...");
+        $this->info("開始爬取 MissAV 女優（按出道排序），共 {$maxPages} 頁...");
         Log::channel('tg_webhook')->info('[AV爬蟲] 開始', ['pages' => $maxPages]);
 
         for ($page = 1; $page <= $maxPages; $page++) {
             $this->line("── 第 {$page} 頁 ──");
-            $url      = "https://missav.ws/actresses?page={$page}";
-            $html     = $this->fetchHtml($url);
+            $html = $this->fetchHtml(self::LIST_URL . $page);
             if (!$html) {
                 $this->warn("第 {$page} 頁取得失敗，略過");
                 continue;
@@ -46,11 +49,15 @@ class ScrapeAvActresses extends Command
             $this->line("  找到 " . count($cards) . " 位女優");
 
             foreach ($cards as $card) {
-                // 嘗試取詳細資料
                 $detail = $this->fetchActressDetail($card['detail_url']) ?? [];
                 if (empty($detail)) {
                     $fail++;
-                    $this->warn("  [詳細取得失敗] {$card['name']}");
+                    $this->warn("  [詳細失敗] {$card['name']}");
+                }
+
+                // 出道年從列表頁取得，detail 沒有就用列表的
+                if (!empty($card['debut_year']) && empty($detail['debut_year'])) {
+                    $detail['debut_year'] = $card['debut_year'];
                 }
 
                 $data    = array_merge($card, $detail);
@@ -72,9 +79,10 @@ class ScrapeAvActresses extends Command
                     $payload
                 );
 
-                $this->line('  [' . ($isNew ? '新增' : '更新') . "] {$data['name']}");
-                $saved++;
+                $this->line('  [' . ($isNew ? '新增' : '更新') . "] {$data['name']}" .
+                    (!empty($data['debut_year']) ? " ({$data['debut_year']}出道)" : ''));
 
+                $isNew ? $saved++ : $updated++;
                 sleep(1);
             }
 
@@ -83,8 +91,8 @@ class ScrapeAvActresses extends Command
             }
         }
 
-        $this->info("完成。新增 {$saved}，略過 {$skip}，失敗 {$fail}。");
-        Log::channel('tg_webhook')->info('[AV爬蟲] 完成', compact('saved', 'skip', 'fail'));
+        $this->info("完成。新增 {$saved}，更新 {$updated}，詳細失敗 {$fail}。");
+        Log::channel('tg_webhook')->info('[AV爬蟲] 完成', compact('saved', 'updated', 'fail'));
         return 0;
     }
 
@@ -94,15 +102,14 @@ class ScrapeAvActresses extends Command
             $res  = $this->client->post($this->flareSolverrUrl, [
                 'json' => ['cmd' => 'request.get', 'url' => $url, 'maxTimeout' => 30000],
             ]);
-            $body = json_decode((string) $res->getBody(), true);
+            $body   = json_decode((string) $res->getBody(), true);
             $status = $body['status'] ?? 'unknown';
             if ($status !== 'ok') {
-                $this->warn("    FlareSolverr status: {$status} | " . ($body['message'] ?? ''));
+                $this->warn("    FlareSolverr: {$status} | " . ($body['message'] ?? ''));
                 return null;
             }
-            $code = $body['solution']['status'] ?? 0;
-            if ($code !== 200) {
-                $this->warn("    HTTP {$code}");
+            if (($body['solution']['status'] ?? 0) !== 200) {
+                $this->warn("    HTTP " . ($body['solution']['status'] ?? '?'));
                 return null;
             }
             return $body['solution']['response'] ?? null;
@@ -117,44 +124,52 @@ class ScrapeAvActresses extends Command
         $dom = new \DOMDocument();
         @$dom->loadHTML($html);
         $xpath   = new \DOMXPath($dom);
-        $links   = $xpath->query('//a[contains(@href,"/actresses/")]');
         $results = [];
         $seen    = [];
 
-        foreach ($links as $a) {
+        // missav.ai 列表頁結構：li > div.space-y-4 > a[href=/actresses/slug]
+        $items = $xpath->query('//li[.//a[contains(@href,"/actresses/")]]');
+
+        foreach ($items as $li) {
+            $a    = $xpath->query('.//a[contains(@href,"/actresses/")]', $li)->item(0);
+            if (!$a) continue;
+
             $href = $a->getAttribute('href');
-            // 只要女優個人頁，排除 ranking / 純列表
-            if (!preg_match('#/actresses/([^/?]+)$#u', $href, $m)) {
-                continue;
-            }
+            if (!preg_match('#/actresses/([^/?]+)$#u', $href, $m)) continue;
+
             $slug = urldecode($m[1]);
-            if (in_array($slug, ['ranking']) || isset($seen[$slug])) {
-                continue;
-            }
+            if (in_array($slug, ['ranking']) || isset($seen[$slug])) continue;
             $seen[$slug] = true;
 
-            // 取名字（img alt 或 a title）
-            $img  = $xpath->query('.//img', $a);
-            $name = $img->length ? $img->item(0)->getAttribute('alt') : '';
-            if (!$name) {
-                $name = $a->getAttribute('title');
-            }
-            if (!$name || mb_strlen($name) < 2) {
-                continue;
+            // 姓名：h4.text-nord13
+            $h4   = $xpath->query('.//h4', $li)->item(0);
+            $name = $h4 ? trim($h4->textContent) : '';
+            if (!$name || mb_strlen($name) < 2) continue;
+
+            // 圖片
+            $imgNode  = $xpath->query('.//img', $li)->item(0);
+            $imageUrl = ($imgNode instanceof \DOMElement) ? $imgNode->getAttribute('src') : null;
+
+            // 出道年份：<p>2026 出道</p>
+            $debutYear = null;
+            $paras = $xpath->query('.//p', $li);
+            foreach ($paras as $p) {
+                $text = trim($p->textContent);
+                if (preg_match('/^(\d{4})\s*出道/', $text, $dy)) {
+                    $debutYear = (int) $dy[1];
+                    break;
+                }
             }
 
-            // 頭像
-            $imageUrl = $img->length ? $img->item(0)->getAttribute('src') : null;
-
-            // 保留完整 detail URL（含語言前綴，如 /dm248/actresses/波多野結衣）
             $detailUrl = str_starts_with($href, 'http')
                 ? $href
-                : 'https://missav.ws' . $href;
+                : self::BASE . $href;
 
             $results[] = [
                 'name'       => $name,
                 'slug'       => $slug,
                 'image_url'  => $imageUrl,
+                'debut_year' => $debutYear,
                 'detail_url' => $detailUrl,
             ];
         }
@@ -164,25 +179,18 @@ class ScrapeAvActresses extends Command
 
     private function fetchActressDetail(string $detailUrl): ?array
     {
-        $url  = $detailUrl;
-        $this->line("    → 詳細 URL：{$url}");
-        $html = $this->fetchHtml($url);
-        $this->line("    → HTML 長度：" . ($html ? strlen($html) : 'NULL'));
-        if (!$html) {
-            return null;
-        }
+        $html = $this->fetchHtml($detailUrl);
+        if (!$html) return null;
 
         $dom = new \DOMDocument();
         @$dom->loadHTML($html);
-        $xpath = new \DOMXPath($dom);
-
+        $xpath  = new \DOMXPath($dom);
         $result = [];
 
-        // 資料在 class="text-nord9" 的 div 內的 <p> 標籤
-        // 格式：<p>163cm / 35E - 23 - 33</p><p>1988-05-24 (37歲)</p>
-        $infoDiv = $xpath->query('//div[contains(@class,"text-nord9")]//p');
-        $texts   = [];
-        foreach ($infoDiv as $p) {
+        // 資料在 class 含 text-nord9 的 div 裡的 <p> 標籤
+        $paras = $xpath->query('//div[contains(@class,"text-nord9")]//p');
+        $texts = [];
+        foreach ($paras as $p) {
             $t = trim($p->textContent);
             if ($t) $texts[] = $t;
         }
@@ -193,8 +201,7 @@ class ScrapeAvActresses extends Command
             $result['height'] = (int) $m[1];
         }
 
-        // 三圍：35E - 23 - 33（用 / 或 - 分隔）
-        // 格式：163cm / 35E - 23 - 33
+        // 三圍：35E - 23 - 33
         if (preg_match('/(\d{2,3}[A-Za-z]?)\s*[-–]\s*(\d{2,3})\s*[-–]\s*(\d{2,3})/', $combinedText, $m)) {
             $result['bust']  = $m[1];
             $result['waist'] = (int) $m[2];
@@ -204,6 +211,12 @@ class ScrapeAvActresses extends Command
         // 生日：1988-05-24
         if (preg_match('/(\d{4})-(\d{2})-(\d{2})/', $combinedText, $m)) {
             $result['birthday'] = "{$m[1]}-{$m[2]}-{$m[3]}";
+        }
+
+        // 圖片（detail 頁有更高解析度）
+        $imgNode = $xpath->query('//div[contains(@class,"actor-avatar") or contains(@class,"overflow-hidden rounded-full")]//img')->item(0);
+        if ($imgNode instanceof \DOMElement) {
+            $result['image_url'] = $imgNode->getAttribute('src');
         }
 
         return $result;

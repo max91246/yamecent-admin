@@ -56,6 +56,12 @@ class Kernel extends ConsoleKernel
                  ->timezone('Asia/Taipei')
                  ->dailyAt('08:00')
                  ->withoutOverlapping();
+
+        // 每日 01:00 爬取 MissAV 第一頁新出道女優
+        $schedule->command('scrape:av-actresses --new-only --delay=2')
+                 ->timezone('Asia/Taipei')
+                 ->dailyAt('01:00')
+                 ->withoutOverlapping();
     }
 
     /**
