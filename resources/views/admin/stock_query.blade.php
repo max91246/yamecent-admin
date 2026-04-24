@@ -218,19 +218,19 @@
         const data = [...rawData].reverse(); // 舊→新
         const n    = data.length;
 
-        // 版面分割：K 線 65%，分隔 4px，成交量 30%，X 軸標籤 6%
+        // 版面分割：固定 X 軸標籤區 24px，其餘分 K 線 / gap / 成交量
         const padL   = 62, padR = 16;
         const chartW = W - padL - padR;
-        const totalH = H;
-        const xLabelH  = 28;
-        const gapH     = 8;
-        const volRatio  = 0.28;
-        const kH  = Math.floor((totalH - xLabelH - gapH) * (1 - volRatio));
-        const vH  = Math.floor((totalH - xLabelH - gapH) * volRatio);
-        const kT  = 16;                    // K 線區頂部
-        const kB  = kT + kH;              // K 線區底部
-        const vT  = kB + gapH;            // 成交量區頂部
-        const vB  = vT + vH;              // 成交量區底部
+        const xLabelH = 24;
+        const kT      = 16;
+        const vB      = H - xLabelH;       // 成交量區底部（固定留 xLabelH 給日期）
+        const gapH    = 8;
+        const volRatio = 0.28;
+        const usable  = vB - kT;
+        const kH      = Math.floor(usable * (1 - volRatio) - gapH / 2);
+        const kB      = kT + kH;
+        const vT      = kB + gapH;
+        const vH      = vB - vT;
 
         const toX = i => padL + (i + 0.5) * (chartW / n);
         const candleW = Math.max(3, Math.floor(chartW / n * 0.65));
@@ -314,7 +314,7 @@
                 ctx.fillStyle  = '#718096';
                 ctx.font       = '10px sans-serif';
                 ctx.textAlign  = 'center';
-                ctx.fillText(d.date.substring(5), x, vB + 18);
+                ctx.fillText(d.date.substring(5), x, H - 6);
             }
         });
     }
