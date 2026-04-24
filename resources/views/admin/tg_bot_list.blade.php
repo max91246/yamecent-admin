@@ -72,9 +72,9 @@
                                             <span class="text-muted small">{{ substr($item->token, 0, 20) }}...</span>
                                         </td>
                                         <td>
-                                            @if(in_array($item->type, ['stock', '1', 1]))
+                                            @if($item->type == 1)
                                                 <span class="badge badge-info">📈 股票指數</span>
-                                            @elseif($item->type === 'av')
+                                            @elseif($item->type == 2)
                                                 <span class="badge badge-danger">🔞 AV 查詢</span>
                                             @else
                                                 <span class="badge badge-secondary">{{ $item->type }}</span>

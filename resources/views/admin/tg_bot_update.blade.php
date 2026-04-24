@@ -23,8 +23,8 @@
                                 <div class="form-group">
                                     <label>類型</label>
                                     <select class="form-control" name="type">
-                                        <option value="stock" {{ in_array($bot->type, ['stock', '1', 1]) ? 'selected' : '' }}>📈 股票指數</option>
-                                        <option value="av"    {{ $bot->type === 'av' ? 'selected' : '' }}>🔞 AV 查詢</option>
+                                        <option value="1" {{ $bot->type == 1 ? 'selected' : '' }}>📈 股票指數</option>
+                                        <option value="2" {{ $bot->type == 2 ? 'selected' : '' }}>🔞 AV 查詢</option>
                                     </select>
                                 </div>
 
