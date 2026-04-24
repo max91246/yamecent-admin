@@ -158,7 +158,9 @@ class ScrapeAvActresses extends Command
     private function fetchActressDetail(string $detailUrl): ?array
     {
         $url  = $detailUrl;
+        $this->line("    → 詳細 URL：{$url}");
         $html = $this->fetchHtml($url);
+        $this->line("    → HTML 長度：" . ($html ? strlen($html) : 'NULL'));
         if (!$html) {
             return null;
         }
