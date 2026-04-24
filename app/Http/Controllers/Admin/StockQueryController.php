@@ -33,6 +33,7 @@ class StockQueryController extends Controller
         $revenues      = $this->fetchRevenue($code);
         $news          = $this->fetchNews($code);
         $disposal      = $this->getDisposal($code);
+        $history       = $this->fetchPriceHistory($code);
 
         return response()->json([
             'code'          => $code,
@@ -41,6 +42,7 @@ class StockQueryController extends Controller
             'revenues'      => $revenues,
             'news'          => $news,
             'disposal'      => $disposal,
+            'history'       => $history,
         ]);
     }
 
@@ -145,6 +147,53 @@ class StockQueryController extends Controller
             return !empty($revenues) ? array_slice($revenues, 0, 6) : null;
         } catch (\Exception $e) {
             return null;
+        }
+    }
+
+    private function fetchPriceHistory(string $code): array
+    {
+        $symbol = $code . '.TW';
+        $url    = "https://query2.finance.yahoo.com/v8/finance/chart/{$symbol}";
+
+        try {
+            $client = new Client(['timeout' => 10]);
+            $res    = $client->get($url, [
+                'query' => ['interval' => '1d', 'range' => '1mo'],
+                'headers' => [
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'Accept'     => 'application/json, text/plain, */*',
+                ],
+            ]);
+
+            $data   = json_decode((string) $res->getBody(), true);
+            $result = $data['chart']['result'][0] ?? null;
+            if (!$result) return [];
+
+            $timestamps = $result['timestamp'] ?? [];
+            $ohlcv      = $result['indicators']['quote'][0] ?? [];
+            $opens      = $ohlcv['open']   ?? [];
+            $highs      = $ohlcv['high']   ?? [];
+            $lows       = $ohlcv['low']    ?? [];
+            $closes     = $ohlcv['close']  ?? [];
+            $volumes    = $ohlcv['volume'] ?? [];
+
+            $candles = [];
+            foreach ($timestamps as $i => $ts) {
+                $close = $closes[$i] ?? null;
+                if ($close === null) continue;
+                $candles[] = [
+                    'date'   => date('Y-m-d', $ts),
+                    'open'   => round($opens[$i]  ?? 0, 2),
+                    'high'   => round($highs[$i]  ?? 0, 2),
+                    'low'    => round($lows[$i]   ?? 0, 2),
+                    'close'  => round($close,          2),
+                    'volume' => (int) round(($volumes[$i] ?? 0) / 1000),
+                ];
+            }
+
+            return array_slice(array_reverse($candles), 0, 10);
+        } catch (\Exception $e) {
+            return [];
         }
     }
 

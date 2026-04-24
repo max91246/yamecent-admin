@@ -82,6 +82,34 @@
                 </div>
             </div>
 
+            {{-- 近10日股價走勢 --}}
+            <div class="row" id="historyRow" style="display:none;">
+                <div class="col-lg-12 grid-margin">
+                    <div class="card">
+                        <div class="card-body">
+                            <h4 class="card-title">近10個交易日股價走勢</h4>
+                            <canvas id="priceChart" height="80"></canvas>
+                            <div class="table-responsive mt-3">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>日期</th>
+                                            <th class="text-right">開盤</th>
+                                            <th class="text-right">最高</th>
+                                            <th class="text-right">最低</th>
+                                            <th class="text-right">收盤</th>
+                                            <th class="text-right">漲跌</th>
+                                            <th class="text-right">成交量（張）</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="historyBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {{-- 三大法人 + 營收 --}}
             <div class="row">
                 {{-- 三大法人 --}}
@@ -173,6 +201,7 @@
 
 <script>
     const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+    let priceChartInstance = null;
 
     document.getElementById('stockCode').addEventListener('keydown', e => {
         if (e.key === 'Enter') doQuery();
@@ -332,6 +361,66 @@
             });
         } else {
             document.getElementById('newsNoData').style.display = 'block';
+        }
+
+        // 近10日走勢
+        const historyRow  = document.getElementById('historyRow');
+        const historyBody = document.getElementById('historyBody');
+        historyBody.innerHTML = '';
+
+        if (data.history && data.history.length) {
+            historyRow.style.display = 'block';
+
+            // 表格（由新到舊）
+            data.history.forEach((d, i) => {
+                const prev  = data.history[i + 1];
+                const diff  = prev ? (d.close - prev.close) : 0;
+                const sign  = diff >= 0 ? '+' : '';
+                const cls   = diff > 0 ? 'inst-pos' : diff < 0 ? 'inst-neg' : '';
+                historyBody.innerHTML += `<tr>
+                    <td>${d.date}</td>
+                    <td class="text-right">${fmtNum(d.open, 2)}</td>
+                    <td class="text-right">${fmtNum(d.high, 2)}</td>
+                    <td class="text-right">${fmtNum(d.low,  2)}</td>
+                    <td class="text-right"><strong>${fmtNum(d.close, 2)}</strong></td>
+                    <td class="text-right ${cls}">${prev ? sign + fmtNum(diff, 2) : '-'}</td>
+                    <td class="text-right">${fmtNum(d.volume)}</td>
+                </tr>`;
+            });
+
+            // Chart.js 折線圖（舊→新）
+            const sorted = [...data.history].reverse();
+            const labels = sorted.map(d => d.date.substring(5));
+            const closes = sorted.map(d => d.close);
+
+            if (priceChartInstance) priceChartInstance.destroy();
+            priceChartInstance = new Chart(document.getElementById('priceChart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: '收盤價',
+                        data: closes,
+                        borderColor: '#63b3ed',
+                        backgroundColor: 'rgba(99,179,237,0.08)',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#63b3ed',
+                        fill: true,
+                        tension: 0.3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { labels: { color: '#a0aec0' } } },
+                    scales: {
+                        x: { ticks: { color: '#718096' }, grid: { color: 'rgba(100,160,255,0.08)' } },
+                        y: { ticks: { color: '#718096' }, grid: { color: 'rgba(100,160,255,0.08)' } },
+                    }
+                }
+            });
+        } else {
+            historyRow.style.display = 'none';
         }
 
         document.getElementById('resultArea').style.display = 'block';
