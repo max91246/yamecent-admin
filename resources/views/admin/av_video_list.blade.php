@@ -62,31 +62,75 @@
             <div class="col-lg-12 grid-margin">
                 <div class="card">
                     <div class="card-body py-3">
-                        <form method="GET" action="">
-                            <div class="d-flex flex-wrap align-items-center" style="gap:8px;">
-                                <input type="hidden" name="period" value="{{ $period }}">
-                                <input type="text" name="code" class="form-control form-control-sm" style="width:150px;"
-                                       placeholder="番號" value="{{ request('code') }}">
-                                <input type="text" name="actress" class="form-control form-control-sm" style="width:150px;"
-                                       placeholder="女優姓名" value="{{ request('actress') }}">
-                                <input type="text" name="studio" class="form-control form-control-sm" style="width:150px;"
-                                       placeholder="片商" value="{{ request('studio') }}">
-                                <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
-                                <a href="{{ url('admin/av/videos') }}" class="btn btn-sm btn-secondary">重置</a>
+                        <form method="GET" action="" id="filterForm">
+                            {{-- 期間頁籤 --}}
+                            <div class="d-flex flex-wrap align-items-center mb-2" style="gap:6px;">
+                                @foreach(['today' => '🔥 今日', 'week' => '📅 本週', 'month' => '📊 本月', 'all' => '📋 全部'] as $k => $v)
+                                    <a href="{{ url('admin/av/videos') }}?period={{ $k }}"
+                                       class="btn btn-sm {{ $period === $k ? 'btn-primary' : 'btn-outline-secondary' }}">{{ $v }}</a>
+                                @endforeach
+                                <span class="text-muted small ml-auto">共 {{ $list->total() }} 部</span>
+                            </div>
 
-                                <div class="ml-auto">
-                                    @foreach(['today' => '🔥 今日', 'week' => '📅 本週', 'month' => '📊 本月', 'all' => '📋 全部'] as $k => $v)
-                                        <a href="{{ url('admin/av/videos') }}?period={{ $k }}"
-                                           class="btn btn-sm {{ $period === $k ? 'btn-primary' : 'btn-outline-secondary' }}">{{ $v }}</a>
-                                    @endforeach
+                            <input type="hidden" name="period" value="{{ $period }}">
+
+                            {{-- 關鍵字搜尋 --}}
+                            <div class="d-flex flex-wrap align-items-center mb-2" style="gap:8px;">
+                                <input type="text" name="code" class="form-control form-control-sm" style="width:130px;"
+                                       placeholder="番號" value="{{ request('code') }}">
+                                <input type="text" name="actress" class="form-control form-control-sm" style="width:130px;"
+                                       placeholder="女優姓名" value="{{ request('actress') }}">
+                                <input type="text" name="studio" class="form-control form-control-sm" style="width:130px;"
+                                       placeholder="片商" value="{{ request('studio') }}">
+                                <input type="hidden" name="tag" id="tagInput" value="{{ request('tag') }}">
+                                <div class="form-check form-check-inline ml-1">
+                                    <input class="form-check-input" type="checkbox" name="uncensored" value="1" id="chkUncensored"
+                                           {{ request('uncensored') ? 'checked' : '' }}>
+                                    <label class="form-check-label" for="chkUncensored" style="color:#a0aec0;">無碼</label>
                                 </div>
-                                <span class="text-muted small">共 {{ $list->total() }} 部</span>
+                                <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
+                                <a href="{{ url('admin/av/videos') }}?period={{ $period }}" class="btn btn-sm btn-secondary">重置</a>
+                            </div>
+
+                            {{-- 標籤快速篩選 --}}
+                            @php
+                            $quickTags = [
+                                '巨乳','美乳','中出','潮吹','人妻','美少女','OL','制服',
+                                '素人','無碼','高清','4K','企劃','單體','系列','SM',
+                                '女同','3P','口交','肛交','泳裝','護士','教師',
+                            ];
+                            $activeTag = request('tag');
+                            @endphp
+                            <div class="d-flex flex-wrap" style="gap:5px;">
+                                @foreach($quickTags as $t)
+                                <button type="button"
+                                        onclick="selectTag('{{ $t }}')"
+                                        class="btn btn-sm {{ $activeTag === $t ? 'btn-danger' : 'btn-outline-secondary' }}"
+                                        style="font-size:0.75rem;padding:2px 10px;">
+                                    {{ $t }}
+                                </button>
+                                @endforeach
+                                @if($activeTag && !in_array($activeTag, $quickTags))
+                                <span class="badge badge-danger align-self-center">{{ $activeTag }}</span>
+                                @endif
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
         </div>
+
+        <script>
+        function selectTag(tag) {
+            var input = document.getElementById('tagInput');
+            if (input.value === tag) {
+                input.value = ''; // 再按一次取消
+            } else {
+                input.value = tag;
+            }
+            document.getElementById('filterForm').submit();
+        }
+        </script>
 
         {{-- 影片卡片 --}}
         <div class="row">

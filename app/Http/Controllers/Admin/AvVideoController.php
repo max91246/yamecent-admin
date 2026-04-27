@@ -36,6 +36,12 @@ class AvVideoController extends Controller
         if ($studio = $request->input('studio')) {
             $query->where('studio', 'like', "%{$studio}%");
         }
+        if ($tag = $request->input('tag')) {
+            $query->whereJsonContains('tags', $tag);
+        }
+        if ($request->boolean('uncensored')) {
+            $query->where('is_uncensored', true);
+        }
 
         $list = $query->orderBy('release_date', 'desc')->orderBy('id', 'desc')
                       ->paginate(24)->appends($request->query());
