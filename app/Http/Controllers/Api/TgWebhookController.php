@@ -1924,7 +1924,7 @@ class TgWebhookController extends Controller
         '女同','3P','口交','肛交','泳裝','護士','教師',
     ];
 
-    private function handleAvBot(TgBot $bot, array $update): \Illuminate\Http\Response
+    private function handleAvBot(TgBot $bot, array $update): \Illuminate\Http\JsonResponse
     {
         // callback_query
         if (isset($update['callback_query'])) {
