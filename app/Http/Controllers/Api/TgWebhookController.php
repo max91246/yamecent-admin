@@ -2032,21 +2032,27 @@ class TgWebhookController extends Controller
 
     private function buildAvTodayReply(TgBot $bot, int $chatId): string
     {
-        $today   = now()->toDateString();
+        $today = now('Asia/Taipei')->toDateString();
 
-        // 今日熱門（按點擊數排序）
-        $hot = \App\AvVideo::whereDate('release_date', $today)
-            ->leftJoin('ya_av_video_clicks as vc', function ($j) use ($today) {
-                $j->on('vc.video_code', '=', 'ya_av_videos.code')
-                  ->whereDate('vc.clicked_at', $today);
-            })
-            ->select('ya_av_videos.*', \Illuminate\Support\Facades\DB::raw('COUNT(vc.id) as click_count'))
-            ->groupBy('ya_av_videos.id')
-            ->orderBy('click_count', 'desc')
+        // 今日熱門（先查今日點擊次數最多的 code）
+        $topCodes = \Illuminate\Support\Facades\DB::table('ya_av_video_clicks')
+            ->whereDate('clicked_at', $today)
+            ->select('video_code', \Illuminate\Support\Facades\DB::raw('COUNT(*) as cnt'))
+            ->groupBy('video_code')
+            ->orderBy('cnt', 'desc')
             ->limit(5)
-            ->get();
+            ->pluck('video_code')
+            ->toArray();
 
-        // 若今日無片，隨機抓近 3 天
+        if (!empty($topCodes)) {
+            $hot = \App\AvVideo::whereIn('code', $topCodes)->get()
+                ->sortBy(fn($v) => array_search($v->code, $topCodes))->values();
+        } else {
+            // 無點擊資料 → 今日新片隨機
+            $hot = \App\AvVideo::whereDate('release_date', $today)->inRandomOrder()->limit(5)->get();
+        }
+
+        // 今日無片 → 近 3 天隨機
         if ($hot->isEmpty()) {
             $hot = \App\AvVideo::where('release_date', '>=', now()->subDays(3)->toDateString())
                 ->inRandomOrder()->limit(5)->get();
@@ -2057,14 +2063,16 @@ class TgWebhookController extends Controller
         }
 
         // 記錄點擊
+        $inserts = [];
         foreach ($hot as $v) {
-            \Illuminate\Support\Facades\DB::table('ya_av_video_clicks')->insert([
+            $inserts[] = [
                 'video_code' => $v->code,
-                'tg_chat_id' => $chatId,
+                'tg_chat_id' => (string) $chatId,
                 'bot_id'     => $bot->id,
                 'clicked_at' => now(),
-            ]);
+            ];
         }
+        \Illuminate\Support\Facades\DB::table('ya_av_video_clicks')->insert($inserts);
 
         $lines = ["🎬 <b>今日新片</b>（" . $today . "）\n"];
         foreach ($hot as $v) {
