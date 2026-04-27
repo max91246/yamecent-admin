@@ -82,7 +82,6 @@
                                        placeholder="女優姓名" value="{{ request('actress') }}">
                                 <input type="text" name="studio" class="form-control form-control-sm" style="width:130px;"
                                        placeholder="片商" value="{{ request('studio') }}">
-                                <input type="hidden" name="tag" id="tagInput" value="{{ request('tag') }}">
                                 <div class="form-check form-check-inline ml-1">
                                     <input class="form-check-input" type="checkbox" name="uncensored" value="1" id="chkUncensored"
                                            {{ request('uncensored') ? 'checked' : '' }}>
@@ -92,28 +91,43 @@
                                 <a href="{{ url('admin/av/videos') }}?period={{ $period }}" class="btn btn-sm btn-secondary">重置</a>
                             </div>
 
-                            {{-- 標籤快速篩選 --}}
+                            {{-- 標籤多選 --}}
                             @php
                             $quickTags = [
                                 '巨乳','美乳','中出','潮吹','人妻','美少女','OL','制服',
                                 '素人','無碼','高清','4K','企劃','單體','系列','SM',
                                 '女同','3P','口交','肛交','泳裝','護士','教師',
                             ];
-                            $activeTag = request('tag');
+                            $activeTags = (array) request('tags', []);
                             @endphp
-                            <div class="d-flex flex-wrap" style="gap:5px;">
-                                @foreach($quickTags as $t)
+                            <div class="d-flex flex-wrap" style="gap:5px;" id="tagArea">
+                                @foreach($quickTags as $idx => $t)
                                 <button type="button"
-                                        onclick="selectTag('{{ $t }}')"
-                                        class="btn btn-sm {{ $activeTag === $t ? 'btn-danger' : 'btn-outline-secondary' }}"
+                                        onclick="toggleTag('{{ $t }}', {{ $idx }})"
+                                        id="tag_{{ $idx }}"
+                                        class="btn btn-sm {{ in_array($t, $activeTags) ? 'btn-danger' : 'btn-outline-secondary' }}"
                                         style="font-size:0.75rem;padding:2px 10px;">
-                                    {{ $t }}
+                                    {{ $t }}@if(in_array($t, $activeTags)) ✓@endif
                                 </button>
                                 @endforeach
-                                @if($activeTag && !in_array($activeTag, $quickTags))
-                                <span class="badge badge-danger align-self-center">{{ $activeTag }}</span>
-                                @endif
                             </div>
+                            {{-- 已選標籤的 hidden inputs --}}
+                            <div id="tagHiddenInputs">
+                                @foreach($activeTags as $t)
+                                    <input type="hidden" name="tags[]" value="{{ $t }}">
+                                @endforeach
+                            </div>
+
+                            @if(count($activeTags) > 0)
+                            <div class="mt-2">
+                                <span class="text-muted small">已選：</span>
+                                @foreach($activeTags as $t)
+                                    <span class="badge badge-danger mr-1">{{ $t }}</span>
+                                @endforeach
+                                <a href="{{ url('admin/av/videos') }}?period={{ $period }}"
+                                   class="btn btn-xs btn-link text-muted" style="font-size:0.75rem;">清除全部</a>
+                            </div>
+                            @endif
                         </form>
                     </div>
                 </div>
@@ -121,14 +135,36 @@
         </div>
 
         <script>
-        function selectTag(tag) {
-            var input = document.getElementById('tagInput');
-            if (input.value === tag) {
-                input.value = ''; // 再按一次取消
+        var selectedTags = {!! json_encode($activeTags) !!};
+
+        function toggleTag(tag, btnIdx) {
+            var pos = selectedTags.indexOf(tag);
+            if (pos > -1) {
+                selectedTags.splice(pos, 1);
             } else {
-                input.value = tag;
+                selectedTags.push(tag);
             }
-            document.getElementById('filterForm').submit();
+
+            // 更新 hidden inputs
+            var container = document.getElementById('tagHiddenInputs');
+            container.innerHTML = '';
+            selectedTags.forEach(function(t) {
+                var input = document.createElement('input');
+                input.type  = 'hidden';
+                input.name  = 'tags[]';
+                input.value = t;
+                container.appendChild(input);
+            });
+
+            // 更新按鈕樣式
+            var btn = document.getElementById('tag_' + btnIdx);
+            if (btn) {
+                var isActive = selectedTags.indexOf(tag) > -1;
+                btn.className = btn.className
+                    .replace(isActive ? 'btn-outline-secondary' : 'btn-danger',
+                             isActive ? 'btn-danger' : 'btn-outline-secondary');
+                btn.textContent = tag + (isActive ? ' ✓' : '');
+            }
         }
         </script>
 
