@@ -15,8 +15,8 @@ class ScrapeAvActresses extends Command
                               {--new-only  : 只爬第 1 頁新人（排程用）}';
     protected $description = '從 MissAV 爬取 AV 女優資料（按出道日期排序）';
 
-    private const BASE      = 'https://missav.ai';
-    private const LIST_URL  = 'https://missav.ai/actresses?sort=debut&page=';
+    private string $BASE;
+    private string $LIST_URL;
 
     private Client $client;
     private string $flareSolverrUrl;
@@ -29,6 +29,9 @@ class ScrapeAvActresses extends Command
             return 1;
         }
 
+        $this->BASE     = rtrim(getConfig('missav_base_url') ?: 'https://missav.ai', '/');
+        $this->LIST_URL = getConfig('missav_actress_list_url') ?: ($this->BASE . '/actresses?sort=debut&page=');
+
         $this->client = new Client(['timeout' => 60]);
         $maxPages = $this->option('new-only') ? 1 : (int) $this->option('pages');
         $delay    = (int) $this->option('delay');
@@ -39,7 +42,7 @@ class ScrapeAvActresses extends Command
 
         for ($page = 1; $page <= $maxPages; $page++) {
             $this->line("── 第 {$page} 頁 ──");
-            $html = $this->fetchHtml(self::LIST_URL . $page);
+            $html = $this->fetchHtml($this->LIST_URL . $page);
             if (!$html) {
                 $this->warn("第 {$page} 頁取得失敗，略過");
                 continue;
@@ -163,7 +166,7 @@ class ScrapeAvActresses extends Command
 
             $detailUrl = str_starts_with($href, 'http')
                 ? $href
-                : self::BASE . $href;
+                : $this->BASE . $href;
 
             $results[] = [
                 'name'       => $name,

@@ -16,8 +16,7 @@ class ScrapeAvVideos extends Command
                               {--delay=2 : 每頁間隔秒數}';
     protected $description = '從 MissAV 爬取 AV 新片資料存入 ya_av_videos';
 
-    private const BASE = 'https://missav.ai';
-
+    private string $BASE;
     private Client $client;
     private string $flareSolverrUrl;
 
@@ -29,6 +28,7 @@ class ScrapeAvVideos extends Command
             return 1;
         }
 
+        $this->BASE   = rtrim(getConfig('missav_base_url') ?: 'https://missav.ai', '/');
         $this->client = new Client(['timeout' => 60]);
         $listType = $this->option('list');
         $maxPages = (int) $this->option('pages');
@@ -101,10 +101,10 @@ class ScrapeAvVideos extends Command
     private function buildListUrl(string $type, int $page): string
     {
         return match ($type) {
-            'today'      => self::BASE . "/today-hot?page={$page}",
-            'uncensored' => self::BASE . "/uncensored-leak?page={$page}",
-            'release'    => self::BASE . "/release?page={$page}",
-            default      => self::BASE . "/new?page={$page}",
+            'today'      => $this->BASE . "/today-hot?page={$page}",
+            'uncensored' => $this->BASE . "/uncensored-leak?page={$page}",
+            'release'    => $this->BASE . "/release?page={$page}",
+            default      => $this->BASE . "/new?page={$page}",
         };
     }
 
