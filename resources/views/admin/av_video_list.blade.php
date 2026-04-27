@@ -179,9 +179,19 @@
                             {{ $v->title }}
                         </p>
                         @if($v->actresses)
-                        <p class="mb-0" style="color:#fbd38d;font-size:0.75rem;">
+                        <p class="mb-1" style="color:#fbd38d;font-size:0.75rem;">
                             ⭐ {{ implode(', ', $v->actresses) }}
                         </p>
+                        @endif
+                        @if($v->tags)
+                        <div class="mb-1" style="line-height:1.8;">
+                            @foreach(array_slice($v->tags, 0, 5) as $tag)
+                                <span style="display:inline-block;padding:1px 7px;margin:1px 2px 1px 0;
+                                             font-size:0.65rem;border-radius:12px;
+                                             background:rgba(100,160,255,0.12);
+                                             color:#63b3ed;border:1px solid rgba(100,160,255,0.2);">{{ $tag }}</span>
+                            @endforeach
+                        </div>
                         @endif
                         <div class="d-flex justify-content-between align-items-center mt-1">
                             <small class="text-muted" style="font-size:0.7rem;">
