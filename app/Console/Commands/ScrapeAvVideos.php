@@ -135,7 +135,7 @@ class ScrapeAvVideos extends Command
             $href = $a->getAttribute('href');
 
             // 番號匹配：xxx-123 或 xxxxx-1234
-            if (!preg_match('#missav\.ai/([a-z0-9]+-[0-9]+)(?:[/?#]|$)#i', $href, $m)) {
+            if (!preg_match('~missav\.ai/([a-z0-9]+-[0-9]+)(?:[/?#]|$)~i', $href, $m)) {
                 continue;
             }
             $code = strtoupper($m[1]);
