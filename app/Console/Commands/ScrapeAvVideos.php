@@ -51,6 +51,13 @@ class ScrapeAvVideos extends Command
             $this->line("  找到 " . count($codes) . " 部影片");
 
             foreach ($codes as $item) {
+                // 已存在直接跳過，不重複請求詳細頁
+                if (AvVideo::where('code', $item['code'])->exists()) {
+                    $skip++;
+                    $this->line("  [跳過] {$item['code']}");
+                    continue;
+                }
+
                 $detail = $this->fetchVideoDetail($item['url']);
                 if (!$detail || empty($detail['code'])) {
                     $fail++;
@@ -74,15 +81,13 @@ class ScrapeAvVideos extends Command
                     'is_leaked'    => str_contains($listType, 'leak'),
                 ];
 
-                $isNew = !AvVideo::where('code', $detail['code'])->exists();
-                AvVideo::updateOrCreate(['code' => $detail['code']], $payload);
+                AvVideo::create($payload);
 
-                $tag = $isNew ? '新增' : '更新';
                 $actress = $payload['actresses'] ? implode(',', $payload['actresses']) : '-';
-                $this->line("  [{$tag}] {$detail['code']} | {$actress} | {$payload['release_date']}");
+                $this->line("  [新增] {$detail['code']} | {$actress} | {$payload['release_date']}");
 
-                $isNew ? $saved++ : $updated++;
-                usleep(800000); // 0.8 秒間隔
+                $saved++;
+                usleep(800000);
             }
 
             if ($page < $maxPages) sleep($delay);
