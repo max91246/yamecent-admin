@@ -72,26 +72,6 @@
                                 <span class="text-muted small ml-auto">共 {{ $list->total() }} 部</span>
                             </div>
 
-                            <input type="hidden" name="period" value="{{ $period }}">
-
-                            {{-- 關鍵字搜尋 --}}
-                            <div class="d-flex flex-wrap align-items-center mb-2" style="gap:8px;">
-                                <input type="text" name="code" class="form-control form-control-sm" style="width:130px;"
-                                       placeholder="番號" value="{{ request('code') }}">
-                                <input type="text" name="actress" class="form-control form-control-sm" style="width:130px;"
-                                       placeholder="女優姓名" value="{{ request('actress') }}">
-                                <input type="text" name="studio" class="form-control form-control-sm" style="width:130px;"
-                                       placeholder="片商" value="{{ request('studio') }}">
-                                <div class="form-check form-check-inline ml-1">
-                                    <input class="form-check-input" type="checkbox" name="uncensored" value="1" id="chkUncensored"
-                                           {{ request('uncensored') ? 'checked' : '' }}>
-                                    <label class="form-check-label" for="chkUncensored" style="color:#a0aec0;">無碼</label>
-                                </div>
-                                <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
-                                <a href="{{ url('admin/av/videos') }}?period={{ $period }}" class="btn btn-sm btn-secondary">重置</a>
-                            </div>
-
-                            {{-- 標籤多選 --}}
                             @php
                             $quickTags = [
                                 '巨乳','美乳','中出','潮吹','人妻','美少女','OL','制服',
@@ -100,72 +80,66 @@
                             ];
                             $activeTags = (array) request('tags', []);
                             @endphp
-                            <div class="d-flex flex-wrap" style="gap:5px;" id="tagArea">
-                                @foreach($quickTags as $idx => $t)
-                                <button type="button"
-                                        onclick="toggleTag('{{ $t }}', {{ $idx }})"
-                                        id="tag_{{ $idx }}"
-                                        class="btn btn-sm {{ in_array($t, $activeTags) ? 'btn-danger' : 'btn-outline-secondary' }}"
-                                        style="font-size:0.75rem;padding:2px 10px;">
-                                    {{ $t }}@if(in_array($t, $activeTags)) ✓@endif
-                                </button>
-                                @endforeach
-                            </div>
-                            {{-- 已選標籤的 hidden inputs --}}
-                            <div id="tagHiddenInputs">
-                                @foreach($activeTags as $t)
-                                    <input type="hidden" name="tags[]" value="{{ $t }}">
-                                @endforeach
-                            </div>
+                            <input type="hidden" name="period" value="{{ $period }}">
 
-                            @if(count($activeTags) > 0)
-                            <div class="mt-2">
-                                <span class="text-muted small">已選：</span>
-                                @foreach($activeTags as $t)
-                                    <span class="badge badge-danger mr-1">{{ $t }}</span>
-                                @endforeach
-                                <a href="{{ url('admin/av/videos') }}?period={{ $period }}"
-                                   class="btn btn-xs btn-link text-muted" style="font-size:0.75rem;">清除全部</a>
+                            {{-- 搜尋列 --}}
+                            <div class="d-flex flex-wrap align-items-center" style="gap:8px;">
+                                <input type="text" name="code" class="form-control form-control-sm" style="width:120px;"
+                                       placeholder="番號" value="{{ request('code') }}">
+                                <input type="text" name="actress" class="form-control form-control-sm" style="width:120px;"
+                                       placeholder="女優姓名" value="{{ request('actress') }}">
+                                <input type="text" name="studio" class="form-control form-control-sm" style="width:120px;"
+                                       placeholder="片商" value="{{ request('studio') }}">
+
+                                {{-- Select2 多選標籤 --}}
+                                <select name="tags[]" id="tagSelect" multiple="multiple" style="width:220px;">
+                                    @foreach($quickTags as $t)
+                                        <option value="{{ $t }}" {{ in_array($t, $activeTags) ? 'selected' : '' }}>{{ $t }}</option>
+                                    @endforeach
+                                </select>
+
+                                <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
+                                <a href="{{ url('admin/av/videos') }}?period={{ $period }}" class="btn btn-sm btn-secondary">重置</a>
                             </div>
-                            @endif
                         </form>
                     </div>
                 </div>
             </div>
         </div>
 
-        <script>
-        var selectedTags = {!! json_encode($activeTags) !!};
-
-        function toggleTag(tag, btnIdx) {
-            var pos = selectedTags.indexOf(tag);
-            if (pos > -1) {
-                selectedTags.splice(pos, 1);
-            } else {
-                selectedTags.push(tag);
-            }
-
-            // 更新 hidden inputs
-            var container = document.getElementById('tagHiddenInputs');
-            container.innerHTML = '';
-            selectedTags.forEach(function(t) {
-                var input = document.createElement('input');
-                input.type  = 'hidden';
-                input.name  = 'tags[]';
-                input.value = t;
-                container.appendChild(input);
-            });
-
-            // 更新按鈕樣式
-            var btn = document.getElementById('tag_' + btnIdx);
-            if (btn) {
-                var isActive = selectedTags.indexOf(tag) > -1;
-                btn.className = btn.className
-                    .replace(isActive ? 'btn-outline-secondary' : 'btn-danger',
-                             isActive ? 'btn-danger' : 'btn-outline-secondary');
-                btn.textContent = tag + (isActive ? ' ✓' : '');
-            }
+        {{-- Select2 CDN --}}
+        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
+        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+        <style>
+        .select2-container--default .select2-selection--multiple {
+            background-color: #0d1224 !important;
+            border-color: rgba(100,160,255,0.2) !important;
+            border-radius: 4px;
+            min-height: 31px;
         }
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #2563a8 !important;
+            border-color: #2563a8 !important;
+            color: #fff !important;
+        }
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove { color: #fff !important; }
+        .select2-dropdown {
+            background-color: #111628 !important;
+            border-color: rgba(100,160,255,0.3) !important;
+        }
+        .select2-container--default .select2-results__option { color: #a0aec0; }
+        .select2-container--default .select2-results__option--highlighted { background:#1a3a6e !important; color:#fff !important; }
+        .select2-container--default .select2-results__option[aria-selected=true] { background:rgba(37,99,168,0.3) !important; color:#63b3ed !important; }
+        .select2-search__field { background:#0d1224 !important; color:#e2e8f0 !important; border-color:rgba(100,160,255,0.2) !important; }
+        </style>
+        <script>
+        $(document).ready(function() {
+            $('#tagSelect').select2({
+                placeholder: '選擇標籤（可多選）',
+                allowClear: true,
+                closeOnSelect: false,
+            });
+        });
         </script>
 
         {{-- 影片卡片 --}}
