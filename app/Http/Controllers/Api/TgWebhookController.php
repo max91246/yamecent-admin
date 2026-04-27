@@ -39,6 +39,16 @@ class TgWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
+        // ── update_id 去重（防 TG 重試重複處理）────────────────────
+        $updateId = $update['update_id'] ?? null;
+        if ($updateId) {
+            $cacheKey = "tg_upd_{$botId}_{$updateId}";
+            if (Cache::has($cacheKey)) {
+                return response()->json(['ok' => true]);
+            }
+            Cache::put($cacheKey, 1, 60); // 60 秒內同一 update_id 忽略
+        }
+
         // ── AV Bot 分流（type == 2）──────────────────────────────
         if ($bot->type == 2) {
             return $this->handleAvBot($bot, $update);
@@ -1946,7 +1956,7 @@ class TgWebhookController extends Controller
         $chatId   = (int) $msg['chat']['id'];
         $text     = trim($msg['text'] ?? '');
 
-        if (in_array($text, ['/start', '開始', 'start'])) {
+        if (str_starts_with($text, '/start') || in_array($text, ['開始', 'start'])) {
             $this->sendMessage($bot->token, $chatId, "🔞 AV 速報機器人\n\n請選擇功能：", $this->getAvKeyboard());
             return response()->json(['ok' => true]);
         }
