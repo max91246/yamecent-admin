@@ -33,7 +33,7 @@ class ScrapeAvVideos extends Command
         $listType = $this->option('list');
         $maxPages = (int) $this->option('pages');
         $delay    = (int) $this->option('delay');
-        $saved = $updated = $fail = 0;
+        $saved = $updated = $fail = $skip = 0;
 
         $this->info("開始爬取 MissAV 新片（{$listType}）共 {$maxPages} 頁...");
         Log::channel('tg_webhook')->info('[AV影片爬蟲] 開始', ['type' => $listType, 'pages' => $maxPages]);
