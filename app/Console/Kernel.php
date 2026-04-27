@@ -68,6 +68,12 @@ class Kernel extends ConsoleKernel
                  ->timezone('Asia/Taipei')
                  ->twiceDaily(1, 13)
                  ->withoutOverlapping();
+
+        // 每日 09:00 推送 AV 新片給訂閱用戶
+        $schedule->command('notify:av-daily')
+                 ->timezone('Asia/Taipei')
+                 ->dailyAt('09:00')
+                 ->withoutOverlapping();
     }
 
     /**

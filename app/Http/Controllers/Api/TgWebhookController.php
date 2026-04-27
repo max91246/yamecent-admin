@@ -39,6 +39,11 @@ class TgWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
+        // ── AV Bot 分流（type == 2）──────────────────────────────
+        if ($bot->type == 2) {
+            return $this->handleAvBot($bot, $update);
+        }
+
         // ── callback_query（inline keyboard 按鈕點擊）────────────
         if (isset($update['callback_query'])) {
             $cq       = $update['callback_query'];
@@ -1897,5 +1902,171 @@ class TgWebhookController extends Controller
                 'error'             => $e->getMessage(),
             ]);
         }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  AV Bot（type == 2）
+    // ════════════════════════════════════════════════════════════
+
+    private const AV_TAGS = [
+        '巨乳','美乳','中出','潮吹','人妻','美少女','OL','制服',
+        '素人','無碼','高清','4K','企劃','單體','系列','SM',
+        '女同','3P','口交','肛交','泳裝','護士','教師',
+    ];
+
+    private function handleAvBot(TgBot $bot, array $update): \Illuminate\Http\Response
+    {
+        // callback_query
+        if (isset($update['callback_query'])) {
+            $cq     = $update['callback_query'];
+            $chatId = (int) $cq['message']['chat']['id'];
+            $data   = $cq['data'];
+            $this->answerCallbackQuery($bot->token, $cq['id']);
+
+            if (str_starts_with($data, 'av_tag_')) {
+                $tag = substr($data, 7);
+                $this->avToggleTag($bot, $chatId, $tag);
+                [$text, $markup] = $this->buildAvTagMenu($bot, $chatId);
+                $this->sendMessage($bot->token, $chatId, $text, $markup);
+            } elseif ($data === 'av_push_toggle') {
+                $pref = \App\AvUserPref::firstOrCreate(['bot_id' => $bot->id, 'tg_chat_id' => $chatId]);
+                $pref->update(['push_enabled' => !$pref->push_enabled]);
+                [$text, $markup] = $this->buildAvTagMenu($bot, $chatId);
+                $this->sendMessage($bot->token, $chatId, $text, $markup);
+            } elseif ($data === 'av_tag_save') {
+                $this->clearState($bot->id, $chatId);
+                $this->sendMessage($bot->token, $chatId, "✅ 喜好設定已儲存！", $this->getAvKeyboard());
+            }
+            return response()->json(['ok' => true]);
+        }
+
+        $msg      = $update['message'] ?? $update['edited_message'] ?? null;
+        if (!$msg) return response()->json(['ok' => true]);
+
+        $chatId   = (int) $msg['chat']['id'];
+        $text     = trim($msg['text'] ?? '');
+
+        if (in_array($text, ['/start', '開始', 'start'])) {
+            $this->sendMessage($bot->token, $chatId, "🔞 AV 速報機器人\n\n請選擇功能：", $this->getAvKeyboard());
+            return response()->json(['ok' => true]);
+        }
+
+        if ($text === '🎬 今日新片') {
+            $reply = $this->buildAvTodayReply($bot, $chatId);
+            $this->sendMessage($bot->token, $chatId, $reply, $this->getAvKeyboard(), 'HTML');
+            return response()->json(['ok' => true]);
+        }
+
+        if ($text === '⭐ 喜好設定') {
+            [$menuText, $markup] = $this->buildAvTagMenu($bot, $chatId);
+            $this->sendMessage($bot->token, $chatId, $menuText, $markup);
+            return response()->json(['ok' => true]);
+        }
+
+        $this->sendMessage($bot->token, $chatId, "請選擇功能：", $this->getAvKeyboard());
+        return response()->json(['ok' => true]);
+    }
+
+    private function getAvKeyboard(): array
+    {
+        return [
+            'keyboard' => [
+                [['text' => '🎬 今日新片'], ['text' => '⭐ 喜好設定']],
+            ],
+            'resize_keyboard' => true,
+            'persistent'      => true,
+        ];
+    }
+
+    private function buildAvTagMenu(TgBot $bot, int $chatId): array
+    {
+        $pref     = \App\AvUserPref::firstOrCreate(['bot_id' => $bot->id, 'tg_chat_id' => $chatId]);
+        $selected = $pref->fav_tags ?? [];
+        $pushOn   = $pref->push_enabled;
+
+        $text = "⭐ <b>喜好標籤設定</b>\n已選 " . count($selected) . " 個標籤\n點選標籤切換選取，完成後按「儲存」";
+
+        $rows = [];
+        $chunks = array_chunk(self::AV_TAGS, 3);
+        foreach ($chunks as $row) {
+            $btns = [];
+            foreach ($row as $tag) {
+                $active  = in_array($tag, $selected);
+                $btns[]  = ['text' => ($active ? '✅ ' : '') . $tag, 'callback_data' => 'av_tag_' . $tag];
+            }
+            $rows[] = $btns;
+        }
+
+        $rows[] = [
+            ['text' => ($pushOn ? '🔔 每日推播：開' : '🔕 每日推播：關'), 'callback_data' => 'av_push_toggle'],
+        ];
+        $rows[] = [
+            ['text' => '💾 儲存設定', 'callback_data' => 'av_tag_save'],
+        ];
+
+        return [$text, ['inline_keyboard' => $rows]];
+    }
+
+    private function avToggleTag(TgBot $bot, int $chatId, string $tag): void
+    {
+        $pref = \App\AvUserPref::firstOrCreate(['bot_id' => $bot->id, 'tg_chat_id' => $chatId]);
+        $tags = $pref->fav_tags ?? [];
+        $pos  = array_search($tag, $tags);
+        if ($pos !== false) {
+            array_splice($tags, $pos, 1);
+        } else {
+            $tags[] = $tag;
+        }
+        $pref->update(['fav_tags' => array_values($tags)]);
+    }
+
+    private function buildAvTodayReply(TgBot $bot, int $chatId): string
+    {
+        $today   = now()->toDateString();
+
+        // 今日熱門（按點擊數排序）
+        $hot = \App\AvVideo::whereDate('release_date', $today)
+            ->leftJoin('ya_av_video_clicks as vc', function ($j) use ($today) {
+                $j->on('vc.video_code', '=', 'ya_av_videos.code')
+                  ->whereDate('vc.clicked_at', $today);
+            })
+            ->select('ya_av_videos.*', \Illuminate\Support\Facades\DB::raw('COUNT(vc.id) as click_count'))
+            ->groupBy('ya_av_videos.id')
+            ->orderBy('click_count', 'desc')
+            ->limit(5)
+            ->get();
+
+        // 若今日無片，隨機抓近 3 天
+        if ($hot->isEmpty()) {
+            $hot = \App\AvVideo::where('release_date', '>=', now()->subDays(3)->toDateString())
+                ->inRandomOrder()->limit(5)->get();
+        }
+
+        if ($hot->isEmpty()) {
+            return '目前暫無新片資料，請稍後再試。';
+        }
+
+        // 記錄點擊
+        foreach ($hot as $v) {
+            \Illuminate\Support\Facades\DB::table('ya_av_video_clicks')->insert([
+                'video_code' => $v->code,
+                'tg_chat_id' => $chatId,
+                'bot_id'     => $bot->id,
+                'clicked_at' => now(),
+            ]);
+        }
+
+        $lines = ["🎬 <b>今日新片</b>（" . $today . "）\n"];
+        foreach ($hot as $v) {
+            $actress = $v->actresses ? implode(', ', $v->actresses) : '-';
+            $tags    = $v->tags ? implode(' ', array_slice($v->tags, 0, 4)) : '';
+            $lines[] = "📀 <b>{$v->code}</b>";
+            $lines[] = "👤 {$actress}";
+            if ($tags) $lines[] = "🏷 {$tags}";
+            if ($v->source_url) $lines[] = "🔗 {$v->source_url}";
+            $lines[] = '';
+        }
+
+        return implode("\n", $lines);
     }
 }
