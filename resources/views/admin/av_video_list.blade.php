@@ -91,15 +91,22 @@
                                 <input type="text" name="studio" class="form-control form-control-sm" style="width:120px;"
                                        placeholder="片商" value="{{ request('studio') }}">
 
-                                {{-- Select2 多選標籤 --}}
-                                <select name="tags[]" id="tagSelect" multiple="multiple" style="width:220px;">
-                                    @foreach($quickTags as $t)
-                                        <option value="{{ $t }}" {{ in_array($t, $activeTags) ? 'selected' : '' }}>{{ $t }}</option>
-                                    @endforeach
-                                </select>
-
                                 <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
                                 <a href="{{ url('admin/av/videos') }}?period={{ $period }}" class="btn btn-sm btn-secondary">重置</a>
+                            </div>
+
+                            {{-- 標籤 Chip 多選 --}}
+                            <div class="mt-2" id="tagChipArea">
+                                @foreach($quickTags as $idx => $t)
+                                    <span onclick="toggleChip(this,'{{ $t }}')"
+                                          data-tag="{{ $t }}"
+                                          class="tag-chip {{ in_array($t, $activeTags) ? 'active' : '' }}">{{ $t }}</span>
+                                @endforeach
+                            </div>
+                            <div id="tagHiddenInputs">
+                                @foreach($activeTags as $t)
+                                    <input type="hidden" name="tags[]" value="{{ $t }}">
+                                @endforeach
                             </div>
                         </form>
                     </div>
@@ -107,39 +114,46 @@
             </div>
         </div>
 
-        {{-- Select2 CDN --}}
-        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
-        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
         <style>
-        .select2-container--default .select2-selection--multiple {
-            background-color: #0d1224 !important;
-            border-color: rgba(100,160,255,0.2) !important;
-            border-radius: 4px;
-            min-height: 31px;
+        .tag-chip {
+            display: inline-block;
+            padding: 3px 12px;
+            margin: 3px 4px 3px 0;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            border: 1px solid rgba(100,160,255,0.25);
+            color: #718096;
+            background: transparent;
+            transition: all .15s;
+            user-select: none;
         }
-        .select2-container--default .select2-selection--multiple .select2-selection__choice {
-            background-color: #2563a8 !important;
-            border-color: #2563a8 !important;
-            color: #fff !important;
+        .tag-chip:hover {
+            border-color: rgba(100,160,255,0.5);
+            color: #a0aec0;
         }
-        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove { color: #fff !important; }
-        .select2-dropdown {
-            background-color: #111628 !important;
-            border-color: rgba(100,160,255,0.3) !important;
+        .tag-chip.active {
+            background: #2563a8;
+            border-color: #2563a8;
+            color: #fff;
+            font-weight: 500;
         }
-        .select2-container--default .select2-results__option { color: #a0aec0; }
-        .select2-container--default .select2-results__option--highlighted { background:#1a3a6e !important; color:#fff !important; }
-        .select2-container--default .select2-results__option[aria-selected=true] { background:rgba(37,99,168,0.3) !important; color:#63b3ed !important; }
-        .select2-search__field { background:#0d1224 !important; color:#e2e8f0 !important; border-color:rgba(100,160,255,0.2) !important; }
         </style>
         <script>
-        $(document).ready(function() {
-            $('#tagSelect').select2({
-                placeholder: '選擇標籤（可多選）',
-                allowClear: true,
-                closeOnSelect: false,
+        function toggleChip(el, tag) {
+            el.classList.toggle('active');
+            var container = document.getElementById('tagHiddenInputs');
+            // 重建全部 hidden inputs
+            var chips = document.querySelectorAll('.tag-chip.active');
+            container.innerHTML = '';
+            chips.forEach(function(c) {
+                var inp = document.createElement('input');
+                inp.type  = 'hidden';
+                inp.name  = 'tags[]';
+                inp.value = c.dataset.tag;
+                container.appendChild(inp);
             });
-        });
+        }
         </script>
 
         {{-- 影片卡片 --}}
