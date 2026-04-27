@@ -1933,19 +1933,19 @@ class TgWebhookController extends Controller
             $data   = $cq['data'];
             $this->answerCallbackQuery($bot->token, $cq['id']);
 
-            if (str_starts_with($data, 'av_tag_')) {
-                $tag = substr($data, 7);
-                $this->avToggleTag($bot, $chatId, $tag);
-                [$text, $markup] = $this->buildAvTagMenu($bot, $chatId);
-                $this->sendMessage($bot->token, $chatId, $text, $markup);
+            if ($data === 'av_tag_save') {
+                $this->clearState($bot->id, $chatId);
+                $this->sendMessage($bot->token, $chatId, "✅ 喜好設定已儲存！", $this->getAvKeyboard());
             } elseif ($data === 'av_push_toggle') {
                 $pref = \App\AvUserPref::firstOrCreate(['bot_id' => $bot->id, 'tg_chat_id' => $chatId]);
                 $pref->update(['push_enabled' => !$pref->push_enabled]);
                 [$text, $markup] = $this->buildAvTagMenu($bot, $chatId);
                 $this->sendMessage($bot->token, $chatId, $text, $markup);
-            } elseif ($data === 'av_tag_save') {
-                $this->clearState($bot->id, $chatId);
-                $this->sendMessage($bot->token, $chatId, "✅ 喜好設定已儲存！", $this->getAvKeyboard());
+            } elseif (str_starts_with($data, 'av_tag_')) {
+                $tag = substr($data, 7);
+                $this->avToggleTag($bot, $chatId, $tag);
+                [$text, $markup] = $this->buildAvTagMenu($bot, $chatId);
+                $this->sendMessage($bot->token, $chatId, $text, $markup);
             }
             return response()->json(['ok' => true]);
         }
