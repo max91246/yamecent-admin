@@ -1,6 +1,6 @@
 # Yamecent Admin
 
-一套基於 Laravel 8 的後台管理系統，整合 REST API、Telegram 機器人互動、股票持倉追蹤與市場告警功能。
+一套基於 Laravel 9 的後台管理系統，整合 REST API、多類型 Telegram 機器人、股票持倉追蹤、市場告警與 AV 內容管理功能。
 
 > 本專案由 **max91246** 與 **Claude（Anthropic）** 協作完成。
 > 從需求討論、架構設計、程式碼實作到部署除錯，全程以 Vibe Coding 方式推進——
@@ -12,487 +12,197 @@
 
 | 項目 | 版本/說明 |
 |------|-----------|
-| 後端框架 | Laravel 8 |
-| 前端 SPA | Vue 3 |
-| 認證 | JWT（7 天有效） |
-| 部署環境 | Docker（Laradock）|
-| 資料庫 | MySQL 8 |
-| 快取 | Redis（DB 1） |
-| Web Server | Nginx |
-| HTTPS | Let's Encrypt（Certbot）|
+| 後端框架 | Laravel 9 |
+| 認證 | Session-based RBAC（後台）/ JWT（API） |
+| 部署環境 | Docker（Laradock）+ GCP Compute Engine |
+| 資料庫 | MySQL 8（DB prefix: `ya_`） |
+| 快取/Queue | Redis（Predis） |
+| Web Server | Nginx + Let's Encrypt |
+| 爬蟲代理 | FlareSolverr（繞 Cloudflare） |
 
 ---
 
-## 後台管理功能
+## 後台選單結構
 
-### 系統管理
+```
+控制台
+系統設定
+  ├ 管理員管理 / 角色 / 權限 / 選單 / 系統設定
+系統日誌（Log Viewer，僅超級管理員）
+文章管理 / 會員管理
+機器人管理
+  ├ 機器人管理（列表 / 設定 Webhook）
+  └ 訊息記錄
+股票功能
+  ├ 持股管理     - 各用戶持倉總覽
+  ├ 交易記錄     - 歷史買賣含損益
+  ├ 處置股查詢   - TPEX / TWSE 當前處置股名單
+  └ 台股查詢     - 即時股價 + K線 + 三大法人 + 月營收 + 新聞
+AV 管理
+  ├ 新片速報     - MissAV 最新影片（按標籤/女優/片商篩選）
+  └ 女優管理     - AV 女優資料庫（搜尋/篩選）
+```
 
-| 功能 | 路由 |
+---
+
+## Telegram 機器人
+
+### 機器人類型
+
+| type | 說明 |
 |------|------|
-| 控制台 | `GET /console` |
-| 管理員管理 | `/admin/administrator/*` |
-| 角色管理 | `/admin/role/*` |
-| 權限管理 | `/admin/permission/*` |
-| 選單管理 | `/admin/menu/*` |
-| 系統設定 | `/admin/config/*` |
-| 系統日誌（Log Viewer） | `/log-viewer`（僅超級管理員） |
+| 1（股票指數）| 股票行情查詢 + 持倉管理 |
+| 2（AV 查詢）| AV 新片速報 + 喜好推播 |
 
-### 內容管理
-
-| 功能 | 路由 |
-|------|------|
-| 文章管理（CRUD） | `/admin/article/*` |
-| 留言管理（審核/回覆/刪除） | `/admin/comment/*` |
-
-### 會員管理
-
-| 功能 | 路由 |
-|------|------|
-| 會員列表/新增/編輯 | `/admin/member/*` |
-| 會籍啟用 | `POST /admin/member/membership/{id}/activate` |
-| 會籍撤銷 | `POST /admin/member/membership/{id}/revoke` |
-| 餘額記錄 | `/admin/member/balance/list` |
-
-### TG 機器人管理
-
-| 功能 | 路由 |
-|------|------|
-| 機器人列表/新增/編輯/刪除 | `/admin/tg-bot/*` |
-| 手動設定 Webhook | `POST /admin/tg-bot/set-webhook/{id}` |
-| 訊息記錄查詢 | `GET /admin/tg-message/list` |
-| 用戶持股查詢（以用戶為單位） | `GET /admin/tg-holding/list` |
-| 交易歷史查詢（含損益） | `GET /admin/tg-holding/trade-list` |
-
-### 控制台通知
-
-頂部導覽列即時顯示：
-
-- 📩 **未回覆留言數**：點開展示最新 5 筆，連結至留言管理
-- 🔔 **待審核會籍申請數**：點開展示最新 5 筆，連結至會員管理
-
----
-
-## REST API 文件
-
-所有 API 路徑前綴為 `/api`。需認證的路由請在 Header 帶入：
-```
-Authorization: Bearer {token}
-```
-
-### 認證
-
-| Method | 路由 | 說明 | 需認證 |
-|--------|------|------|:------:|
-| POST | `/api/auth/login` | 登入，回傳 JWT token | 否 |
-| POST | `/api/auth/logout` | 登出 | 是 |
-
-**登入請求範例：**
-```json
-POST /api/auth/login
-{
-  "account": "admin",
-  "password": "123456"
-}
-```
-
-**回應：**
-```json
-{
-  "code": 200,
-  "token": "eyJ0eXAiOiJKV1Qi..."
-}
-```
-
----
-
-### 會員
-
-| Method | 路由 | 說明 | 需認證 |
-|--------|------|------|:------:|
-| POST | `/api/members/register` | 會員註冊 | 否 |
-| GET | `/api/members/{id}` | 取得會員資料 | 是 |
-| POST | `/api/members/{id}/profile` | 更新個人資料 | 是 |
-| GET | `/api/members/{id}/transactions` | 交易記錄 | 是 |
-| POST | `/api/members/{id}/membership/apply` | 申請會籍升級 | 是 |
-
----
-
-### 文章
-
-| Method | 路由 | 說明 | 需認證 |
-|--------|------|------|:------:|
-| GET | `/api/articles` | 文章列表（支援分頁） | 否 |
-| GET | `/api/articles/{id}` | 文章詳情 | 否 |
-| GET | `/api/articles/{id}/comments` | 取得文章留言 | 否 |
-| POST | `/api/articles/{id}/comments` | 新增留言 | 是 |
-
----
-
-### Telegram Webhook
-
-| Method | 路由 | 說明 |
-|--------|------|------|
-| POST | `/api/tg/webhook/{botId}` | Telegram 伺服器回調入口（公開，無需認證） |
-
----
-
-## Telegram 機器人互動
-
-### 鍵盤按鈕佈局
+### 股票機器人主選單
 
 ```
-┌──────────────────┬──────────────────┐
-│  🛢 布蘭特原油   │   📈 台指期貨    │
-├──────────────────┼──────────────────┤
-│  😨 VIX恐慌指數  │   📊 台股查詢    │
-├──────────────────┴──────────────────┤
-│           💼 我的持股               │
-└─────────────────────────────────────┘
+📈 台指期貨  |  🛡 避險商品指數
+📊 台股查詢  |  💼 我的持股
+⚙️ 設置
 ```
 
----
+**避險商品指數** 一次顯示：布蘭特原油 / VIX 恐慌指數 / 黃金期貨（GC=F）
 
-### 🛢 布蘭特原油
+**台股查詢** 流程：輸入股票代號 → 回覆即時股價、三大法人（含橫條圖）、月營收、最新新聞、處置股標記
 
-顯示最新 5 分 K 資料：
-- 當前收盤價
-- 5 分鐘漲跌（價差 / 百分比）
-- 資料更新時間
-- VIX 恐慌指數附帶顯示
+**我的持股** 功能：
+- 添加持股（多步驟：代號 → 股數 → 融資選擇 → 買進價）
+- 賣出持股（FIFO 多筆合併）
+- T+2 交割款追蹤
+- 帳戶資金設定（總資金 / 剩餘資金兩種模式）
+- 處置股自動標記（買進立即扣款，不走 T+2）
 
----
-
-### 📈 台指期貨
-
-顯示台指期最新資料（1 分 K）：
-- 當前報價
-- 5 分鐘漲跌（點數 / 百分比）
-- 資料更新時間
-- VIX 恐慌指數附帶顯示
-
----
-
-### 😨 VIX 恐慌指數
-
-- 當前 VIX 數值
-- 5 分鐘變化（價差 / 百分比）
-- 資料更新時間
-
----
-
-### 📊 台股查詢（互動式）
-
-**流程：**
-1. 按下按鈕後，機器人提示輸入股票代號
-2. 輸入代號（例如：`2317`）
-3. 機器人回覆：
-   - 股票名稱、成交價、漲跌幅、成交張數
-   - 近 10 日三大法人買賣超橫條圖
-   - 每日明細（外資 / 投信 / 自營商）
-   - 月營收資訊
-   - Yahoo Finance RSS 最新新聞（含可點擊連結）
-   - 10 日合計
-
-**範例輸出：**
-```
-📊 鴻海（2317.TW）
-💰 成交價：192.0
-📈 漲跌：+1.50（+0.41%）
-📦 成交張數：23,021 張
-
-━━ 近10日三大法人買賣超 ━━
-🔴 外資 [████████░░░░] ▼9,206張
-🟢 投信 [█░░░░░░░░░░░] ▲629張
-🔴 自營 [██░░░░░░░░░░] ▼1,897張
-
-📅 每日明細
-04/02  外▼4,392  信▲78   營▼327
-...
-
-📊 10日合計  外▼9,206  信▲629  營▼1,897
-```
-
-> 查詢結果快取：盤中 10 秒，盤後至下一交易日 09:00
-
----
-
-### 💼 我的持股
-
-顯示用戶個人持倉總覽（以股為單位，支援零股）：
+### AV 機器人主選單
 
 ```
-💼 我的持股
-
-📌 威剛（3260）5000股（5張）·融資　買進：NT$366.5
-   現值：NT$726,000
-   稅費：NT$3,120（買費+賣費+稅）　淨損益：-NT$5,620
-
-📊 自備成本：NT$1,232,200　原始市值：NT$2,162,500
-📈 現值合計：NT$2,122,500
-💸 預估稅費：NT$xx,xxx
-💹 淨損益：-NT$xx,xxx　自備報酬：-3.25%
+🎬 今日新片  |  ⭐ 喜好設定
 ```
 
-**Inline 按鈕：**
-- `➕ 添加持股`
-- `💰 賣出 XXXX`（每檔各一個）
+**今日新片**：以昨日（D-1）為基準，優先推薦符合用戶喜好 tag 的影片，最多 5 部。
+
+**喜好設定**：Inline keyboard 選擇喜好標籤（動態從 DB 統計前 30 個熱門 tag），開關每日推播。
+
+**每日 09:00 自動推播**：符合用戶喜好 tag 的昨日新片。
 
 ---
 
-#### 添加持股（多步驟對話）
+## 排程任務
 
-| 步驟 | 說明 |
-|------|------|
-| Step 1 | 輸入股票代號（自動查詢驗證，取得股票名稱） |
-| Step 2 | 輸入持有股數（支援零股，1 張 = 1000 股） |
-| Step 3 | 選擇是否融資（Inline 按鈕：是/否） |
-| Step 4 | 輸入買進每股價格 |
-| 完成 | 系統計算成本（現股=全額，融資=40%），存入 DB，建立 T+2 交割款，顯示最新持股列表 |
-
----
-
-#### 賣出持股
-
-| 步驟 | 說明 |
-|------|------|
-| Step 1 | 點擊「💰 賣出 XXXX」按鈕 |
-| Step 2 | 輸入賣出股數（支援 FIFO 多筆合併扣除） |
-| Step 3 | 輸入賣出每股價格 |
-| 完成 | 計算損益並記錄，更新剩餘持股，建立 T+2 交割款，顯示最新持股列表 |
-
-**損益計算公式：**
-```
-損益 = 賣出價值 - 買進價值 - 買進手續費(0.1425%) - 賣出手續費(0.1425%) - 證券交易稅(0.3%)
-融資利息亦計入持股成本
-```
-
----
-
-#### 帳戶資金（Wallet）
-
-- 顯示現金餘額，扣除 T+2 待交割款後的真實可用金額
-- 每日 00:00 自動結算到期交割款（cron）
-- 買進不立即扣款，T+2 到期後由排程統一扣/入帳
-
----
-
-#### 通用操作
-
-任何對話步驟輸入「取消」，立即返回主選單。
-主選單按鈕可隨時中斷進行中的對話狀態。
-
----
-
-### TG Banner 圖片儲存
-
-Banner 圖片採用 **Telegram file_id** 儲存，不在本地磁碟留存副本：
-
-- 上傳時呼叫 `getFile` 取得 `file_id` 直接存入 DB
-- 推送時以 `sendPhoto` + `file_id` 發送，無需下載再上傳
-- 若 bot 更換導致 `file_id` 失效，自動 fallback 至預設圖片（`login-bg.jpg`）
-- 舊版路徑格式（`/uploads/...`）向下相容
-
----
-
-### 市場告警（排程自動推送）
-
-| 排程 | 指令 | 說明 |
+| 時間 | 指令 | 說明 |
 |------|------|------|
-| 每 5 分鐘 | `fetch:oil-price` | 布蘭特原油，振幅 ≥ 1% 推送告警 |
-| 每分鐘 | `fetch:tw-index` | 台指期（1分K），1分鐘漲跌 ≥ 50 點推送告警 |
+| 每 5 分鐘 | `fetch:oil-price` | 布蘭特原油 5分K，振幅 ≥ 1% 推送告警；同步台指 / VIX / 黃金現價 |
+| 每分鐘 | `fetch:tw-index` | 台指期 1分K，漲跌 ≥ 50 點推送告警 |
 | 每日 00:00 | `settle:payments` | 結算 T+2 到期交割款 |
+| 每日 08:00 | `fetch:disposal-stocks` | 抓取 TPEX / TWSE 最新處置股，寫入 DB + Redis |
 | 每日 14:00 | `notify:holdings` | 台股收盤後推送持股漲跌通知 |
 | 每 6 小時 | `scrape:wantgoo` | 爬取玩股網精選文章 |
-
-> 若無新 K 棒寫入（休市或資料未更新），自動跳過全部處理。
+| 每日 01:00 | `scrape:av-actresses --new-only` | 爬取 MissAV 最新出道女優 |
+| 每日 01:30 / 13:30 | `scrape:av-videos --pages=3` | 爬取 MissAV 最新影片 |
+| 每日 09:00 | `notify:av-daily` | 推送 AV 新片給訂閱用戶 |
 
 ---
 
 ## Log 系統
 
-採用 `opcodesio/log-viewer` 套件，後台入口：`/log-viewer`（僅超級管理員可存取）。
-
-各排程指令均輸出至獨立 daily channel，保留 14 天：
-
 | Channel | 檔案 | 記錄內容 |
-| ------- | ---- | -------- |
-| `oil_price` | `logs/oil-price-YYYY-MM-DD.log` | K棒寫入數、告警觸發、錯誤 |
-| `tw_index` | `logs/tw-index-YYYY-MM-DD.log` | 台指現價、1分震盪告警、錯誤 |
-| `notify_holdings` | `logs/notify-holdings-YYYY-MM-DD.log` | 通知筆數、告警推送 |
-| `settle_payments` | `logs/settle-payments-YYYY-MM-DD.log` | 每筆結算金額、完成統計 |
-| `scrape_wantgoo` | `logs/scrape-wantgoo-YYYY-MM-DD.log` | 新增/略過篇數、錯誤 |
-| `tg_webhook` | `logs/tg-webhook-YYYY-MM-DD.log` | Webhook 收發事件 |
+|---------|------|----------|
+| `tg_webhook` | `logs/tg-webhook-YYYY-MM-DD.log` | TG Bot 收發事件（股票機器人） |
+| `oil_price` | `logs/oil-price-YYYY-MM-DD.log` | 油價 K棒 / 告警 |
+| `tw_index` | `logs/tw-index-YYYY-MM-DD.log` | 台指震盪告警 |
+| `notify_holdings` | `logs/notify-holdings-YYYY-MM-DD.log` | 持股通知 |
+| `settle_payments` | `logs/settle-payments-YYYY-MM-DD.log` | 交割款結算 |
+| `scrape_wantgoo` | `logs/scrape-wantgoo-YYYY-MM-DD.log` | 玩股網爬蟲 |
+| `av_scraper` | `logs/av-scraper-YYYY-MM-DD.log` | AV 影片 / 女優爬蟲 / 推播 |
 
 ---
 
-## 資料庫結構
+## 資料庫主要表結構
 
+### 系統
 | 表名 | 說明 |
 |------|------|
-| `ya_admin_users` | 後台管理員帳號 |
-| `ya_admin_roles` | 角色 |
-| `ya_admin_permissions` | 權限（對應路由） |
-| `ya_admin_menus` | 後台側邊欄選單 |
-| `ya_admin_configs` | 系統設定鍵值（API URL 等） |
-| `ya_members` | 前台會員資料 |
-| `ya_member_balance_logs` | 會員餘額變動記錄 |
-| `ya_articles` | 文章 |
-| `ya_article_comments` | 文章留言 |
-| `ya_oil_prices` | 5分K棒（ticker: `QA`=原油 / `WTX`=台指 / `VIX`=恐慌指數） |
-| `ya_tg_bots` | TG 機器人設定（token、webhook 狀態） |
-| `ya_tg_messages` | TG 對話記錄（收/發） |
-| `ya_tg_states` | TG 多步驟對話狀態機（含暫存資料，JSON） |
-| `ya_tg_holdings` | 用戶持股記錄（以股為單位） |
-| `ya_tg_holding_trades` | 歷史交易記錄（含損益、手續費） |
+| `ya_admin_users` | 後台管理員 |
+| `ya_admin_roles` / `ya_admin_permissions` / `ya_admin_menus` | RBAC |
+| `ya_admin_configs` | 系統設定（API URL 等，統一用 `getConfig()` 讀取） |
+| `ya_migrations` | Migration 記錄 |
+
+### 股票機器人
+| 表名 | 說明 |
+|------|------|
+| `ya_tg_bots` | 機器人設定（type: 1=股票, 2=AV） |
+| `ya_tg_messages` | 對話記錄 |
+| `ya_tg_states` | 多步驟狀態機（JSON 暫存資料） |
+| `ya_tg_holdings` | 用戶持股（以股為單位，支援零股） |
+| `ya_tg_holding_trades` | 歷史交易含損益 |
 | `ya_tg_wallets` | 用戶帳戶資金 |
-| `ya_tg_settlements` | T+2 交割款明細（direction: buy/sell） |
+| `ya_tg_settlements` | T+2 交割款明細 |
+| `ya_oil_prices` | 5分K棒（QA=原油 / WTX=台指 / VIX=恐慌 / GOLD=黃金） |
+| `ya_disposal_stocks` | 處置股名單（市場 / 起訖日 / 原因） |
 
-**外鍵關聯：**
-
-- `ya_tg_states`, `ya_tg_holdings`, `ya_tg_holding_trades`, `ya_tg_messages` → `ya_tg_bots.id`
-- `ya_article_comments` → `ya_articles.id`, `ya_members.id`
-- `ya_member_balance_logs` → `ya_members.id`
+### AV 系統
+| 表名 | 說明 |
+|------|------|
+| `ya_av_videos` | AV 影片（番號 / 標題 / 封面 / 片商 / 演員 / 標籤） |
+| `ya_av_actresses` | AV 女優（姓名 / 三圍 / 生日 / 出道年） |
+| `ya_av_video_actresses` | 影片 ↔ 女優 多對多關聯 |
+| `ya_av_user_prefs` | 用戶喜好標籤 + 推播開關 |
+| `ya_av_video_clicks` | 影片點擊記錄（熱門排序用） |
 
 ---
 
-## 部署說明（GCP + Docker）
+## Redis Cache 設計
 
-### 環境需求
+| Key | 說明 | TTL |
+|-----|------|-----|
+| `disposal:{code}` | 處置股個股資料 | 至隔日 07:59 |
+| `disposal:cache_ready` | 處置股快取旗標 | 至隔日 07:59 |
+| `tw-{code}` | 台股即時報價 | 5 分鐘 |
+| `tw-news-{code}` | 台股新聞 | 10 分鐘 |
+| `av_popular_tags` | 熱門 AV 標籤統計 | 1 小時（新片爬取後自動失效） |
+| `av_pref_{bot}_{chat}` | 用戶喜好 tag | 10 分鐘 |
+| `tg_upd_{bot}_{updateId}` | TG update 去重 | 60 秒 |
 
-- GCP Compute Engine（Debian）
-- Docker + Docker Compose
-- Laradock（位於 `~/laradock`）
+---
 
-### 首次部署
+## 色系規範
+
+| 情境 | 上漲 / 獲利 | 下跌 / 虧損 | 平盤 |
+|------|------------|------------|------|
+| 台股（後台 + TG） | 紅色 `#fc8181` `.tw-up` | 綠色 `#68d391` `.tw-dn` | 白色 `.tw-flat` |
+
+全站統一使用 `.tw-up` / `.tw-dn` / `.tw-flat` class（定義於 `base.blade.php`）。
+
+---
+
+## 重要開發規範
+
+1. **所有外部 API URL** 存入 `ya_admin_configs`，透過 `getConfig('key')` 讀取，不得寫死在程式碼
+2. **頻繁讀取的資料** 走 `Cache::remember()`，更新時 `Cache::forget()` 讓快取失效
+3. **SQL 查詢** 使用 `yamecent.ya_*` 完整前綴（GCP 環境要求）
+
+---
+
+## GCP 部署
+
+### 環境
+- GCP Compute Engine + Laradock（`~/laradock`）
+- 專案目錄：`/var/www`（Docker 容器內）
+
+### 升級流程
 
 ```bash
-# 1. Clone 專案
-git clone <repo-url> /var/www/yamecent-admin
+# 1. Host 拉取代碼
+cd ~/www/yamecent-admin && git pull
 
-# 2. 啟動 Docker 服務
-cd ~/laradock
-docker compose up -d nginx mysql redis workspace php-fpm
-
-# 3. 進入 workspace
-docker compose exec -it workspace bash
-
-# 4. 安裝依賴
-cd /var/www/yamecent-admin
-composer install --no-dev --optimize-autoloader
-
-# 5. 環境設定
-cp .env.example .env
-# 編輯 .env：設定 DB、Redis、JWT、APP_URL 等
-
-# 6. 初始化
-php artisan key:generate
-php artisan migrate
-php artisan db:seed
-php artisan config:cache
-```
-
-### 升級部署
-
-```bash
-cd ~/laradock
-docker compose exec -it workspace bash
-
-cd /var/www/yamecent-admin
-git pull
-composer install --no-dev --optimize-autoloader
+# 2. 進入容器執行 artisan
+cd ~/laradock && docker compose exec -it workspace bash
 php artisan migrate --force
-php artisan config:clear
-php artisan route:clear
-php artisan view:clear
+php artisan config:clear && php artisan view:clear
 ```
 
-### HTTPS 設定（Let's Encrypt）
+### 排程（Crontab）
 
 ```bash
-# 停止 nginx 釋放 80 port
-docker compose stop nginx
-
-# 申請憑證
-sudo certbot certonly --standalone -d yourdomain.com
-
-# 掛載憑證至 nginx（docker-compose.yml nginx volumes 加入）
-- /etc/letsencrypt:/etc/letsencrypt:ro
-
-# 重啟
-docker compose up -d nginx
+* * * * * docker exec laradock-workspace-1 php /var/www/artisan schedule:run >> /dev/null 2>&1
 ```
-
-### .env 重要設定
-
-```env
-APP_URL=https://yourdomain.com
-CACHE_DRIVER=redis
-REDIS_HOST=redis
-REDIS_PASSWORD=your_redis_password
-REDIS_DB=1
-LOG_VIEWER_ENABLED=true
-```
-
-### 排程設定（Crontab）
-
-```bash
-# 主機 crontab（注意容器名稱）
-* * * * * docker exec laradock_workspace_1 php /var/www/yamecent-admin/artisan schedule:run >> /dev/null 2>&1
-```
-
----
-
-## 專案結構
-
-```
-app/
-├── Console/
-│   ├── Kernel.php                     # 排程設定
-│   └── Commands/
-│       ├── FetchOilPrice.php          # 布蘭特原油抓取與告警
-│       ├── FetchTwIndex.php           # 台指期 / VIX 抓取與告警
-│       ├── NotifyHoldings.php         # 每日持股漲跌通知
-│       ├── SettlePayments.php         # T+2 交割款自動結算
-│       └── ScrapeWantgoo.php          # 玩股網文章爬蟲
-├── Http/Controllers/
-│   ├── Admin/                         # 後台控制器
-│   │   ├── IndexController.php        # 控制台（含通知資料）
-│   │   ├── TgBotController.php
-│   │   ├── TgMessageController.php
-│   │   └── TgHoldingController.php
-│   └── Api/
-│       ├── TgWebhookController.php    # TG Webhook 主控制器
-│       └── TgAuthController.php      # Telegram Mini App 登入
-├── Providers/
-│   └── AppServiceProvider.php        # Log Viewer 存取授權
-├── TgBot.php
-├── TgMessage.php
-├── TgState.php
-├── TgHolding.php
-├── TgHoldingTrade.php
-├── TgWallet.php
-└── TgSettlement.php
-config/
-├── logging.php                        # 含 6 個自訂 Log channel
-└── log-viewer.php                     # Log Viewer 設定
-database/
-├── migrations/
-└── seeders/
-routes/
-├── web.php                            # 後台路由
-└── api.php                            # API 路由
-```
-
----
-
-## RBAC 鑑權流程
-
-詳見 [Rbac.md](Rbac.md)。
-
-後台採 Session-based RBAC，流程：
-
-1. `CheckSession` 中間件 — 驗證 Session 是否存在登入資訊
-2. `Rbac` 中間件 — 從 Session 取得 AdminUser，比對當前路由是否在授權範圍內
-3. 通過後進入對應 Controller 方法，取得該用戶的選單集合傳至 View
-
-Log Viewer 另有獨立的 `LogViewer::auth()` 守衛，限制僅超級管理員（`hasSuperRole()`）可存取。
