@@ -2048,8 +2048,9 @@ class TgWebhookController extends Controller
 
     private function buildAvTodayReply(TgBot $bot, int $chatId): string
     {
-        $today   = now('Asia/Taipei')->toDateString();
-        $limit   = 5;
+        // D-1：爬蟲當天抓到的通常是昨日發行，以昨日為「今日新片」基準
+        $targetDate = now('Asia/Taipei')->subDay()->toDateString();
+        $limit      = 5;
 
         // 讀用戶喜好 tag（從 Redis 快取，miss 才查 DB）
         $prefKey  = "av_pref_{$bot->id}_{$chatId}";
@@ -2061,26 +2062,26 @@ class TgWebhookController extends Controller
 
         $hot = collect();
 
-        // ── 1. 當日 × 喜好 tag（有喜好才查）────────────────────────
+        // ── 1. D-1 × 喜好 tag ──────────────────────────────────────
         if (!empty($favTags)) {
-            $q = \App\AvVideo::whereDate('release_date', $today);
+            $q = \App\AvVideo::whereDate('release_date', $targetDate);
             foreach ($favTags as $tag) {
                 $q->whereJsonContains('tags', $tag);
             }
             $hot = $q->inRandomOrder()->limit($limit)->get();
         }
 
-        // ── 2. 當日任意新片（補不足或無喜好）───────────────────────
+        // ── 2. D-1 任意新片（補不足或無喜好）──────────────────────
         if ($hot->count() < $limit) {
             $need    = $limit - $hot->count();
             $exclude = $hot->pluck('code')->toArray();
-            $fill    = \App\AvVideo::whereDate('release_date', $today)
+            $fill    = \App\AvVideo::whereDate('release_date', $targetDate)
                 ->when(!empty($exclude), fn($q) => $q->whereNotIn('code', $exclude))
                 ->inRandomOrder()->limit($need)->get();
             $hot = $hot->concat($fill);
         }
 
-        // ── 3. 近 3 天最新片（當日完全無資料）──────────────────────
+        // ── 3. 近 3 天最新片（D-1 無資料才用）─────────────────────
         if ($hot->isEmpty()) {
             $hot = \App\AvVideo::where('release_date', '>=', now()->subDays(3)->toDateString())
                 ->inRandomOrder()->limit($limit)->get();
@@ -2102,7 +2103,7 @@ class TgWebhookController extends Controller
         }
         \Illuminate\Support\Facades\DB::table('ya_av_video_clicks')->insert($inserts);
 
-        $lines = ["🎬 <b>今日新片</b>（" . $today . "）\n"];
+        $lines = ["🎬 <b>今日新片</b>（" . $targetDate . "）\n"];
         foreach ($hot as $v) {
             $actress = $v->actresses ? implode(' / ', $v->actresses) : '-';
             $tags    = $v->tags ? implode(' ｜ ', array_slice($v->tags, 0, 5)) : '';

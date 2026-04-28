@@ -16,9 +16,12 @@ class AvVideoController extends Controller
 
         $query = AvVideo::query();
 
+        // D-1：以昨日發行日期為「今日新片」基準
+        $yesterday = $now->copy()->subDay()->toDateString();
+
         switch ($period) {
             case 'today':
-                $query->whereDate('release_date', $now->toDateString());
+                $query->whereDate('release_date', $yesterday);
                 break;
             case 'week':
                 $query->where('release_date', '>=', $now->copy()->subDays(7)->toDateString());
@@ -65,7 +68,7 @@ class AvVideoController extends Controller
         });
 
         $stats = [
-            'today' => AvVideo::whereDate('release_date', $now->toDateString())->count(),
+            'today' => AvVideo::whereDate('release_date', $yesterday)->count(),
             'week'  => AvVideo::where('release_date', '>=', $now->copy()->subDays(7)->toDateString())->count(),
             'month' => AvVideo::where('release_date', '>=', $now->copy()->subDays(30)->toDateString())->count(),
             'total' => AvVideo::count(),
