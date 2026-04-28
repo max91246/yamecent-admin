@@ -38,7 +38,7 @@ class ScrapeAvActresses extends Command
         $saved = $updated = $fail = 0;
 
         $this->info("開始爬取 MissAV 女優（按出道排序），共 {$maxPages} 頁...");
-        Log::channel('tg_webhook')->info('[AV爬蟲] 開始', ['pages' => $maxPages]);
+        Log::channel('av_scraper')->info('[AV爬蟲] 開始', ['pages' => $maxPages]);
 
         for ($page = 1; $page <= $maxPages; $page++) {
             $this->line("── 第 {$page} 頁 ──");
@@ -95,7 +95,7 @@ class ScrapeAvActresses extends Command
         }
 
         $this->info("完成。新增 {$saved}，更新 {$updated}，詳細失敗 {$fail}。");
-        Log::channel('tg_webhook')->info('[AV爬蟲] 完成', compact('saved', 'updated', 'fail'));
+        Log::channel('av_scraper')->info('[AV爬蟲] 完成', compact('saved', 'updated', 'fail'));
         return 0;
     }
 

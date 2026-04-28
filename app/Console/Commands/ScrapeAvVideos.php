@@ -36,7 +36,7 @@ class ScrapeAvVideos extends Command
         $saved = $updated = $fail = $skip = 0;
 
         $this->info("開始爬取 MissAV 新片（{$listType}）共 {$maxPages} 頁...");
-        Log::channel('tg_webhook')->info('[AV影片爬蟲] 開始', ['type' => $listType, 'pages' => $maxPages]);
+        Log::channel('av_scraper')->info('[AV影片爬蟲] 開始', ['type' => $listType, 'pages' => $maxPages]);
 
         for ($page = 1; $page <= $maxPages; $page++) {
             $this->line("── 第 {$page} 頁 ──");
@@ -94,7 +94,7 @@ class ScrapeAvVideos extends Command
         }
 
         $this->info("完成。新增 {$saved}，更新 {$updated}，略過 {$skip}，失敗 {$fail}。");
-        Log::channel('tg_webhook')->info('[AV影片爬蟲] 完成', compact('saved', 'updated', 'skip', 'fail'));
+        Log::channel('av_scraper')->info('[AV影片爬蟲] 完成', compact('saved', 'updated', 'skip', 'fail'));
 
         // 有新資料才讓標籤快取失效，下次查詢重新統計
         if ($saved > 0) {

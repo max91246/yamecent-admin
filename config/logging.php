@@ -124,6 +124,14 @@ return [
             'days'       => 14,
             'permission' => 0666,
         ],
+
+        'av_scraper' => [
+            'driver'     => 'daily',
+            'path'       => storage_path('logs/av-scraper.log'),
+            'level'      => 'debug',
+            'days'       => 14,
+            'permission' => 0666,
+        ],
     ],
 
 ];

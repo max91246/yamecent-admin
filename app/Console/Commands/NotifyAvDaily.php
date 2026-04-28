@@ -21,7 +21,7 @@ class NotifyAvDaily extends Command
         $pushed = 0;
         $skip   = 0;
 
-        Log::channel('tg_webhook')->info('[AV推播] 開始每日推播', ['date' => $today]);
+        Log::channel('av_scraper')->info('[AV推播] 開始每日推播', ['date' => $today]);
 
         // 取所有開啟推播的用戶偏好
         $prefs = AvUserPref::where('push_enabled', true)
@@ -74,7 +74,7 @@ class NotifyAvDaily extends Command
                 ]);
                 $pushed++;
             } catch (\Exception $e) {
-                Log::channel('tg_webhook')->warning('[AV推播] 推送失敗', [
+                Log::channel('av_scraper')->warning('[AV推播] 推送失敗', [
                     'chat_id' => $pref->tg_chat_id,
                     'error'   => $e->getMessage(),
                 ]);
@@ -84,7 +84,7 @@ class NotifyAvDaily extends Command
         }
 
         $this->info("完成。推播 {$pushed} 人，略過 {$skip} 人。");
-        Log::channel('tg_webhook')->info('[AV推播] 完成', compact('pushed', 'skip'));
+        Log::channel('av_scraper')->info('[AV推播] 完成', compact('pushed', 'skip'));
         return 0;
     }
 }
