@@ -2042,34 +2042,48 @@ class TgWebhookController extends Controller
             $tags[] = $tag;
         }
         $pref->update(['fav_tags' => array_values($tags)]);
+        // 清除用戶偏好快取
+        Cache::forget("av_pref_{$bot->id}_{$chatId}");
     }
 
     private function buildAvTodayReply(TgBot $bot, int $chatId): string
     {
-        $today = now('Asia/Taipei')->toDateString();
+        $today   = now('Asia/Taipei')->toDateString();
+        $limit   = 5;
 
-        // 今日熱門（先查今日點擊次數最多的 code）
-        $topCodes = \Illuminate\Support\Facades\DB::table('ya_av_video_clicks')
-            ->whereDate('clicked_at', $today)
-            ->select('video_code', \Illuminate\Support\Facades\DB::raw('COUNT(*) as cnt'))
-            ->groupBy('video_code')
-            ->orderBy('cnt', 'desc')
-            ->limit(5)
-            ->pluck('video_code')
-            ->toArray();
+        // 讀用戶喜好 tag（從 Redis 快取，miss 才查 DB）
+        $prefKey  = "av_pref_{$bot->id}_{$chatId}";
+        $favTags  = Cache::remember($prefKey, 600, function () use ($bot, $chatId) {
+            $pref = \App\AvUserPref::where('bot_id', $bot->id)
+                ->where('tg_chat_id', $chatId)->first();
+            return $pref ? ($pref->fav_tags ?? []) : [];
+        });
 
-        if (!empty($topCodes)) {
-            $hot = \App\AvVideo::whereIn('code', $topCodes)->get()
-                ->sortBy(fn($v) => array_search($v->code, $topCodes))->values();
-        } else {
-            // 無點擊資料 → 今日新片隨機
-            $hot = \App\AvVideo::whereDate('release_date', $today)->inRandomOrder()->limit(5)->get();
+        $hot = collect();
+
+        // ── 1. 當日 × 喜好 tag（有喜好才查）────────────────────────
+        if (!empty($favTags)) {
+            $q = \App\AvVideo::whereDate('release_date', $today);
+            foreach ($favTags as $tag) {
+                $q->whereJsonContains('tags', $tag);
+            }
+            $hot = $q->inRandomOrder()->limit($limit)->get();
         }
 
-        // 今日無片 → 近 3 天隨機
+        // ── 2. 當日任意新片（補不足或無喜好）───────────────────────
+        if ($hot->count() < $limit) {
+            $need    = $limit - $hot->count();
+            $exclude = $hot->pluck('code')->toArray();
+            $fill    = \App\AvVideo::whereDate('release_date', $today)
+                ->when(!empty($exclude), fn($q) => $q->whereNotIn('code', $exclude))
+                ->inRandomOrder()->limit($need)->get();
+            $hot = $hot->concat($fill);
+        }
+
+        // ── 3. 近 3 天最新片（當日完全無資料）──────────────────────
         if ($hot->isEmpty()) {
             $hot = \App\AvVideo::where('release_date', '>=', now()->subDays(3)->toDateString())
-                ->inRandomOrder()->limit(5)->get();
+                ->inRandomOrder()->limit($limit)->get();
         }
 
         if ($hot->isEmpty()) {
