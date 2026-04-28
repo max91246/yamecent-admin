@@ -249,7 +249,7 @@
                                             </td>
                                             <td>NT${{ $row->buy_price }}</td>
                                             <td>NT${{ $row->sell_price }}</td>
-                                            <td class="{{ $row->profit >= 0 ? 'text-success' : 'text-danger' }} font-weight-bold">
+                                            <td class="{{ $row->profit > 0 ? 'tw-up' : ($row->profit < 0 ? 'tw-dn' : 'tw-flat') }} font-weight-bold">
                                                 {{ $row->profit >= 0 ? '+' : '' }}NT${{ number_format($row->profit, 0) }}
                                                 @if($profitPct !== null)
                                                 <br><small class="font-weight-normal">{{ $row->profit >= 0 ? '+' : '' }}{{ $profitPct }}%</small>

@@ -89,7 +89,7 @@
                                                 </td>
                                                 <td>NT${{ $row->buy_price }}</td>
                                                 <td>NT${{ $row->sell_price }}</td>
-                                                <td class="{{ $row->profit >= 0 ? 'text-success' : 'text-danger' }}">
+                                                <td class="{{ $row->profit > 0 ? 'tw-up' : ($row->profit < 0 ? 'tw-dn' : 'tw-flat') }}">
                                                     <strong>{{ $row->profit >= 0 ? '+' : '' }}NT${{ number_format($row->profit, 0) }}</strong>
                                                 </td>
                                                 <td>{{ $row->created_at }}</td>

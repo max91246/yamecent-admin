@@ -144,6 +144,11 @@
       background: linear-gradient(135deg, #1a3a6e, #2563a8) !important;
     }
 
+    /* 台股色系：漲紅跌綠平白（全站統一） */
+    .tw-up   { color: #fc8181 !important; }
+    .tw-dn   { color: #68d391 !important; }
+    .tw-flat { color: #e2e8f0 !important; }
+
     /* Pagination */
     .pagination {
       margin-bottom: 0;

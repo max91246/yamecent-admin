@@ -370,7 +370,7 @@
 
     function instColor(v) {
         if (v === null || v === undefined) return '';
-        return v >= 0 ? 'inst-pos' : 'inst-neg';
+        return v > 0 ? 'tw-up' : v < 0 ? 'tw-dn' : 'tw-flat';
     }
 
     function renderResult(data) {

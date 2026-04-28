@@ -67,7 +67,7 @@
                                                 <td>NT${{ number_format($wallet->capital, 0) }}</td>
                                                 <td>{{ $hc ? $hc->cnt : 0 }} 筆</td>
                                                 <td>{{ $hc ? 'NT$' . number_format($hc->total_cost, 0) : '-' }}</td>
-                                                <td class="{{ $profit >= 0 ? 'text-success' : 'text-danger' }} font-weight-bold">
+                                                <td class="{{ $profit > 0 ? 'tw-up' : ($profit < 0 ? 'tw-dn' : 'tw-flat') }} font-weight-bold">
                                                     {{ $total > 0 ? ($profit >= 0 ? '+' : '') . 'NT$' . number_format($profit, 0) : '-' }}
                                                 </td>
                                                 <td>
