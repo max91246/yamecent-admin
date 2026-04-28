@@ -486,15 +486,19 @@
             data.history.forEach((d, i) => {
                 const prev  = data.history[i + 1];
                 const diff  = prev ? (d.close - prev.close) : 0;
+                const pct   = prev && prev.close > 0 ? (diff / prev.close * 100) : 0;
                 const sign  = diff >= 0 ? '+' : '';
                 const cls   = diff > 0 ? 'inst-neg' : diff < 0 ? 'inst-pos' : '';
+                const changeStr = prev
+                    ? `${sign}${fmtNum(diff, 2)} <small style="opacity:0.75">(${sign}${fmtNum(pct, 2)}%)</small>`
+                    : '-';
                 historyBody.innerHTML += `<tr>
                     <td>${d.date}</td>
                     <td class="text-right">${fmtNum(d.open, 2)}</td>
                     <td class="text-right">${fmtNum(d.high, 2)}</td>
                     <td class="text-right">${fmtNum(d.low,  2)}</td>
                     <td class="text-right"><strong>${fmtNum(d.close, 2)}</strong></td>
-                    <td class="text-right ${cls}">${prev ? sign + fmtNum(diff, 2) : '-'}</td>
+                    <td class="text-right ${cls}">${changeStr}</td>
                     <td class="text-right">${fmtNum(d.volume)}</td>
                 </tr>`;
             });
