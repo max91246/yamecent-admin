@@ -1968,26 +1968,39 @@ class TgWebhookController extends Controller
         if (!$msg) return response()->json(['ok' => true]);
 
         $chatId   = (int) $msg['chat']['id'];
+        $userId   = (string) ($msg['from']['id'] ?? $chatId);
+        $username = $msg['from']['username'] ?? null;
         $text     = trim($msg['text'] ?? '');
 
+        // 記錄用戶訊息
+        if ($text) {
+            $this->logMessage($bot->id, $userId, $username, $chatId, $text, 1, 'text');
+        }
+
         if (str_starts_with($text, '/start') || in_array($text, ['開始', 'start'])) {
-            $this->sendMessage($bot->token, $chatId, "🔞 AV 速報機器人\n\n請選擇功能：", $this->getAvKeyboard());
+            $reply = "🔞 AV 速報機器人\n\n請選擇功能：";
+            $this->sendMessage($bot->token, $chatId, $reply, $this->getAvKeyboard());
+            $this->logMessage($bot->id, $userId, $username, $chatId, $reply, 2, 'reply');
             return response()->json(['ok' => true]);
         }
 
         if ($text === '🎬 今日新片') {
             $reply = $this->buildAvTodayReply($bot, $chatId);
             $this->sendMessage($bot->token, $chatId, $reply, $this->getAvKeyboard(), 'HTML');
+            $this->logMessage($bot->id, $userId, $username, $chatId, $reply, 2, 'reply');
             return response()->json(['ok' => true]);
         }
 
         if ($text === '⭐ 喜好設定') {
             [$menuText, $markup] = $this->buildAvTagMenu($bot, $chatId);
             $this->sendMessage($bot->token, $chatId, $menuText, $markup);
+            $this->logMessage($bot->id, $userId, $username, $chatId, $menuText, 2, 'reply');
             return response()->json(['ok' => true]);
         }
 
-        $this->sendMessage($bot->token, $chatId, "請選擇功能：", $this->getAvKeyboard());
+        $reply = "請選擇功能：";
+        $this->sendMessage($bot->token, $chatId, $reply, $this->getAvKeyboard());
+        $this->logMessage($bot->id, $userId, $username, $chatId, $reply, 2, 'reply');
         return response()->json(['ok' => true]);
     }
 
