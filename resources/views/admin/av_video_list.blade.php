@@ -73,11 +73,6 @@
                             </div>
 
                             @php
-                            $quickTags = [
-                                '巨乳','美乳','中出','潮吹','人妻','美少女','OL','制服',
-                                '素人','無碼','高清','4K','企劃','單體','系列','SM',
-                                '女同','3P','口交','肛交','泳裝','護士','教師',
-                            ];
                             $activeTags = (array) request('tags', []);
                             @endphp
                             <input type="hidden" name="period" value="{{ $period }}">
@@ -97,7 +92,7 @@
 
                             {{-- 標籤 Chip 多選 --}}
                             <div class="mt-2" id="tagChipArea">
-                                @foreach($quickTags as $idx => $t)
+                                @foreach($availableTags as $idx => $t)
                                     <span onclick="toggleChip(this,'{{ $t }}')"
                                           data-tag="{{ $t }}"
                                           class="tag-chip {{ in_array($t, $activeTags) ? 'active' : '' }}">{{ $t }}</span>

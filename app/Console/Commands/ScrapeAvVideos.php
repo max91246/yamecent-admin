@@ -93,8 +93,14 @@ class ScrapeAvVideos extends Command
             if ($page < $maxPages) sleep($delay);
         }
 
-        $this->info("完成。新增 {$saved}，更新 {$updated}，失敗 {$fail}。");
-        Log::channel('tg_webhook')->info('[AV影片爬蟲] 完成', compact('saved', 'updated', 'fail'));
+        $this->info("完成。新增 {$saved}，更新 {$updated}，略過 {$skip}，失敗 {$fail}。");
+        Log::channel('tg_webhook')->info('[AV影片爬蟲] 完成', compact('saved', 'updated', 'skip', 'fail'));
+
+        // 有新資料才讓標籤快取失效，下次查詢重新統計
+        if ($saved > 0) {
+            \Illuminate\Support\Facades\Cache::forget('av_popular_tags');
+            $this->info("已清除標籤快取，下次將重新統計。");
+        }
         return 0;
     }
 

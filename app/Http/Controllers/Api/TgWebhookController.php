@@ -1918,11 +1918,25 @@ class TgWebhookController extends Controller
     //  AV Bot（type == 2）
     // ════════════════════════════════════════════════════════════
 
-    private const AV_TAGS = [
-        '巨乳','美乳','中出','潮吹','人妻','美少女','OL','制服',
-        '素人','無碼','高清','4K','企劃','單體','系列','SM',
-        '女同','3P','口交','肛交','泳裝','護士','教師',
-    ];
+    // 動態從 DB 統計最常見標籤，快取 1 小時
+    private function getAvTags(): array
+    {
+        return Cache::remember('av_popular_tags', 3600, function () {
+            $rows = \App\AvVideo::whereNotNull('tags')->pluck('tags');
+            $count = [];
+            foreach ($rows as $tagArr) {
+                if (!is_array($tagArr)) continue;
+                foreach ($tagArr as $tag) {
+                    $t = trim($tag);
+                    if ($t && mb_strlen($t) <= 10) {
+                        $count[$t] = ($count[$t] ?? 0) + 1;
+                    }
+                }
+            }
+            arsort($count);
+            return array_keys(array_slice($count, 0, 30, true));
+        });
+    }
 
     private function handleAvBot(TgBot $bot, array $update): \Illuminate\Http\JsonResponse
     {
@@ -1997,7 +2011,7 @@ class TgWebhookController extends Controller
         $text = "⭐ <b>喜好標籤設定</b>\n已選 " . count($selected) . " 個標籤\n點選標籤切換選取，完成後按「儲存」";
 
         $rows = [];
-        $chunks = array_chunk(self::AV_TAGS, 3);
+        $chunks = array_chunk($this->getAvTags(), 3);
         foreach ($chunks as $row) {
             $btns = [];
             foreach ($row as $tag) {
