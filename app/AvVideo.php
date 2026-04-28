@@ -23,4 +23,14 @@ class AvVideo extends Model
         'is_uncensored' => 'boolean',
         'is_leaked'     => 'boolean',
     ];
+
+    public function actresses(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(
+            AvActress::class,
+            'ya_av_video_actresses',
+            'video_id',
+            'actress_id'
+        );
+    }
 }

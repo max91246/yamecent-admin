@@ -23,4 +23,14 @@ class AvActress extends Model
     {
         return $this->birthday ? $this->birthday->age : null;
     }
+
+    public function videos(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(
+            AvVideo::class,
+            'ya_av_video_actresses',
+            'actress_id',
+            'video_id'
+        );
+    }
 }

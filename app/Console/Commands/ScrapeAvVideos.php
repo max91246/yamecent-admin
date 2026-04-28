@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\AvActress;
 use App\AvVideo;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
@@ -81,10 +82,27 @@ class ScrapeAvVideos extends Command
                     'is_leaked'    => str_contains($listType, 'leak'),
                 ];
 
-                AvVideo::create($payload);
+                $video = AvVideo::create($payload);
 
-                $actress = $payload['actresses'] ? implode(',', $payload['actresses']) : '-';
-                $this->line("  [新增] {$detail['code']} | {$actress} | {$payload['release_date']}");
+                // 自動建立/關聯女優
+                if (!empty($payload['actresses'])) {
+                    $actressIds = [];
+                    foreach ($payload['actresses'] as $name) {
+                        $name = trim($name);
+                        if (!$name) continue;
+                        $actress = AvActress::firstOrCreate(
+                            ['name' => $name],
+                            ['missav_slug' => $name, 'is_active' => true]
+                        );
+                        $actressIds[] = $actress->id;
+                    }
+                    if ($actressIds) {
+                        $video->actresses()->sync($actressIds);
+                    }
+                }
+
+                $actressStr = $payload['actresses'] ? implode(',', $payload['actresses']) : '-';
+                $this->line("  [新增] {$detail['code']} | {$actressStr} | {$payload['release_date']}");
 
                 $saved++;
                 usleep(800000);
