@@ -11,24 +11,67 @@
             </h3>
         </div>
 
-        {{-- 搜尋 --}}
+        {{-- 統計卡 --}}
+        <div class="row">
+            <div class="col-md-3 stretch-card grid-margin">
+                <div class="card bg-gradient-danger card-img-holder text-white">
+                    <div class="card-body">
+                        <img src="/assets/images/dashboard/circle.svg" class="card-img-absolute" alt=""/>
+                        <h5 class="font-weight-normal mb-2">本月新增 <i class="mdi mdi-calendar-today mdi-24px float-right"></i></h5>
+                        <h3 class="mb-1">{{ $stats['month'] }}</h3><small>位女優</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 stretch-card grid-margin">
+                <div class="card bg-gradient-warning card-img-holder text-white">
+                    <div class="card-body">
+                        <img src="/assets/images/dashboard/circle.svg" class="card-img-absolute" alt=""/>
+                        <h5 class="font-weight-normal mb-2">本季新增 <i class="mdi mdi-calendar mdi-24px float-right"></i></h5>
+                        <h3 class="mb-1">{{ $stats['quarter'] }}</h3><small>位女優</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 stretch-card grid-margin">
+                <div class="card bg-gradient-info card-img-holder text-white">
+                    <div class="card-body">
+                        <img src="/assets/images/dashboard/circle.svg" class="card-img-absolute" alt=""/>
+                        <h5 class="font-weight-normal mb-2">{{ now()->year }} 出道 <i class="mdi mdi-star mdi-24px float-right"></i></h5>
+                        <h3 class="mb-1">{{ $stats['year'] }}</h3><small>位女優</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 stretch-card grid-margin">
+                <div class="card bg-gradient-primary card-img-holder text-white">
+                    <div class="card-body">
+                        <img src="/assets/images/dashboard/circle.svg" class="card-img-absolute" alt=""/>
+                        <h5 class="font-weight-normal mb-2">資料庫總數 <i class="mdi mdi-database mdi-24px float-right"></i></h5>
+                        <h3 class="mb-1">{{ number_format($stats['total']) }}</h3><small>位女優</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- 篩選 --}}
         <div class="row">
             <div class="col-lg-12 grid-margin">
                 <div class="card">
                     <div class="card-body py-3">
+                        {{-- 期間頁籤 --}}
+                        <div class="d-flex flex-wrap mb-3" style="gap:6px;">
+                            @foreach(['' => '📋 全部', 'month' => '📅 本月', 'quarter' => '📊 本季', 'year' => '🗓 ' . now()->year . ' 年'] as $key => $label)
+                                <a href="{{ url('admin/av/actresses') }}?period={{ $key }}"
+                                   class="btn btn-sm {{ $period === $key ? 'btn-primary' : 'btn-outline-secondary' }}">{{ $label }}</a>
+                            @endforeach
+                            <span class="text-muted small align-self-center ml-auto">共 {{ $list->total() }} 筆</span>
+                        </div>
+
+                        {{-- 搜尋列 --}}
                         <form method="GET" action="">
-                            <div class="row" style="gap:0;">
-                                {{-- 第一行 --}}
+                            <input type="hidden" name="period" value="{{ $period }}">
+                            <div class="row">
                                 <div class="col-md-2 mb-2">
                                     <input type="text" name="name" class="form-control form-control-sm"
-                                           placeholder="姓名搜尋" value="{{ request('name') }}">
-                                </div>
-                                <div class="col-md-2 mb-2">
-                                    <select name="is_active" class="form-control form-control-sm">
-                                        <option value="">全部狀態</option>
-                                        <option value="1" {{ request('is_active') === '1' ? 'selected' : '' }}>在役</option>
-                                        <option value="0" {{ request('is_active') === '0' ? 'selected' : '' }}>引退</option>
-                                    </select>
+                                           placeholder="搜尋姓名" value="{{ request('name') }}">
                                 </div>
                                 <div class="col-md-2 mb-2">
                                     <select name="debut_year" class="form-control form-control-sm">
@@ -46,8 +89,6 @@
                                         @endforeach
                                     </select>
                                 </div>
-                            </div>
-                            <div class="row mt-1">
                                 <div class="col-md-3 mb-2">
                                     <div class="d-flex align-items-center" style="gap:6px;">
                                         <span class="text-muted small" style="white-space:nowrap;">身高</span>
@@ -66,28 +107,9 @@
                                         </select>
                                     </div>
                                 </div>
-                                <div class="col-md-3 mb-2">
-                                    <div class="d-flex align-items-center" style="gap:6px;">
-                                        <span class="text-muted small" style="white-space:nowrap;">腰圍</span>
-                                        <select name="waist_min" class="form-control form-control-sm">
-                                            <option value="">最小</option>
-                                            @for($w = 48; $w <= 70; $w += 2)
-                                                <option value="{{ $w }}" {{ request('waist_min') == $w ? 'selected' : '' }}>{{ $w }}</option>
-                                            @endfor
-                                        </select>
-                                        <span class="text-muted">~</span>
-                                        <select name="waist_max" class="form-control form-control-sm">
-                                            <option value="">最大</option>
-                                            @for($w = 48; $w <= 70; $w += 2)
-                                                <option value="{{ $w }}" {{ request('waist_max') == $w ? 'selected' : '' }}>{{ $w }}</option>
-                                            @endfor
-                                        </select>
-                                    </div>
-                                </div>
                                 <div class="col-md-auto mb-2">
                                     <button type="submit" class="btn btn-sm btn-primary">搜尋</button>
-                                    <a href="{{ url()->current() }}" class="btn btn-sm btn-secondary ml-1">重置</a>
-                                    <span class="text-muted small ml-2">共 {{ $list->total() }} 筆</span>
+                                    <a href="{{ url('admin/av/actresses') }}" class="btn btn-sm btn-secondary ml-1">重置</a>
                                 </div>
                             </div>
                         </form>
@@ -99,52 +121,40 @@
         {{-- 女優卡片 --}}
         <div class="row">
             @forelse($list as $actress)
+            @php $isNew = $actress->created_at->gt(now()->subDays(7)); @endphp
             <div class="col-6 col-md-3 col-lg-2 grid-margin">
-                <div class="card h-100 text-center" style="border-color:rgba(100,160,255,0.15)!important;">
+                <div class="card h-100 text-center" style="border-color:rgba(100,160,255,0.15)!important;position:relative;">
+                    @if($isNew)
+                        <span class="badge badge-danger" style="position:absolute;top:6px;right:6px;font-size:0.6rem;">NEW</span>
+                    @endif
                     <div class="card-body p-2">
-
-                        {{-- 頭像 --}}
                         <div class="mb-2">
                             @if($actress->image_url)
                                 <img src="{{ $actress->image_url }}" alt="{{ $actress->name }}"
                                      referrerpolicy="no-referrer"
-                                     style="width:80px;height:80px;border-radius:50%;object-fit:cover;object-position:top;">
+                                     style="width:80px;height:80px;border-radius:50%;object-fit:cover;object-position:top;
+                                            border:2px solid {{ $isNew ? '#fc8181' : 'rgba(100,160,255,0.3)' }};">
                             @else
                                 <div style="width:80px;height:80px;border-radius:50%;background:#1a3a6e;display:inline-flex;align-items:center;justify-content:center;">
                                     <i class="mdi mdi-account" style="font-size:2rem;color:#63b3ed;"></i>
                                 </div>
                             @endif
                         </div>
-
-                        {{-- 姓名 --}}
                         <p class="mb-1 font-weight-bold" style="color:#e2e8f0;font-size:0.85rem;line-height:1.2;">
                             {{ $actress->name }}
                         </p>
-
-                        {{-- 生日 --}}
+                        @if($actress->debut_year)
+                            <p class="mb-0" style="color:#fbd38d;font-size:0.72rem;">🌟 {{ $actress->debut_year }} 出道</p>
+                        @endif
                         @if($actress->birthday)
-                        <p class="mb-0 text-muted" style="font-size:0.75rem;">
-                            {{ $actress->birthday->format('Y-m-d') }}
-                        </p>
+                            <p class="mb-0 text-muted" style="font-size:0.72rem;">{{ $actress->birthday->format('Y-m-d') }}</p>
                         @endif
-
-                        {{-- 三圍 --}}
                         @if($actress->height || $actress->bust)
-                        <p class="mb-0 text-muted" style="font-size:0.75rem;">
-                            @if($actress->height){{ $actress->height }}cm @endif
-                            @if($actress->bust){{ $actress->bust }}-{{ $actress->waist }}-{{ $actress->hip }}@endif
-                        </p>
+                            <p class="mb-0 text-muted" style="font-size:0.72rem;">
+                                @if($actress->height){{ $actress->height }}cm @endif
+                                @if($actress->bust){{ $actress->bust }}-{{ $actress->waist }}-{{ $actress->hip }}@endif
+                            </p>
                         @endif
-
-                        {{-- 狀態 --}}
-                        <div class="mt-1">
-                            @if($actress->is_active)
-                                <span class="badge badge-success" style="font-size:0.65rem;">在役</span>
-                            @else
-                                <span class="badge badge-secondary" style="font-size:0.65rem;">引退</span>
-                            @endif
-                        </div>
-
                     </div>
                 </div>
             </div>
@@ -160,11 +170,7 @@
             @endforelse
         </div>
 
-        {{-- 分頁 --}}
-        <div class="mt-2">
-            {{ $list->appends(request()->query())->links() }}
-        </div>
-
+        <div class="mt-2">{{ $list->appends(request()->query())->links() }}</div>
     </div>
 </div>
 @endsection
