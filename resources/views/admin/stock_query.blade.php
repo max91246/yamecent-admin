@@ -188,10 +188,10 @@
 <style>
     #stockCode { background: #0d1224 !important; color: #e2e8f0 !important; border-color: rgba(100,160,255,0.2) !important; }
     #stockCode:focus { border-color: rgba(100,160,255,0.5) !important; box-shadow: 0 0 0 0.2rem rgba(100,160,255,0.15) !important; }
-    .inst-pos { color: #68d391; }
-    .inst-neg { color: #fc8181; }
-    .rev-up   { color: #68d391; }
-    .rev-dn   { color: #fc8181; }
+    .inst-pos { color: #68d391; } /* 下跌綠 */
+    .inst-neg { color: #fc8181; } /* 上漲紅 */
+    .rev-up   { color: #fc8181; } /* 營收月增/年增 紅漲 */
+    .rev-dn   { color: #68d391; } /* 營收月減/年減 綠跌 */
     #newsList li { padding: 8px 0; border-bottom: 1px solid rgba(100,160,255,0.08); }
     #newsList li:last-child { border-bottom: none; }
     #newsList a { color: #63b3ed; text-decoration: none; }
@@ -385,7 +385,7 @@
             const diff = parseFloat(q.priceChange);
             const pct  = parseFloat(q.priceChangePct);
             const sign = diff >= 0 ? '+' : '';
-            const color = diff >= 0 ? '#68d391' : '#fc8181';
+            const color = diff > 0 ? '#fc8181' : diff < 0 ? '#68d391' : '#e2e8f0';
             const arrow = diff >= 0 ? '📈' : '📉';
             document.getElementById('stockChange').innerHTML =
                 `<span style="color:${color}; font-size:1rem;">${arrow} ${sign}${fmtNum(diff,2)} (${sign}${fmtNum(pct,2)}%)</span>`;
