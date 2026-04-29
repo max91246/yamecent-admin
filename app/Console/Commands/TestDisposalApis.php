@@ -14,7 +14,7 @@ class TestDisposalApis extends Command
     {
         $stock          = $this->argument('stock');
         $targetUrl      = "https://norway.twsthr.info/StockHolders.aspx?stock={$stock}";
-        $flaresolverrUrl = rtrim(getConfig('flaresolverr_url'), '/') . '/v1';
+        $flaresolverrUrl = rtrim(getConfig('flaresolverr_url'), '/');
 
         $this->info("FlareSolverr: {$flaresolverrUrl}");
         $this->info("目標: {$targetUrl}");
