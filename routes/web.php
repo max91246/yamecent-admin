@@ -122,6 +122,9 @@ Route::group([
 
         // AV 新片速報
         $route->get('av/videos',    'Admin\AvVideoController@news');
+
+        // AV 用戶偏好
+        $route->get('av/user-prefs', 'Admin\AvUserPrefController@index');
     });
 
 });
