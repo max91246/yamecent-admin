@@ -7,83 +7,104 @@ use Illuminate\Console\Command;
 
 class TestDisposalApis extends Command
 {
-    protected $signature   = 'test:disposal-apis {stock=2330}';
-    protected $description = '測試大戶持股人數相關 API 端點';
+    protected $signature   = 'test:disposal-apis {stock=2376}';
+    protected $description = '透過 FlareSolverr 抓取大戶持股分散表（norway.twsthr.info）';
 
     public function handle()
     {
-        $stock  = $this->argument('stock');
-        $client = new Client(['timeout' => 15]);
-        $today  = now()->subDay()->format('Ymd'); // 抓昨日（今日可能未更新）
+        $stock          = $this->argument('stock');
+        $targetUrl      = "https://norway.twsthr.info/StockHolders.aspx?stock={$stock}";
+        $flaresolverrUrl = rtrim(getConfig('flaresolverr_url'), '/') . '/v1';
 
-        // ── 1. TWSE 集保戶股權分散表（TWTB4U）────────────────────
-        $this->info("=== [1] TWSE 集保戶股權分散表 TWTB4U (股票:{$stock}, 日期:{$today}) ===");
+        $this->info("FlareSolverr: {$flaresolverrUrl}");
+        $this->info("目標: {$targetUrl}");
+
+        $client = new Client(['timeout' => 60]);
+
         try {
-            $res  = $client->get('https://www.twse.com.tw/rwd/zh/fund/TWTB4U', [
-                'query'   => ['response' => 'json', 'strDate' => $today, 'stockNo' => $stock],
-                'headers' => ['User-Agent' => 'Mozilla/5.0', 'Referer' => 'https://www.twse.com.tw/'],
+            $res  = $client->post($flaresolverrUrl, [
+                'json' => [
+                    'cmd'     => 'request.get',
+                    'url'     => $targetUrl,
+                    'maxTimeout' => 30000,
+                ],
             ]);
-            $data = json_decode((string) $res->getBody(), true);
-            $this->line('stat: ' . ($data['stat'] ?? 'N/A'));
-            $this->line('title: ' . ($data['title'] ?? 'N/A'));
-            if (!empty($data['fields'])) {
-                $this->line('欄位：' . implode(', ', $data['fields']));
-            }
-            if (!empty($data['data'][0])) {
-                $this->line('第一筆：' . implode(' | ', $data['data'][0]));
-            }
+            $body = json_decode((string) $res->getBody(), true);
         } catch (\Exception $e) {
-            $this->error('失敗：' . $e->getMessage());
+            $this->error('FlareSolverr 請求失敗：' . $e->getMessage());
+            return 1;
         }
 
-        $this->newLine();
+        $status = $body['status'] ?? 'unknown';
+        $this->info("FlareSolverr status: {$status}");
 
-        // ── 2. TWSE OpenAPI 集保戶股權分散表 ─────────────────────
-        $this->info("=== [2] TWSE OpenAPI 集保戶股權分散表 ===");
-        try {
-            $res  = $client->get('https://openapi.twse.com.tw/v1/fund/TWTB4U', [
-                'headers' => ['Accept' => 'application/json', 'User-Agent' => 'Mozilla/5.0'],
-            ]);
-            $data = json_decode((string) $res->getBody(), true);
-            $this->line('筆數：' . count($data));
-            if (!empty($data[0])) {
-                $this->line('欄位：' . implode(', ', array_keys($data[0])));
-                $this->line('第一筆：');
-                foreach ($data[0] as $k => $v) {
-                    $this->line("  [{$k}] => {$v}");
-                }
-            }
-        } catch (\Exception $e) {
-            $this->error('失敗：' . $e->getMessage());
+        if ($status !== 'ok') {
+            $this->error('FlareSolverr 回傳非 ok：' . json_encode($body));
+            return 1;
         }
 
-        $this->newLine();
+        $html = $body['solution']['response'] ?? '';
+        $this->info('取得 HTML 長度：' . strlen($html));
 
-        // ── 3. TDCC 集保結算所 API ────────────────────────────────
-        $this->info("=== [3] TDCC 集保結算所 smApi (股票:{$stock}) ===");
-        try {
-            $res  = $client->get('https://www.tdcc.com.tw/smApi/smViewer', [
-                'query'   => ['searchDate' => $today, 'searchType' => '02', 'id' => $stock],
-                'headers' => ['User-Agent' => 'Mozilla/5.0', 'Referer' => 'https://www.tdcc.com.tw/'],
-            ]);
-            $body = (string) $res->getBody();
-            $data = json_decode($body, true);
-            if ($data) {
-                $this->line('筆數：' . count($data));
-                if (!empty($data[0])) {
-                    $this->line('欄位：' . implode(', ', array_keys($data[0])));
-                    $this->line('第一筆：');
-                    foreach ($data[0] as $k => $v) {
-                        $this->line("  [{$k}] => {$v}");
-                    }
-                }
-            } else {
-                $this->line('回傳非 JSON，前 300 字：' . substr($body, 0, 300));
+        // 解析 table#myTable1（明細頁籤的主表格）
+        $rows = $this->parseTable($html);
+
+        if (empty($rows)) {
+            $this->error('找不到資料表格，印出 HTML 前 1000 字：');
+            $this->line(substr(strip_tags($html), 0, 1000));
+            return 1;
+        }
+
+        $this->info('解析到 ' . count($rows) . ' 筆資料，顯示前 3 筆：');
+        foreach (array_slice($rows, 0, 3) as $i => $row) {
+            $this->line("── 第 " . ($i + 1) . " 筆 ──");
+            foreach ($row as $k => $v) {
+                $this->line("  [{$k}] => {$v}");
             }
-        } catch (\Exception $e) {
-            $this->error('失敗：' . $e->getMessage());
         }
 
         return 0;
+    }
+
+    private function parseTable(string $html): array
+    {
+        libxml_use_internal_errors(true);
+        $doc = new \DOMDocument();
+        $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+        $xpath = new \DOMXPath($doc);
+
+        // 找 id="myTable1" 的 table（明細頁籤）
+        $tables = $xpath->query('//table[@id="myTable1"]');
+        if (!$tables || $tables->length === 0) {
+            // fallback：找第一個有 20260 開頭日期的 table
+            $tables = $xpath->query('//table[contains(@class,"table")]');
+        }
+        if (!$tables || $tables->length === 0) {
+            return [];
+        }
+
+        $table   = $tables->item(0);
+        $headers = [];
+        $rows    = [];
+
+        foreach ($xpath->query('.//tr', $table) as $tr) {
+            $cells = $xpath->query('.//th|.//td', $tr);
+            $vals  = [];
+            foreach ($cells as $cell) {
+                $vals[] = trim($cell->textContent);
+            }
+            if (empty(array_filter($vals))) continue;
+
+            if (empty($headers)) {
+                $headers = $vals;
+            } else {
+                $rows[] = array_combine(
+                    array_slice($headers, 0, count($vals)),
+                    $vals
+                );
+            }
+        }
+
+        return $rows;
     }
 }
