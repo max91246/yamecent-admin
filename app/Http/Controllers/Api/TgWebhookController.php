@@ -2121,7 +2121,7 @@ class TgWebhookController extends Controller
         $lines = ["🎬 <b>今日新片</b>（" . $targetDate . "）\n"];
         foreach ($hot as $v) {
             $actress = $v->actresses ? implode(' / ', $v->actresses) : '-';
-            $tags    = $v->tags ? implode(' ｜ ', array_slice($v->tags, 0, 5)) : '';
+            $tags    = $v->tags ? implode(' ｜ ', $v->tags) : '';
             $lines[] = "📀 <b>{$v->code}</b>";
             if ($v->title) $lines[] = "📝 " . mb_substr($v->title, 0, 50) . (mb_strlen($v->title) > 50 ? '…' : '');
             $lines[] = "👤 {$actress}";
