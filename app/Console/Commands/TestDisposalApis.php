@@ -106,10 +106,8 @@ class TestDisposalApis extends Command
             if (empty($headers)) {
                 $headers = $vals;
             } else {
-                $rows[] = array_combine(
-                    array_slice($headers, 0, count($vals)),
-                    $vals
-                );
+                if (count($vals) !== count($headers)) continue;
+                $rows[] = array_combine($headers, $vals);
             }
         }
 
