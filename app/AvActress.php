@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class AvActress extends Model
 {
-    protected $table = 'ya_av_actresses';
+    protected $table = 'av_actresses';
 
     protected $fillable = [
         'name', 'missav_slug', 'image_url',
@@ -28,7 +28,7 @@ class AvActress extends Model
     {
         return $this->belongsToMany(
             AvVideo::class,
-            'ya_av_video_actresses',
+            'av_video_actresses',
             'actress_id',
             'video_id'
         );

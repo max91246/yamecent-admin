@@ -16,12 +16,12 @@ class NotifyAvDaily extends Command
 
     public function handle()
     {
-        $today  = now()->toDateString();
+        $yesterday = now()->subDay()->toDateString();
         $client = new Client(['timeout' => 10]);
         $pushed = 0;
         $skip   = 0;
 
-        Log::channel('av_scraper')->info('[AV推播] 開始每日推播', ['date' => $today]);
+        Log::channel('av_scraper')->info('[AV推播] 開始每日推播', ['date' => $yesterday]);
 
         // 取所有開啟推播的用戶偏好
         $prefs = AvUserPref::where('push_enabled', true)
@@ -35,12 +35,12 @@ class NotifyAvDaily extends Command
             $bot = TgBot::find($pref->bot_id);
             if (!$bot || !$bot->is_active) { $skip++; continue; }
 
-            // 找今日有匹配 tag 的新片（最多 5 部）
-            $query = AvVideo::whereDate('release_date', $today);
+            // 找昨日（D-1）有匹配 tag 的新片（最多 5 部）
+            $query = AvVideo::whereDate('release_date', $yesterday);
             foreach ($tags as $tag) {
-                $query->orWhere(function ($q) use ($tag) {
+                $query->orWhere(function ($q) use ($tag, $yesterday) {
                     $q->whereJsonContains('tags', $tag)
-                      ->whereDate('release_date', now()->toDateString());
+                      ->whereDate('release_date', $yesterday);
                 });
             }
             $videos = $query->inRandomOrder()->limit(5)->get();
