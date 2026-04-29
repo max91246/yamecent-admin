@@ -456,12 +456,12 @@
                     <td class="text-right">${r.total_holders}</td>
                     <td class="text-right">${r.avg_lots}</td>
                     <td class="text-right">${r.over400_count}</td>
-                    <td class="text-right">${r.over400_pct}</td>
+                    <td class="text-right">${r.over400_pct}%</td>
                     <td class="text-right">${r.range_400_600}</td>
                     <td class="text-right">${r.range_600_800}</td>
                     <td class="text-right">${r.range_800_1000}</td>
                     <td class="text-right"><strong>${r.over1000_count}</strong></td>
-                    <td class="text-right"><strong>${r.over1000_pct}</strong></td>
+                    <td class="text-right"><strong>${r.over1000_pct}%</strong></td>
                     <td class="text-right">${r.close_price}</td>
                 </tr>`;
             });
