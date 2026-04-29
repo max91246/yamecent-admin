@@ -13,6 +13,7 @@ use App\TgState;
 use App\TgSettlement;
 use App\TgWallet;
 use App\Http\Controllers\Controller;
+use App\Services\ShareholderService;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
@@ -1044,6 +1045,25 @@ class TgWebhookController extends Controller
             if (!empty($disposalData['reason'])) {
                 $reply .= "\n📋 " . $this->t('stock_disposal_reason', $lang) . "：{$disposalData['reason']}";
             }
+        }
+
+        // 大戶持股分散表（近10週）
+        $shareholder = ShareholderService::fetch($code);
+        if (!empty($shareholder)) {
+            $reply .= "\n\n━━ 🏦 大戶持股（近10週）━━";
+            $reply .= "\n<code>";
+            $reply .= sprintf("%-10s %6s %6s %8s\n", '日期', '>1000人', '>1000%', '收盤');
+            foreach ($shareholder as $row) {
+                $date  = $row['date'] ? substr($row['date'], 2, 6) : '------';
+                $date  = substr($date, 0, 2) . '/' . substr($date, 2, 2) . '/' . substr($date, 4, 2);
+                $reply .= sprintf("%-10s %6s %6s %8s\n",
+                    $date,
+                    $row['over1000_count'],
+                    $row['over1000_pct'] . '%',
+                    $row['close_price']
+                );
+            }
+            $reply .= "</code>";
         }
 
         return $reply;

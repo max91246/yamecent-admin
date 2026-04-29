@@ -110,6 +110,40 @@
                 </div>
             </div>
 
+            {{-- 大戶持股分散表 --}}
+            <div class="row" id="shareholderRow" style="display:none;">
+                <div class="col-lg-12 grid-margin">
+                    <div class="card">
+                        <div class="card-body">
+                            <h4 class="card-title">近10週大戶持股分散表
+                                <small class="text-muted ml-2" style="font-size:0.75rem;">資料來源：神秘金字塔</small>
+                            </h4>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>資料日期</th>
+                                            <th class="text-right">總股東人數</th>
+                                            <th class="text-right">平均張數/人</th>
+                                            <th class="text-right">&gt;400張人數</th>
+                                            <th class="text-right">&gt;400張持有%</th>
+                                            <th class="text-right">400~600張</th>
+                                            <th class="text-right">600~800張</th>
+                                            <th class="text-right">800~1000張</th>
+                                            <th class="text-right">&gt;1000張人數</th>
+                                            <th class="text-right">&gt;1000張持有%</th>
+                                            <th class="text-right">收盤價</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="shareholderBody"></tbody>
+                                </table>
+                            </div>
+                            <div id="shareholderNoData" class="text-muted text-center py-3" style="display:none;">暫無大戶持股資料</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {{-- 三大法人 + 營收 --}}
             <div class="row">
                 {{-- 三大法人 --}}
@@ -406,6 +440,34 @@
         } else {
             document.getElementById('disposalBadge').style.display = 'none';
             disposalRow.style.display = 'none';
+        }
+
+        // 大戶持股分散表
+        const shareholderRow  = document.getElementById('shareholderRow');
+        const shareholderBody = document.getElementById('shareholderBody');
+        shareholderBody.innerHTML = '';
+        if (data.shareholder && data.shareholder.length) {
+            shareholderRow.style.display = 'block';
+            document.getElementById('shareholderNoData').style.display = 'none';
+            data.shareholder.forEach(r => {
+                const dateStr = r.date ? r.date.substring(0,4)+'/'+r.date.substring(4,6)+'/'+r.date.substring(6,8) : '-';
+                shareholderBody.innerHTML += `<tr>
+                    <td>${dateStr}</td>
+                    <td class="text-right">${r.total_holders}</td>
+                    <td class="text-right">${r.avg_lots}</td>
+                    <td class="text-right">${r.over400_count}</td>
+                    <td class="text-right">${r.over400_pct}</td>
+                    <td class="text-right">${r.range_400_600}</td>
+                    <td class="text-right">${r.range_600_800}</td>
+                    <td class="text-right">${r.range_800_1000}</td>
+                    <td class="text-right"><strong>${r.over1000_count}</strong></td>
+                    <td class="text-right"><strong>${r.over1000_pct}</strong></td>
+                    <td class="text-right">${r.close_price}</td>
+                </tr>`;
+            });
+        } else {
+            shareholderRow.style.display = data.shareholder === null ? 'none' : 'block';
+            document.getElementById('shareholderNoData').style.display = data.shareholder === null ? 'none' : 'block';
         }
 
         // 三大法人

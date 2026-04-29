@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\DisposalStock;
 use App\Http\Controllers\Controller;
+use App\Services\ShareholderService;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -34,6 +35,7 @@ class StockQueryController extends Controller
         $news          = $this->fetchNews($code);
         $disposal      = $this->getDisposal($code);
         $history       = $this->fetchPriceHistory($code);
+        $shareholder   = ShareholderService::fetch($code);
 
         return response()->json([
             'code'          => $code,
@@ -43,6 +45,7 @@ class StockQueryController extends Controller
             'news'          => $news,
             'disposal'      => $disposal,
             'history'       => $history,
+            'shareholder'   => $shareholder,
         ]);
     }
 
