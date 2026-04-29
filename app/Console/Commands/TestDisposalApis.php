@@ -82,11 +82,10 @@ class TestDisposalApis extends Command
         $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
         $xpath = new \DOMXPath($doc);
 
-        // 找 id="myTable1" 的 table（明細頁籤）
-        $tables = $xpath->query('//table[@id="myTable1"]');
+        // id="details" class="display" 是明細頁籤的 DataTable
+        $tables = $xpath->query('//table[@id="details"]');
         if (!$tables || $tables->length === 0) {
-            // fallback：找第一個有 20260 開頭日期的 table
-            $tables = $xpath->query('//table[contains(@class,"table")]');
+            $tables = $xpath->query('//table[contains(@class,"display")]');
         }
         if (!$tables || $tables->length === 0) {
             return [];
