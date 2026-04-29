@@ -82,10 +82,10 @@ class TestDisposalApis extends Command
         $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
         $xpath = new \DOMXPath($doc);
 
-        // id="details" class="display" 是明細頁籤的 DataTable
-        $tables = $xpath->query('//table[@id="details"]');
+        // div#D1 底下的 table id="Details" 是明細資料表
+        $tables = $xpath->query('//div[@id="D1"]//table[@id="Details"]');
         if (!$tables || $tables->length === 0) {
-            $tables = $xpath->query('//table[contains(@class,"display")]');
+            $tables = $xpath->query('//table[@id="Details"]');
         }
         if (!$tables || $tables->length === 0) {
             return [];
