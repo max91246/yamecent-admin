@@ -7,38 +7,41 @@ use Illuminate\Console\Command;
 
 class TestDisposalApis extends Command
 {
-    protected $signature   = 'test:disposal-apis';
-    protected $description = '測試 TPEX / TWSE OpenAPI 處置股端點，印出欄位與第一筆資料';
+    protected $signature   = 'test:disposal-apis {stock=2330}';
+    protected $description = '測試大戶持股人數相關 API 端點';
 
     public function handle()
     {
+        $stock  = $this->argument('stock');
         $client = new Client(['timeout' => 15]);
+        $today  = now()->subDay()->format('Ymd'); // 抓昨日（今日可能未更新）
 
-        // ── TPEX ─────────────────────────────────────────────────
-        $this->info('=== TPEX 上櫃 ===');
+        // ── 1. TWSE 集保戶股權分散表（TWTB4U）────────────────────
+        $this->info("=== [1] TWSE 集保戶股權分散表 TWTB4U (股票:{$stock}, 日期:{$today}) ===");
         try {
-            $res  = $client->get('https://www.tpex.org.tw/openapi/v1/tpex_disposal_information', [
-                'headers' => ['User-Agent' => 'Mozilla/5.0'],
+            $res  = $client->get('https://www.twse.com.tw/rwd/zh/fund/TWTB4U', [
+                'query'   => ['response' => 'json', 'strDate' => $today, 'stockNo' => $stock],
+                'headers' => ['User-Agent' => 'Mozilla/5.0', 'Referer' => 'https://www.twse.com.tw/'],
             ]);
             $data = json_decode((string) $res->getBody(), true);
-            $this->line('筆數：' . count($data));
-            if (!empty($data[0])) {
-                $this->line('欄位：' . implode(', ', array_keys($data[0])));
-                $this->line('第一筆：');
-                foreach ($data[0] as $k => $v) {
-                    $this->line("  [{$k}] => {$v}");
-                }
+            $this->line('stat: ' . ($data['stat'] ?? 'N/A'));
+            $this->line('title: ' . ($data['title'] ?? 'N/A'));
+            if (!empty($data['fields'])) {
+                $this->line('欄位：' . implode(', ', $data['fields']));
+            }
+            if (!empty($data['data'][0])) {
+                $this->line('第一筆：' . implode(' | ', $data['data'][0]));
             }
         } catch (\Exception $e) {
-            $this->error('TPEX 失敗：' . $e->getMessage());
+            $this->error('失敗：' . $e->getMessage());
         }
 
         $this->newLine();
 
-        // ── TWSE OpenAPI ──────────────────────────────────────────
-        $this->info('=== TWSE 上市 (openapi.twse.com.tw) ===');
+        // ── 2. TWSE OpenAPI 集保戶股權分散表 ─────────────────────
+        $this->info("=== [2] TWSE OpenAPI 集保戶股權分散表 ===");
         try {
-            $res  = $client->get('https://openapi.twse.com.tw/v1/announcement/punish', [
+            $res  = $client->get('https://openapi.twse.com.tw/v1/fund/TWTB4U', [
                 'headers' => ['Accept' => 'application/json', 'User-Agent' => 'Mozilla/5.0'],
             ]);
             $data = json_decode((string) $res->getBody(), true);
@@ -51,7 +54,34 @@ class TestDisposalApis extends Command
                 }
             }
         } catch (\Exception $e) {
-            $this->error('TWSE OpenAPI 失敗：' . $e->getMessage());
+            $this->error('失敗：' . $e->getMessage());
+        }
+
+        $this->newLine();
+
+        // ── 3. TDCC 集保結算所 API ────────────────────────────────
+        $this->info("=== [3] TDCC 集保結算所 smApi (股票:{$stock}) ===");
+        try {
+            $res  = $client->get('https://www.tdcc.com.tw/smApi/smViewer', [
+                'query'   => ['searchDate' => $today, 'searchType' => '02', 'id' => $stock],
+                'headers' => ['User-Agent' => 'Mozilla/5.0', 'Referer' => 'https://www.tdcc.com.tw/'],
+            ]);
+            $body = (string) $res->getBody();
+            $data = json_decode($body, true);
+            if ($data) {
+                $this->line('筆數：' . count($data));
+                if (!empty($data[0])) {
+                    $this->line('欄位：' . implode(', ', array_keys($data[0])));
+                    $this->line('第一筆：');
+                    foreach ($data[0] as $k => $v) {
+                        $this->line("  [{$k}] => {$v}");
+                    }
+                }
+            } else {
+                $this->line('回傳非 JSON，前 300 字：' . substr($body, 0, 300));
+            }
+        } catch (\Exception $e) {
+            $this->error('失敗：' . $e->getMessage());
         }
 
         return 0;
