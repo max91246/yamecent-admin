@@ -50,8 +50,17 @@ class TestDisposalApis extends Command
         $rows = $this->parseTable($html);
 
         if (empty($rows)) {
-            $this->error('找不到資料表格，印出 HTML 前 1000 字：');
-            $this->line(substr(strip_tags($html), 0, 1000));
+            // 列出頁面所有 table 的 id 和 class，幫助定位
+            $this->error('找不到資料表格，列出頁面所有 table：');
+            libxml_use_internal_errors(true);
+            $doc2 = new \DOMDocument();
+            $doc2->loadHTML('<?xml encoding="UTF-8">' . $html);
+            $xp2 = new \DOMXPath($doc2);
+            foreach ($xp2->query('//table') as $t) {
+                $id  = $t->getAttribute('id');
+                $cls = $t->getAttribute('class');
+                $this->line("  table id=[{$id}] class=[{$cls}]");
+            }
             return 1;
         }
 
