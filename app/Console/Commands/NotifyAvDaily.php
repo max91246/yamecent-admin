@@ -36,14 +36,15 @@ class NotifyAvDaily extends Command
             if (!$bot || !$bot->is_active) { $skip++; continue; }
 
             // 找昨日（D-1）有匹配 tag 的新片（最多 5 部）
-            $query = AvVideo::whereDate('release_date', $yesterday);
-            foreach ($tags as $tag) {
-                $query->orWhere(function ($q) use ($tag, $yesterday) {
-                    $q->whereJsonContains('tags', $tag)
-                      ->whereDate('release_date', $yesterday);
-                });
-            }
-            $videos = $query->inRandomOrder()->limit(5)->get();
+            $videos = AvVideo::whereDate('release_date', $yesterday)
+                ->where(function ($q) use ($tags) {
+                    foreach ($tags as $tag) {
+                        $q->orWhereJsonContains('tags', $tag);
+                    }
+                })
+                ->inRandomOrder()
+                ->limit(5)
+                ->get();
 
             if ($videos->isEmpty()) { $skip++; continue; }
 

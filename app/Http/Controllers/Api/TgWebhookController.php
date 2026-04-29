@@ -2075,13 +2075,15 @@ class TgWebhookController extends Controller
 
         $hot = collect();
 
-        // ── 1. D-1 × 喜好 tag ──────────────────────────────────────
+        // ── 1. D-1 × 喜好 tag（OR，符合任一 tag 即可）────────────
         if (!empty($favTags)) {
-            $q = \App\AvVideo::whereDate('release_date', $targetDate);
-            foreach ($favTags as $tag) {
-                $q->whereJsonContains('tags', $tag);
-            }
-            $hot = $q->inRandomOrder()->limit($limit)->get();
+            $hot = \App\AvVideo::whereDate('release_date', $targetDate)
+                ->where(function ($q) use ($favTags) {
+                    foreach ($favTags as $tag) {
+                        $q->orWhereJsonContains('tags', $tag);
+                    }
+                })
+                ->inRandomOrder()->limit($limit)->get();
         }
 
         // ── 2. D-1 任意新片（補不足或無喜好）──────────────────────
