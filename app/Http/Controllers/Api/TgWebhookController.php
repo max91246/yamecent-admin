@@ -2116,7 +2116,7 @@ class TgWebhookController extends Controller
                 'clicked_at' => now(),
             ];
         }
-        \Illuminate\Support\Facades\DB::table('ya_av_video_clicks')->insert($inserts);
+        \Illuminate\Support\Facades\DB::table('av_video_clicks')->insert($inserts);
 
         $lines = ["🎬 <b>今日新片</b>（" . $targetDate . "）\n"];
         foreach ($hot as $v) {
