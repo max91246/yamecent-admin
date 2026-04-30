@@ -14,6 +14,7 @@ use App\TgSettlement;
 use App\TgWallet;
 use App\Http\Controllers\Controller;
 use App\Services\ShareholderService;
+use App\Services\TaiwanHolidayService;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
@@ -731,15 +732,7 @@ class TgWebhookController extends Controller
 
     private function calcSettleDate(\Carbon\Carbon $tradeDate): \Carbon\Carbon
     {
-        $d    = $tradeDate->copy()->startOfDay();
-        $days = 0;
-        while ($days < 2) {
-            $d->addDay();
-            if ($d->isWeekday()) {
-                $days++;
-            }
-        }
-        return $d;
+        return TaiwanHolidayService::calcSettleDate($tradeDate);
     }
 
     // ─── 回覆組建：油價 ──────────────────────────────────────────

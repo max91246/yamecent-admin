@@ -74,6 +74,12 @@ class Kernel extends ConsoleKernel
                  ->timezone('Asia/Taipei')
                  ->dailyAt('09:00')
                  ->withoutOverlapping();
+
+        // 每年 12/01 08:00 自動匯入下一年台股休市日（並清除兩年前舊資料）
+        $schedule->command('holiday:import')
+                 ->timezone('Asia/Taipei')
+                 ->yearlyOn(12, 1, '08:00')
+                 ->withoutOverlapping();
     }
 
     /**
