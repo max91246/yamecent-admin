@@ -397,6 +397,12 @@
         el.style.display = 'block';
     }
 
+    const DOW = ['日','一','二','三','四','五','六'];
+    function fmtDate(dateStr) {
+        const d = new Date(dateStr + 'T00:00:00');
+        return dateStr + '(' + DOW[d.getDay()] + ')';
+    }
+
     function fmtNum(n, dec = 0) {
         if (n === null || n === undefined) return '-';
         return Number(n).toLocaleString('zh-TW', { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -555,7 +561,7 @@
                     ? `${sign}${fmtNum(diff, 2)} <small style="opacity:0.75">(${sign}${fmtNum(pct, 2)}%)</small>`
                     : '-';
                 historyBody.innerHTML += `<tr>
-                    <td>${d.date}</td>
+                    <td>${fmtDate(d.date)}</td>
                     <td class="text-right">${fmtNum(d.open, 2)}</td>
                     <td class="text-right">${fmtNum(d.high, 2)}</td>
                     <td class="text-right">${fmtNum(d.low,  2)}</td>
