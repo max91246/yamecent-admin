@@ -100,6 +100,7 @@ AV 管理
 | 每日 01:00 | `scrape:av-actresses --new-only` | 爬取 MissAV 最新出道女優 |
 | 每日 01:30 / 13:30 | `scrape:av-videos --pages=3` | 爬取 MissAV 最新影片 |
 | 每日 09:00 | `notify:av-daily` | 推送 AV 新片給訂閱用戶 |
+| 每年 12/01 08:00 | `holiday:import` | 從 TWSE OpenAPI 匯入下一年台股休市日，清除兩年前舊資料 |
 
 ---
 
@@ -139,6 +140,7 @@ AV 管理
 | `ya_tg_settlements` | T+2 交割款明細 |
 | `ya_oil_prices` | 5分K棒（QA=原油 / WTX=台指 / VIX=恐慌 / GOLD=黃金） |
 | `ya_disposal_stocks` | 處置股名單（市場 / 起訖日 / 原因） |
+| `ya_tw_market_holidays` | 台股休市日（主鍵為 date，每年12月自動匯入隔年資料） |
 
 ### AV 系統
 | 表名 | 說明 |
@@ -146,7 +148,7 @@ AV 管理
 | `ya_av_videos` | AV 影片（番號 / 標題 / 封面 / 片商 / 演員 / 標籤） |
 | `ya_av_actresses` | AV 女優（姓名 / 三圍 / 生日 / 出道年） |
 | `ya_av_video_actresses` | 影片 ↔ 女優 多對多關聯 |
-| `ya_av_user_prefs` | 用戶喜好標籤 + 推播開關 |
+| `ya_av_user_prefs` | 用戶喜好標籤 + 推播開關 + tg_username（用戶識別） |
 | `ya_av_video_clicks` | 影片點擊記錄（熱門排序用） |
 
 ---
