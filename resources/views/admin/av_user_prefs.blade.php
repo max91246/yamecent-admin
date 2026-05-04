@@ -46,7 +46,7 @@
                                         </td>
                                         <td>
                                             @if($pref->tg_username)
-                                                <span class="text-muted small">@{{ $pref->tg_username }}</span>
+                                                <span class="text-muted small">@{{ '@' }}{{ $pref->tg_username }}</span>
                                             @else
                                                 <span class="text-muted small">-</span>
                                             @endif
