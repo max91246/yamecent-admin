@@ -1966,12 +1966,12 @@ class TgWebhookController extends Controller
             } elseif ($data === 'av_push_toggle') {
                 $pref = \App\AvUserPref::firstOrCreate(['bot_id' => $bot->id, 'tg_chat_id' => $chatId]);
                 $pref->update(['push_enabled' => !$pref->push_enabled]);
-                [$text, $markup] = $this->buildAvTagMenu($bot, $chatId);
+                [$text, $markup] = $this->buildAvTagMenu($bot, $chatId, $username);
                 $this->sendMessage($bot->token, $chatId, $text, $markup);
             } elseif (str_starts_with($data, 'av_tag_')) {
                 $tag = substr($data, 7);
                 $this->avToggleTag($bot, $chatId, $tag);
-                [$text, $markup] = $this->buildAvTagMenu($bot, $chatId);
+                [$text, $markup] = $this->buildAvTagMenu($bot, $chatId, $username);
                 $this->sendMessage($bot->token, $chatId, $text, $markup);
             }
             return response()->json(['ok' => true]);
@@ -2005,7 +2005,7 @@ class TgWebhookController extends Controller
         }
 
         if ($text === '⭐ 喜好設定') {
-            [$menuText, $markup] = $this->buildAvTagMenu($bot, $chatId);
+            [$menuText, $markup] = $this->buildAvTagMenu($bot, $chatId, $username);
             $this->sendMessage($bot->token, $chatId, $menuText, $markup);
             $this->logMessage($bot->id, $userId, $username, $chatId, $menuText, 2, 'reply');
             return response()->json(['ok' => true]);
@@ -2028,9 +2028,12 @@ class TgWebhookController extends Controller
         ];
     }
 
-    private function buildAvTagMenu(TgBot $bot, int $chatId): array
+    private function buildAvTagMenu(TgBot $bot, int $chatId, ?string $username = null): array
     {
-        $pref     = \App\AvUserPref::firstOrCreate(['bot_id' => $bot->id, 'tg_chat_id' => $chatId]);
+        $pref = \App\AvUserPref::firstOrCreate(['bot_id' => $bot->id, 'tg_chat_id' => $chatId]);
+        if ($username && $pref->tg_username !== $username) {
+            $pref->update(['tg_username' => $username]);
+        }
         $selected = $pref->fav_tags ?? [];
         $pushOn   = $pref->push_enabled;
 

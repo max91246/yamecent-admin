@@ -29,6 +29,7 @@
                                     <tr>
                                         <th>機器人</th>
                                         <th>Chat ID</th>
+                                        <th>用戶名稱</th>
                                         <th>喜好標籤</th>
                                         <th class="text-center">每日推播</th>
                                         <th>更新時間</th>
@@ -42,6 +43,13 @@
                                         </td>
                                         <td>
                                             <code style="color:#63b3ed;">{{ $pref->tg_chat_id }}</code>
+                                        </td>
+                                        <td>
+                                            @if($pref->tg_username)
+                                                <span class="text-muted small">@{{ $pref->tg_username }}</span>
+                                            @else
+                                                <span class="text-muted small">-</span>
+                                            @endif
                                         </td>
                                         <td>
                                             @if(!empty($pref->fav_tags))
