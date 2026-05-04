@@ -64,7 +64,7 @@ class AvVideoController extends Controller
                 }
             }
             arsort($count);
-            return array_keys(array_slice($count, 0, 20, true));
+            return array_keys(array_slice($count, 0, 40, true));
         });
 
         $stats = [
