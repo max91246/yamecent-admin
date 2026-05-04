@@ -1240,14 +1240,13 @@ class StockBotHandler
                 $groupHeader .= "\n   {$curPriceStr}";
             }
 
-            $lotLines       = [];
             $groupCurrentVal = 0;
             $groupNetProfit  = 0;
 
-            foreach ($group as $idx => $h) {
+            // ── 計算每筆成本/損益（維持精確計算，合計加到全域）────────
+            foreach ($group as $h) {
                 $buyPrice    = (float) $h->buy_price;
                 $originValue = $buyPrice > 0 ? $buyPrice * $h->shares : (float) $h->total_cost;
-                $selfCost    = (float) $h->total_cost;
                 $curValue    = $curPrice !== null ? $curPrice * $h->shares : null;
 
                 $buyFee  = $buyPrice > 0 ? (int) ceil($originValue * $feeRate) : 0;
@@ -1256,64 +1255,55 @@ class StockBotHandler
                 $txCost  = $buyFee + $sellFee + $sellTax;
 
                 $interest = 0;
-                $daysHeld = 1;
                 if ($h->is_margin && $buyPrice > 0) {
                     $loanAmount = $originValue * 0.6;
                     $daysHeld   = max(1, (int) $h->created_at->diffInDays(now()));
                     $interest   = (int) round($loanAmount * $marginAnnualRate * $daysHeld / 365);
                 }
 
-                $totalSelfCost  += $selfCost;
+                $totalSelfCost  += (float) $h->total_cost;
                 $totalOriginVal += $originValue;
                 $totalTxCost    += $txCost;
                 $totalInterest  += $interest;
                 if ($curValue !== null) {
                     $totalCurrentVal += $curValue;
                     $groupCurrentVal += $curValue;
+                    $groupNetProfit  += $curValue - $originValue - $txCost - $interest;
                 }
-
-                $marginTag = $h->is_margin ? $this->t('holding_margin_tag', $lang) : $this->t('holding_cash_tag', $lang);
-                $buyStr    = $buyPrice > 0 ? $this->t('portfolio_bought', $lang) . "：NT$" . $buyPrice : '';
-
-                $stockProfit = $curValue !== null ? $curValue - $originValue - $txCost - $interest : null;
-                if ($stockProfit !== null) {
-                    $groupNetProfit += $stockProfit;
-                }
-
-                $profitStr = '';
-                if ($stockProfit !== null) {
-                    $sign        = $stockProfit >= 0 ? '+' : '';
-                    $txCostStr   = 'NT$' . number_format($txCost, 0);
-                    $interestStr = $interest > 0
-                        ? "　" . $this->t('portfolio_interest_lbl', $lang) . "：NT$" . number_format($interest, 0) . "（{$daysHeld}" . $this->t('portfolio_days_unit', $lang) . "）"
-                        : '';
-                    $profitStr   = "\n      " . $this->t('portfolio_fees', $lang) . "：{$txCostStr}" . $this->t('portfolio_fees_detail', $lang) . "{$interestStr}　" . $this->t('portfolio_net_pnl', $lang) . "：{$sign}NT$" . number_format($stockProfit, 0);
-                }
-
-                $isLast    = $idx === $group->keys()->last();
-                $prefix    = $isLast ? '   └' : '   ├';
-                $curValStr = $curValue !== null ? $this->t('portfolio_cur_val', $lang) . '：NT$' . number_format($curValue, 0) : $this->t('portfolio_quote_fail', $lang);
-
-                $lotLines[] = "{$prefix} " . $this->sharesDisplay($h->shares) . "·{$marginTag}　{$buyStr}\n      {$curValStr}{$profitStr}";
             }
 
-            // 按 is_margin 分組各加一顆賣出按鈕（合併同股同類型全部持股）
-            $marginGroups = $group->groupBy('is_margin');
+            // ── 按類型（現貨/融資）合併顯示，最多 2 行 ──────────────
+            $marginGroups     = $group->groupBy('is_margin');
             $hasMultipleTypes = $marginGroups->count() > 1;
+            $typeLines        = [];
+
             foreach ($marginGroups as $marginVal => $mGroup) {
-                $typeTag = $hasMultipleTypes ? ('(' . ($marginVal ? $this->t('holding_margin_tag', $lang) : $this->t('holding_cash_tag', $lang)) . ')') : '';
-                $delButtons[] = ['text' => "💰 賣出 {$stockCode}{$typeTag}", 'callback_data' => "holding_sell_c_{$stockCode}_{$marginVal}"];
+                $typeTag    = $marginVal ? $this->t('holding_margin_tag', $lang) : $this->t('holding_cash_tag', $lang);
+                $typeShares = $mGroup->sum('shares');
+                $weightedSum = $mGroup->sum(fn($h) => (float) $h->buy_price * $h->shares);
+                $avgPrice   = $typeShares > 0 ? number_format($weightedSum / $typeShares, 1) : 0;
+                $typeLines[] = "{$typeTag} " . $this->sharesDisplay($typeShares) . " 均價 NT${avgPrice}";
+
+                $typeTag2 = $hasMultipleTypes ? ('(' . $typeTag . ')') : '';
+                $delButtons[] = ['text' => "💰 賣出 {$stockCode}{$typeTag2}", 'callback_data' => "holding_sell_c_{$stockCode}_{$marginVal}"];
             }
 
-            // 多筆時顯示分組合計
-            $groupSummary = '';
-            if ($lotCount > 1 && $groupCurrentVal > 0) {
+            // 組合 ├/└ 前綴
+            $typeCount    = count($typeLines);
+            $displayLines = [];
+            foreach ($typeLines as $i => $line) {
+                $isLast = ($i === $typeCount - 1) && $groupCurrentVal === 0;
+                $displayLines[] = ($isLast ? '   └' : '   ├') . " {$line}";
+            }
+
+            // 最後一行：現值 + 損益 summary
+            if ($groupCurrentVal > 0) {
                 $sign         = $groupNetProfit >= 0 ? '+' : '';
-                $groupSummary = "\n   " . $this->t('portfolio_total_val', $lang) . "：NT$" . number_format($groupCurrentVal, 0)
-                              . "　" . $this->t('portfolio_pnl', $lang) . "：{$sign}NT$" . number_format($groupNetProfit, 0);
+                $displayLines[] = '   └ ' . $this->t('portfolio_cur_val', $lang) . '：NT$' . number_format($groupCurrentVal, 0)
+                                . '　' . $this->t('portfolio_pnl', $lang) . "：{$sign}NT$" . number_format($groupNetProfit, 0);
             }
 
-            $lines[] = $groupHeader . "\n" . implode("\n", $lotLines) . $groupSummary;
+            $lines[] = $groupHeader . "\n" . implode("\n", $displayLines);
         }
 
         // 損益摘要
