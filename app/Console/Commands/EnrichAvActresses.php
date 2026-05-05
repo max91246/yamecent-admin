@@ -76,7 +76,7 @@ class EnrichAvActresses extends Command
             if (!$actress->birthday   && !empty($data['birthday']))    $payload['birthday']   = $data['birthday'];
             if (!$actress->birthplace && !empty($data['birthplace']))  $payload['birthplace'] = $data['birthplace'];
             if (!$actress->hobbies    && !empty($data['hobbies']))     $payload['hobbies']    = $data['hobbies'];
-            if (!$actress->image_url  && !empty($data['image_url']))   $payload['image_url']  = $data['image_url'];
+            if (!empty($data['image_url']))                             $payload['image_url']  = $data['image_url'];
 
             if (!empty($payload)) {
                 $actress->update($payload);
