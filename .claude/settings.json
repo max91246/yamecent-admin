@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m ' *)",
+      "Bash(ls c:/project/www/yamecent-admin/app/*.php)",
+      "WebFetch(domain:www.twse.com.tw)",
+      "WebFetch(domain:openapi.twse.com.tw)",
+      "WebFetch(domain:www.tdcc.com.tw)",
+      "WebFetch(domain:stock.wantgoo.com)",
+      "WebFetch(domain:goodinfo.tw)",
+      "WebFetch(domain:openapi.tdcc.com.tw)",
+      "WebFetch(domain:query2.finance.yahoo.com)",
+      "WebFetch(domain:jdata.yuanta.com.tw)",
+      "WebFetch(domain:mops.twse.com.tw)"
+    ]
+  }
+}

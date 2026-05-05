@@ -5,7 +5,7 @@
       "args": ["-y", "@benborla29/mcp-server-mysql"],
       "env": {
         "MYSQL_HOST": "127.0.0.1",
-        "MYSQL_PORT": "3307",
+        "MYSQL_PORT": "3306",
         "MYSQL_USER": "root",
         "MYSQL_PASS": "root",
         "MYSQL_DB": "yamecent",
@@ -16,7 +16,7 @@
     },
     "redis": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-redis", "redis://:secret_redis@host.docker.internal:6380/1"]
+      "args": ["-y", "@modelcontextprotocol/server-redis", "redis://:secret_redis@host.docker.internal:6379/1"]
     }
   }
 }

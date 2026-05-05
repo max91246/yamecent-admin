@@ -11,6 +11,7 @@ class AvActress extends Model
     protected $fillable = [
         'name', 'missav_slug', 'image_url',
         'height', 'bust', 'waist', 'hip',
+        'birthplace', 'hobbies',
         'birthday', 'debut_year', 'notes', 'is_active',
     ];
 

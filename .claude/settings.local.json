@@ -9,5 +9,27 @@
       "Bash(docker exec:*)",
       "Bash(ls c:/project/www/yamecent-admin/storage/framework/schedule-*)"
     ]
+  },
+  "mcpServers": {
+    "mysql": {
+      "command": "npx",
+      "args": ["-y", "@benborla29/mcp-server-mysql"],
+      "env": {
+        "MYSQL_HOST": "127.0.0.1",
+        "MYSQL_PORT": "3306",
+        "MYSQL_USER": "root",
+        "MYSQL_PASS": "root",
+        "MYSQL_DB": "yamecent"
+      }
+    },
+    "redis": {
+      "command": "npx",
+      "args": ["-y", "mcp-redis"],
+      "env": {
+        "REDIS_HOST": "127.0.0.1",
+        "REDIS_PORT": "6379",
+        "REDIS_PASSWORD": "secret_redis"
+      }
+    }
   }
 }
