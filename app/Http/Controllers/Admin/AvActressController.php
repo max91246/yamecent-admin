@@ -38,6 +38,14 @@ class AvActressController extends Controller
             $query->where('bust', 'like', '%' . strtoupper($cup));
         }
 
+        // 圖片篩選
+        $hasImage = $request->input('has_image', '');
+        if ($hasImage === '1') {
+            $query->whereNotNull('image_url');
+        } elseif ($hasImage === '0') {
+            $query->whereNull('image_url');
+        }
+
         // 期間篩選（按爬取時間）
         switch ($period) {
             case 'month':

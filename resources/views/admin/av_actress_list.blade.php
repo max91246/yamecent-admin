@@ -82,6 +82,13 @@
                                     </select>
                                 </div>
                                 <div class="col-md-2 mb-2">
+                                    <select name="has_image" class="form-control form-control-sm">
+                                        <option value="">圖片：全部</option>
+                                        <option value="1" {{ request('has_image') === '1' ? 'selected' : '' }}>✅ 有圖片</option>
+                                        <option value="0" {{ request('has_image') === '0' ? 'selected' : '' }}>❌ 無圖片</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2 mb-2">
                                     <select name="cup" class="form-control form-control-sm">
                                         <option value="">罩杯</option>
                                         @foreach(['A','B','C','D','E','F','G','H','I','J','K'] as $c)
