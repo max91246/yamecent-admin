@@ -61,8 +61,24 @@ class EnrichAvActresses extends Command
             $data = $this->parse($html);
 
             if (empty($data)) {
-                $this->line("  → 查無資料");
+                $this->line("  → avbase 查無資料");
                 $notFound++;
+            }
+
+            // avbase 查無或無圖時，fallback 用 MissAV 取圖
+            if (empty($data['image_url']) && $actress->missav_slug) {
+                $missavUrl = 'https://missav.ai/actresses/' . urlencode($actress->missav_slug);
+                $missavHtml = $this->fetchHtml($client, $flareUrl, $missavUrl);
+                if ($missavHtml) {
+                    $missavImg = $this->parseMissavImage($missavHtml);
+                    if ($missavImg) {
+                        $data['image_url'] = $missavImg;
+                        $this->line("  → MissAV 補圖成功");
+                    }
+                }
+            }
+
+            if (empty($data)) {
                 sleep($delay);
                 continue;
             }
@@ -122,6 +138,31 @@ class EnrichAvActresses extends Command
             ]);
             return null;
         }
+    }
+
+    private function parseMissavImage(string $html): ?string
+    {
+        libxml_use_internal_errors(true);
+        $doc = new \DOMDocument();
+        $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+        $xpath = new \DOMXPath($doc);
+
+        // og:image 通常是最高解析度的女優圖
+        $og = $xpath->query('//meta[@property="og:image"]')->item(0);
+        if ($og) {
+            $src = $og->getAttribute('content');
+            if ($src && !str_contains($src, 'default') && !str_contains($src, 'placeholder')) {
+                return $src;
+            }
+        }
+
+        // fallback：找 class 含 actor-avatar 或 rounded-full 的 img
+        $img = $xpath->query('//img[contains(@class,"rounded-full") or contains(@class,"actor-avatar")]')->item(0);
+        if ($img instanceof \DOMElement) {
+            return $img->getAttribute('src') ?: null;
+        }
+
+        return null;
     }
 
     private function parse(string $html): array
