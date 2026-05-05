@@ -147,19 +147,29 @@ class EnrichAvActresses extends Command
         $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
         $xpath = new \DOMXPath($doc);
 
+        $rejectKeywords = ['logo', 'default', 'placeholder', 'no-image', 'noimage', 'no_image', 'dummy'];
+
+        $isValid = function (?string $src) use ($rejectKeywords): bool {
+            if (!$src) return false;
+            $lower = strtolower($src);
+            foreach ($rejectKeywords as $kw) {
+                if (str_contains($lower, $kw)) return false;
+            }
+            return true;
+        };
+
         // og:image 通常是最高解析度的女優圖
         $og = $xpath->query('//meta[@property="og:image"]')->item(0);
         if ($og) {
             $src = $og->getAttribute('content');
-            if ($src && !str_contains($src, 'default') && !str_contains($src, 'placeholder')) {
-                return $src;
-            }
+            if ($isValid($src)) return $src;
         }
 
         // fallback：找 class 含 actor-avatar 或 rounded-full 的 img
         $img = $xpath->query('//img[contains(@class,"rounded-full") or contains(@class,"actor-avatar")]')->item(0);
         if ($img instanceof \DOMElement) {
-            return $img->getAttribute('src') ?: null;
+            $src = $img->getAttribute('src');
+            if ($isValid($src)) return $src;
         }
 
         return null;
