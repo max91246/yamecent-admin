@@ -185,8 +185,9 @@ class AvBotHandler
                 ->inRandomOrder()->limit($limit)->get();
         }
 
-        // ── 2. D-1 任意新片（補不足或無喜好）──────────────────────
-        if ($hot->count() < $limit) {
+        // ── 2. D-1 任意新片（只在無喜好設定時補齊）────────────────
+        // 有喜好 tag 的用戶不補非相關影片，避免推送不符合偏好的內容
+        if (empty($favTags) && $hot->count() < $limit) {
             $need    = $limit - $hot->count();
             $exclude = $hot->pluck('code')->toArray();
             $fill    = AvVideo::whereDate('release_date', $targetDate)
@@ -195,7 +196,20 @@ class AvBotHandler
             $hot = $hot->concat($fill);
         }
 
-        // ── 3. 近 3 天最新片（D-1 無資料才用）─────────────────────
+        // ── 3. 近 3 天最新片（D-1 無資料才用，同樣依喜好篩選）──────
+        if ($hot->isEmpty()) {
+            $query = AvVideo::where('release_date', '>=', now()->subDays(3)->toDateString());
+            if (!empty($favTags)) {
+                $query->where(function ($q) use ($favTags) {
+                    foreach ($favTags as $tag) {
+                        $q->orWhereJsonContains('tags', $tag);
+                    }
+                });
+            }
+            $hot = $query->inRandomOrder()->limit($limit)->get();
+        }
+
+        // ── 4. 真的完全沒資料才顯示任意近期影片 ──────────────────
         if ($hot->isEmpty()) {
             $hot = AvVideo::where('release_date', '>=', now()->subDays(3)->toDateString())
                 ->inRandomOrder()->limit($limit)->get();
