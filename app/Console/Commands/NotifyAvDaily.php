@@ -64,6 +64,13 @@ class NotifyAvDaily extends Command
                 $lines[] = '';
             }
 
+            $codes = $videos->pluck('code')->toArray();
+            Log::channel('av_scraper')->info('[AV推播] 推送', [
+                'chat_id' => $pref->tg_chat_id,
+                'tags'    => $tags,
+                'videos'  => $codes,
+            ]);
+
             try {
                 $client->post("https://api.telegram.org/bot{$bot->token}/sendMessage", [
                     'json' => [
