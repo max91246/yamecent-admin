@@ -59,7 +59,7 @@ class AvActressController extends Controller
                 break;
         }
 
-        $list = $query->orderBy('created_at', 'desc')->paginate(24)->appends($request->query());
+        $list = $query->withCount('videos')->orderBy('created_at', 'desc')->paginate(24)->appends($request->query());
 
         // 統計卡
         $stats = [

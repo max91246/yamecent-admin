@@ -11,7 +11,9 @@ class AvVideoController extends Controller
 {
     public function news(Request $request)
     {
-        $period = $request->input('period', 'week');
+        // 有女優篩選時預設顯示全部，否則預設本週
+        $defaultPeriod = $request->has('actress') ? 'all' : 'week';
+        $period = $request->input('period', $defaultPeriod);
         $now    = now();
 
         $query = AvVideo::query();
@@ -29,6 +31,7 @@ class AvVideoController extends Controller
             case 'month':
                 $query->where('release_date', '>=', $now->copy()->subDays(30)->toDateString());
                 break;
+            // 'all'：不加日期限制
         }
 
         if ($code = $request->input('code')) {

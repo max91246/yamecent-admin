@@ -147,8 +147,16 @@
                                 </div>
                             @endif
                         </div>
-                        <p class="mb-1 font-weight-bold" style="color:#e2e8f0;font-size:0.85rem;line-height:1.2;">
-                            {{ $actress->name }}
+                        <p class="mb-1 font-weight-bold" style="font-size:0.85rem;line-height:1.2;">
+                            <a href="{{ url('admin/av/videos') }}?actress={{ urlencode($actress->name) }}"
+                               style="color:#e2e8f0;text-decoration:none;">
+                                {{ $actress->name }}
+                                @if($actress->videos_count > 0)
+                                    <span style="color:#63b3ed;font-size:0.75rem;font-weight:400;">
+                                        ({{ $actress->videos_count }})
+                                    </span>
+                                @endif
+                            </a>
                         </p>
                         @if($actress->debut_year)
                             <p class="mb-0" style="color:#fbd38d;font-size:0.72rem;">🌟 {{ $actress->debut_year }} 出道</p>
