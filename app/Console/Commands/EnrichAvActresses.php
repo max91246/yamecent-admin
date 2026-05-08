@@ -23,7 +23,7 @@ class EnrichAvActresses extends Command
         $delay    = (int) $this->option('delay');
         $client   = new Client(['timeout' => 60]);
 
-        $query = AvActress::orderBy('id');
+        $query = AvActress::orderByDesc('id');
 
         if ($this->option('no-image')) {
             $query->whereNull('image_url');
