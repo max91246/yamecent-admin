@@ -90,10 +90,22 @@ class ScrapeAvVideos extends Command
                     foreach ($payload['actresses'] as $name) {
                         $name = trim($name);
                         if (!$name) continue;
-                        $actress = AvActress::firstOrCreate(
+                        $actress  = AvActress::firstOrCreate(
                             ['name' => $name],
                             ['missav_slug' => $name, 'is_active' => true]
                         );
+
+                        // 新建的女優沒圖片，從 MissAV 補圖
+                        if ($actress->wasRecentlyCreated && !$actress->image_url) {
+                            $imgHtml = $this->fetchHtml('https://missav.ai/actresses/' . urlencode($name));
+                            if ($imgHtml) {
+                                $imgSrc = $this->extractMissavImage($imgHtml);
+                                if ($imgSrc) {
+                                    $actress->update(['image_url' => $imgSrc]);
+                                }
+                            }
+                        }
+
                         $actressIds[] = $actress->id;
                     }
                     if ($actressIds) {
@@ -254,5 +266,35 @@ class ScrapeAvVideos extends Command
         $result['is_uncensored'] = str_contains($url, 'uncensored') || str_contains($url, 'leak');
 
         return $result;
+    }
+
+    private function extractMissavImage(string $html): ?string
+    {
+        $rejectKeywords = ['logo', 'default', 'placeholder', 'no-image', 'noimage', 'dummy'];
+
+        libxml_use_internal_errors(true);
+        $doc = new \DOMDocument();
+        $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+        $xpath = new \DOMXPath($doc);
+
+        $og = $xpath->query('//meta[@property="og:image"]')->item(0);
+        if ($og) {
+            $src   = $og->getAttribute('content');
+            $lower = strtolower($src);
+            if ($src && !array_filter($rejectKeywords, fn($kw) => str_contains($lower, $kw))) {
+                return $src;
+            }
+        }
+
+        $img = $xpath->query('//img[contains(@class,"rounded-full") or contains(@class,"actor-avatar")]')->item(0);
+        if ($img instanceof \DOMElement) {
+            $src   = $img->getAttribute('src');
+            $lower = strtolower($src);
+            if ($src && !array_filter($rejectKeywords, fn($kw) => str_contains($lower, $kw))) {
+                return $src;
+            }
+        }
+
+        return null;
     }
 }
