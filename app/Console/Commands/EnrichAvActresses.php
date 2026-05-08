@@ -10,10 +10,11 @@ use Illuminate\Support\Facades\Log;
 class EnrichAvActresses extends Command
 {
     protected $signature   = 'enrich:av-actresses
-                              {--limit=0   : 最多處理幾筆（0=全部）}
-                              {--missing   : 只處理缺資料的女優（height/birthday/birthplace 任一為空）}
-                              {--delay=2   : 每筆請求間隔秒數}';
-    protected $description = '從 avbase.net 批次補齊女優個人資料（出身地/身長/サイズ/趣味/生日）';
+                              {--limit=0    : 最多處理幾筆（0=全部）}
+                              {--missing    : 只處理缺資料的女優（height/birthday/birthplace 任一為空）}
+                              {--no-image   : 只處理沒有圖片的女優（image_url 為空）}
+                              {--delay=2    : 每筆請求間隔秒數}';
+    protected $description = '從 avbase.net + MissAV 批次補齊女優個人資料與圖片';
 
     public function handle()
     {
@@ -24,11 +25,14 @@ class EnrichAvActresses extends Command
 
         $query = AvActress::orderBy('id');
 
-        if ($this->option('missing')) {
+        if ($this->option('no-image')) {
+            $query->whereNull('image_url');
+        } elseif ($this->option('missing')) {
             $query->where(function ($q) {
                 $q->whereNull('height')
                   ->orWhereNull('birthday')
-                  ->orWhereNull('birthplace');
+                  ->orWhereNull('birthplace')
+                  ->orWhereNull('image_url');
             });
         }
 
