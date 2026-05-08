@@ -77,10 +77,23 @@ class ScrapeAvActresses extends Command
                 ];
 
                 $isNew = !AvActress::where('missav_slug', $data['slug'])->exists();
-                AvActress::updateOrCreate(
+                $actress = AvActress::updateOrCreate(
                     ['missav_slug' => $data['slug']],
                     $payload
                 );
+
+                // 沒有圖片時，從 MissAV 個人頁補圖
+                if (!$actress->image_url) {
+                    $missavUrl = 'https://missav.ai/actresses/' . urlencode($data['slug']);
+                    $imgHtml   = $this->fetchHtml($missavUrl);
+                    if ($imgHtml) {
+                        $imgSrc = $this->extractMissavImage($imgHtml);
+                        if ($imgSrc) {
+                            $actress->update(['image_url' => $imgSrc]);
+                            $this->line("      → 補圖成功");
+                        }
+                    }
+                }
 
                 $this->line('  [' . ($isNew ? '新增' : '更新') . "] {$data['name']}" .
                     (!empty($data['debut_year']) ? " ({$data['debut_year']}出道)" : ''));
@@ -216,12 +229,48 @@ class ScrapeAvActresses extends Command
             $result['birthday'] = "{$m[1]}-{$m[2]}-{$m[3]}";
         }
 
-        // 圖片（detail 頁有更高解析度）
+        // 圖片（detail 頁有更高解析度，過濾 logo/placeholder）
+        $rejectKeywords = ['logo', 'default', 'placeholder', 'no-image', 'noimage', 'dummy'];
         $imgNode = $xpath->query('//div[contains(@class,"actor-avatar") or contains(@class,"overflow-hidden rounded-full")]//img')->item(0);
         if ($imgNode instanceof \DOMElement) {
-            $result['image_url'] = $imgNode->getAttribute('src');
+            $src   = $imgNode->getAttribute('src');
+            $lower = strtolower($src);
+            $isLogo = array_filter($rejectKeywords, fn($kw) => str_contains($lower, $kw));
+            if ($src && !$isLogo) {
+                $result['image_url'] = $src;
+            }
         }
 
         return $result;
+    }
+
+    private function extractMissavImage(string $html): ?string
+    {
+        $rejectKeywords = ['logo', 'default', 'placeholder', 'no-image', 'noimage', 'dummy'];
+
+        libxml_use_internal_errors(true);
+        $doc = new \DOMDocument();
+        $doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+        $xpath = new \DOMXPath($doc);
+
+        $og = $xpath->query('//meta[@property="og:image"]')->item(0);
+        if ($og) {
+            $src   = $og->getAttribute('content');
+            $lower = strtolower($src);
+            if ($src && !array_filter($rejectKeywords, fn($kw) => str_contains($lower, $kw))) {
+                return $src;
+            }
+        }
+
+        $img = $xpath->query('//img[contains(@class,"rounded-full") or contains(@class,"actor-avatar")]')->item(0);
+        if ($img instanceof \DOMElement) {
+            $src   = $img->getAttribute('src');
+            $lower = strtolower($src);
+            if ($src && !array_filter($rejectKeywords, fn($kw) => str_contains($lower, $kw))) {
+                return $src;
+            }
+        }
+
+        return null;
     }
 }

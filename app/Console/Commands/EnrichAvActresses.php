@@ -26,7 +26,12 @@ class EnrichAvActresses extends Command
         $query = AvActress::orderByDesc('id');
 
         if ($this->option('no-image')) {
-            $query->whereNull('image_url');
+            $query->where(function ($q) {
+                $q->whereNull('image_url')
+                  ->orWhere('image_url', 'like', '%logo%')
+                  ->orWhere('image_url', 'like', '%placeholder%')
+                  ->orWhere('image_url', 'like', '%default%');
+            });
         } elseif ($this->option('missing')) {
             $query->where(function ($q) {
                 $q->whereNull('height')
