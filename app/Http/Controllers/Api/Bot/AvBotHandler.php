@@ -43,6 +43,24 @@ class AvBotHandler
                 $tag   = $parts[1] ?? '';
                 [$text, $markup] = $this->buildTagVideoList($tag, $page);
                 $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
+            } elseif (str_starts_with($data, 'avba_')) {
+                // 女優搜片：選中某女優，顯示第 1 頁
+                $name = substr($data, 5);
+                [$text, $markup] = $this->buildActressVideoList($name, 1);
+                $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
+            } elseif (str_starts_with($data, 'avbap_')) {
+                // 女優搜片：翻頁，格式 avbap_{page}_{name}
+                $parts = explode('_', substr($data, 6), 2);
+                $page  = (int) ($parts[0] ?? 1);
+                $name  = $parts[1] ?? '';
+                [$text, $markup] = $this->buildActressVideoList($name, $page);
+                $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
+            } elseif ($data === 'avba_menu') {
+                [$text, $markup] = $this->buildActressBrowseMenu();
+                $this->sendMessage($bot->token, $chatId, $text, $markup);
+            } elseif ($data === 'avba_search') {
+                $this->setState($bot->id, $chatId, 'av_actress_search');
+                $this->sendMessage($bot->token, $chatId, "🔍 請輸入女優姓名關鍵字：");
             } elseif ($data === 'avb_menu') {
                 [$text, $markup] = $this->buildTagBrowseMenu($chatId);
                 $this->sendMessage($bot->token, $chatId, $text, $markup);
@@ -105,6 +123,14 @@ class AvBotHandler
             return response()->json(['ok' => true]);
         }
 
+        if ($text === '👤 女優搜片') {
+            $this->clearState($bot->id, $chatId);
+            [$menuText, $markup] = $this->buildActressBrowseMenu();
+            $this->sendMessage($bot->token, $chatId, $menuText, $markup);
+            $this->logMessage($bot->id, $userId, $username, $chatId, $menuText, 2, 'reply');
+            return response()->json(['ok' => true]);
+        }
+
         if ($text === '🏷 tag搜片') {
             $this->clearState($bot->id, $chatId);
             [$menuText, $markup] = $this->buildTagBrowseMenu($chatId);
@@ -115,6 +141,12 @@ class AvBotHandler
 
         // 搜尋標籤 state：用戶輸入關鍵字，從 DB 找出匹配 tag
         $stateObj = $this->getState($bot->id, $chatId);
+        if ($stateObj && $stateObj->state === 'av_actress_search' && $text) {
+            [$reply, $markup] = $this->buildActressSearchResult($text);
+            $this->sendMessage($bot->token, $chatId, $reply, $markup);
+            $this->logMessage($bot->id, $userId, $username, $chatId, $reply, 2, 'reply');
+            return response()->json(['ok' => true]);
+        }
         if ($stateObj && $stateObj->state === 'av_browse_search' && $text) {
             [$reply, $markup] = $this->buildTagSearchResult($bot, $chatId, $text, 'browse');
             $this->sendMessage($bot->token, $chatId, $reply, $markup);
@@ -159,7 +191,7 @@ class AvBotHandler
         return [
             'keyboard' => [
                 [['text' => '🎬 今日新片'], ['text' => '⭐ 喜好設定']],
-                [['text' => '🏷 tag搜片']],
+                [['text' => '🏷 tag搜片'],  ['text' => '👤 女優搜片']],
             ],
             'resize_keyboard' => true,
             'persistent'      => true,
@@ -199,6 +231,99 @@ class AvBotHandler
         return [$text, ['inline_keyboard' => $rows]];
     }
 
+    private function buildActressBrowseMenu(): array
+    {
+        // 依片子數量排名前 40 女優
+        $topActresses = \App\AvActress::withCount('videos')
+            ->orderByDesc('videos_count')
+            ->limit(40)
+            ->pluck('name')
+            ->toArray();
+
+        $text = "👤 <b>女優搜片</b>\n選擇女優查看對應影片：";
+        $rows = [];
+        foreach (array_chunk($topActresses, 3) as $row) {
+            $btns = [];
+            foreach ($row as $name) {
+                $btns[] = ['text' => $name, 'callback_data' => 'avba_' . $name];
+            }
+            $rows[] = $btns;
+        }
+        $rows[] = [['text' => '🔍 搜尋更多女優', 'callback_data' => 'avba_search']];
+        return [$text, ['inline_keyboard' => $rows]];
+    }
+
+    private function buildActressVideoList(string $name, int $page): array
+    {
+        $perPage  = 5;
+        $maxPages = 5;
+        $offset   = ($page - 1) * $perPage;
+
+        $total  = AvVideo::where('actresses', 'like', "%{$name}%")->count();
+        $videos = AvVideo::where('actresses', 'like', "%{$name}%")
+            ->orderBy('release_date', 'desc')
+            ->orderBy('id', 'desc')
+            ->skip($offset)
+            ->take($perPage)
+            ->get();
+
+        if ($videos->isEmpty()) {
+            return ["👤 <b>{$name}</b>\n\n暫無相關影片。", ['inline_keyboard' => [[['text' => '⬅️ 返回', 'callback_data' => 'avba_menu']]]]];
+        }
+
+        $totalPages = min($maxPages, (int) ceil($total / $perPage));
+        $lines = ["👤 <b>{$name}</b>（第 {$page}/{$totalPages} 頁，共 {$total} 部）\n"];
+
+        foreach ($videos as $v) {
+            $lines[] = "📀 <b>{$v->code}</b>";
+            if ($v->title) $lines[] = "📝 " . mb_substr($v->title, 0, 40) . (mb_strlen($v->title) > 40 ? '…' : '');
+            if ($v->release_date) $lines[] = "📅 " . $v->release_date->format('Y-m-d');
+            if ($v->source_url)   $lines[] = "🔗 {$v->source_url}";
+            $lines[] = '';
+        }
+
+        $prevPage = $page - 1;
+        $nextPage = $page + 1;
+        $navBtns  = [];
+        if ($page > 1)           $navBtns[] = ['text' => '⬅️ 上一頁', 'callback_data' => "avbap_{$prevPage}_{$name}"];
+        if ($page < $totalPages) $navBtns[] = ['text' => '下一頁 ➡️', 'callback_data' => "avbap_{$nextPage}_{$name}"];
+
+        $rows = [];
+        if (!empty($navBtns)) $rows[] = $navBtns;
+        $rows[] = [['text' => '⬅️ 返回女優選單', 'callback_data' => 'avba_menu']];
+
+        return [implode("\n", $lines), ['inline_keyboard' => $rows]];
+    }
+
+    private function buildActressSearchResult(string $keyword): array
+    {
+        $matched = \App\AvActress::where('name', 'like', "%{$keyword}%")
+            ->withCount('videos')
+            ->orderByDesc('videos_count')
+            ->limit(15)
+            ->pluck('name')
+            ->toArray();
+
+        if (empty($matched)) {
+            return [
+                "🔍 找不到含「{$keyword}」的女優，請換個關鍵字：",
+                ['inline_keyboard' => [[['text' => '⬅️ 返回', 'callback_data' => 'avba_menu']]]],
+            ];
+        }
+
+        $rows = [];
+        foreach (array_chunk($matched, 3) as $row) {
+            $btns = [];
+            foreach ($row as $name) {
+                $btns[] = ['text' => $name, 'callback_data' => 'avba_' . $name];
+            }
+            $rows[] = $btns;
+        }
+        $rows[] = [['text' => '⬅️ 返回', 'callback_data' => 'avba_menu']];
+
+        return ["🔍 含「{$keyword}」的女優（共 " . count($matched) . " 位）：", ['inline_keyboard' => $rows]];
+    }
+
     private function buildTagBrowseMenu(int $chatId): array
     {
         $text = "🏷 <b>tag搜片</b>\n選擇標籤查看對應影片：";
@@ -219,8 +344,9 @@ class AvBotHandler
         $perPage = 5;
         $offset  = ($page - 1) * $perPage;
 
-        $total = AvVideo::whereJsonContains('tags', $tag)->count();
-        $videos = AvVideo::whereJsonContains('tags', $tag)
+        $maxPages = 5;
+        $total    = AvVideo::whereJsonContains('tags', $tag)->count();
+        $videos   = AvVideo::whereJsonContains('tags', $tag)
             ->orderBy('release_date', 'desc')
             ->orderBy('id', 'desc')
             ->skip($offset)
@@ -231,7 +357,7 @@ class AvBotHandler
             return ["🏷 <b>{$tag}</b>\n\n暫無相關影片。", ['inline_keyboard' => [[['text' => '⬅️ 返回', 'callback_data' => 'avb_menu']]]]];
         }
 
-        $totalPages = (int) ceil($total / $perPage);
+        $totalPages = min($maxPages, (int) ceil($total / $perPage));
         $lines = ["🏷 <b>{$tag}</b>（第 {$page}/{$totalPages} 頁，共 {$total} 部）\n"];
 
         foreach ($videos as $v) {
