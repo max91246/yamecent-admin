@@ -31,9 +31,21 @@ class AvBotHandler
                 $pref->update(['push_enabled' => !$pref->push_enabled]);
                 [$text, $markup] = $this->buildAvTagMenu($bot, $chatId, $username);
                 $this->sendMessage($bot->token, $chatId, $text, $markup);
+            } elseif ($data === 'av_tag_search') {
+                $this->setState($bot->id, $chatId, 'av_search_tag');
+                $this->sendMessage($bot->token, $chatId, "🔍 請輸入標籤關鍵字（例：顏射、素人）：");
+            } elseif ($data === 'av_search_back') {
+                $this->clearState($bot->id, $chatId);
+                [$text, $markup] = $this->buildAvTagMenu($bot, $chatId, $username);
+                $this->sendMessage($bot->token, $chatId, $text, $markup);
             } elseif (str_starts_with($data, 'av_tag_')) {
                 $tag = substr($data, 7);
                 $this->avToggleTag($bot, $chatId, $tag);
+                $stateObj = $this->getState($bot->id, $chatId);
+                // 搜尋結果頁點選後回到主選單
+                if ($stateObj && $stateObj->state === 'av_search_tag') {
+                    $this->clearState($bot->id, $chatId);
+                }
                 [$text, $markup] = $this->buildAvTagMenu($bot, $chatId, $username);
                 $this->sendMessage($bot->token, $chatId, $text, $markup);
             }
@@ -68,9 +80,19 @@ class AvBotHandler
         }
 
         if ($text === '⭐ 喜好設定') {
+            $this->clearState($bot->id, $chatId);
             [$menuText, $markup] = $this->buildAvTagMenu($bot, $chatId, $username);
             $this->sendMessage($bot->token, $chatId, $menuText, $markup);
             $this->logMessage($bot->id, $userId, $username, $chatId, $menuText, 2, 'reply');
+            return response()->json(['ok' => true]);
+        }
+
+        // 搜尋標籤 state：用戶輸入關鍵字，從 DB 找出匹配 tag
+        $stateObj = $this->getState($bot->id, $chatId);
+        if ($stateObj && $stateObj->state === 'av_search_tag' && $text) {
+            [$reply, $markup] = $this->buildTagSearchResult($bot, $chatId, $text);
+            $this->sendMessage($bot->token, $chatId, $reply, $markup);
+            $this->logMessage($bot->id, $userId, $username, $chatId, $reply, 2, 'reply');
             return response()->json(['ok' => true]);
         }
 
@@ -137,10 +159,65 @@ class AvBotHandler
             ['text' => ($pushOn ? '🔔 每日推播：開' : '🔕 每日推播：關'), 'callback_data' => 'av_push_toggle'],
         ];
         $rows[] = [
-            ['text' => '💾 儲存設定', 'callback_data' => 'av_tag_save'],
+            ['text' => '🔍 搜尋更多標籤', 'callback_data' => 'av_tag_search'],
+            ['text' => '💾 儲存設定',      'callback_data' => 'av_tag_save'],
         ];
 
         return [$text, ['inline_keyboard' => $rows]];
+    }
+
+    private function buildTagSearchResult(TgBot $bot, int $chatId, string $keyword): array
+    {
+        // 從所有影片 tags 中找含關鍵字的，取前 15 個
+        $allTags = Cache::remember('av_all_tags', 3600, function () {
+            $rows  = AvVideo::whereNotNull('tags')->pluck('tags');
+            $count = [];
+            foreach ($rows as $tagArr) {
+                if (!is_array($tagArr)) continue;
+                foreach ($tagArr as $tag) {
+                    $t = trim($tag);
+                    if ($t && mb_strlen($t) <= 10) {
+                        $count[$t] = ($count[$t] ?? 0) + 1;
+                    }
+                }
+            }
+            arsort($count);
+            return array_keys($count);
+        });
+
+        $matched = array_values(array_filter(
+            $allTags,
+            fn($tag) => mb_strpos($tag, $keyword) !== false
+        ));
+
+        if (empty($matched)) {
+            return [
+                "🔍 找不到含「{$keyword}」的標籤，請換個關鍵字：",
+                ['inline_keyboard' => [[['text' => '⬅️ 返回設定', 'callback_data' => 'av_search_back']]]],
+            ];
+        }
+
+        $pref     = AvUserPref::firstOrCreate(['bot_id' => $bot->id, 'tg_chat_id' => $chatId]);
+        $selected = $pref->fav_tags ?? [];
+
+        $rows = [];
+        foreach (array_chunk(array_slice($matched, 0, 15), 3) as $row) {
+            $btns = [];
+            foreach ($row as $tag) {
+                $active = in_array($tag, $selected);
+                $btns[] = ['text' => ($active ? '✅ ' : '') . $tag, 'callback_data' => 'av_tag_' . $tag];
+            }
+            $rows[] = $btns;
+        }
+        $rows[] = [['text' => '⬅️ 返回設定', 'callback_data' => 'av_search_back']];
+
+        $count = count($matched);
+        $hint  = $count > 15 ? "（顯示前 15 筆，共 {$count} 筆）" : "（共 {$count} 筆）";
+
+        return [
+            "🔍 含「{$keyword}」的標籤 {$hint}\n點選加入喜好：",
+            ['inline_keyboard' => $rows],
+        ];
     }
 
     private function avToggleTag(TgBot $bot, int $chatId, string $tag): void
