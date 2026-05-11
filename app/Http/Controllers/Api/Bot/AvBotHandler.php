@@ -43,24 +43,24 @@ class AvBotHandler
                 $tag   = $parts[1] ?? '';
                 [$text, $markup] = $this->buildTagVideoList($tag, $page);
                 $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
-            } elseif (str_starts_with($data, 'avba_')) {
-                // 女優搜片：選中某女優，顯示第 1 頁
-                $name = substr($data, 5);
-                [$text, $markup] = $this->buildActressVideoList($name, 1);
-                $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
-            } elseif (str_starts_with($data, 'avbap_')) {
-                // 女優搜片：翻頁，格式 avbap_{page}_{name}
-                $parts = explode('_', substr($data, 6), 2);
-                $page  = (int) ($parts[0] ?? 1);
-                $name  = $parts[1] ?? '';
-                [$text, $markup] = $this->buildActressVideoList($name, $page);
-                $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
             } elseif ($data === 'avba_menu') {
                 [$text, $markup] = $this->buildActressBrowseMenu();
                 $this->sendMessage($bot->token, $chatId, $text, $markup);
             } elseif ($data === 'avba_search') {
                 $this->setState($bot->id, $chatId, 'av_actress_search');
                 $this->sendMessage($bot->token, $chatId, "🔍 請輸入女優姓名關鍵字：");
+            } elseif (str_starts_with($data, 'avbap_')) {
+                // 女優搜片：翻頁，格式 avbap_{page}_{name}（要在 avba_ 之前判斷）
+                $parts = explode('_', substr($data, 6), 2);
+                $page  = (int) ($parts[0] ?? 1);
+                $name  = $parts[1] ?? '';
+                [$text, $markup] = $this->buildActressVideoList($name, $page);
+                $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
+            } elseif (str_starts_with($data, 'avba_')) {
+                // 女優搜片：選中某女優，顯示第 1 頁
+                $name = substr($data, 5);
+                [$text, $markup] = $this->buildActressVideoList($name, 1);
+                $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
             } elseif ($data === 'avb_menu') {
                 [$text, $markup] = $this->buildTagBrowseMenu($chatId);
                 $this->sendMessage($bot->token, $chatId, $text, $markup);
