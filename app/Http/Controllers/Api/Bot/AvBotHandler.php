@@ -31,6 +31,24 @@ class AvBotHandler
                 $pref->update(['push_enabled' => !$pref->push_enabled]);
                 [$text, $markup] = $this->buildAvTagMenu($bot, $chatId, $username);
                 $this->sendMessage($bot->token, $chatId, $text, $markup);
+            } elseif (str_starts_with($data, 'avbt_')) {
+                // tag搜片：選中某 tag，顯示第 1 頁
+                $tag = substr($data, 5);
+                [$text, $markup] = $this->buildTagVideoList($tag, 1);
+                $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
+            } elseif (str_starts_with($data, 'avbp_')) {
+                // tag搜片：翻頁，格式 avbp_{page}_{tag}
+                $parts = explode('_', substr($data, 5), 2);
+                $page  = (int) ($parts[0] ?? 1);
+                $tag   = $parts[1] ?? '';
+                [$text, $markup] = $this->buildTagVideoList($tag, $page);
+                $this->sendMessage($bot->token, $chatId, $text, $markup, 'HTML');
+            } elseif ($data === 'avb_menu') {
+                [$text, $markup] = $this->buildTagBrowseMenu($chatId);
+                $this->sendMessage($bot->token, $chatId, $text, $markup);
+            } elseif ($data === 'avb_search') {
+                $this->setState($bot->id, $chatId, 'av_browse_search');
+                $this->sendMessage($bot->token, $chatId, "🔍 請輸入標籤關鍵字：");
             } elseif ($data === 'av_tag_search') {
                 $this->setState($bot->id, $chatId, 'av_search_tag');
                 $this->sendMessage($bot->token, $chatId, "🔍 請輸入標籤關鍵字（例：顏射、素人）：");
@@ -87,8 +105,22 @@ class AvBotHandler
             return response()->json(['ok' => true]);
         }
 
+        if ($text === '🏷 tag搜片') {
+            $this->clearState($bot->id, $chatId);
+            [$menuText, $markup] = $this->buildTagBrowseMenu($chatId);
+            $this->sendMessage($bot->token, $chatId, $menuText, $markup);
+            $this->logMessage($bot->id, $userId, $username, $chatId, $menuText, 2, 'reply');
+            return response()->json(['ok' => true]);
+        }
+
         // 搜尋標籤 state：用戶輸入關鍵字，從 DB 找出匹配 tag
         $stateObj = $this->getState($bot->id, $chatId);
+        if ($stateObj && $stateObj->state === 'av_browse_search' && $text) {
+            [$reply, $markup] = $this->buildTagSearchResult($bot, $chatId, $text, 'browse');
+            $this->sendMessage($bot->token, $chatId, $reply, $markup);
+            $this->logMessage($bot->id, $userId, $username, $chatId, $reply, 2, 'reply');
+            return response()->json(['ok' => true]);
+        }
         if ($stateObj && $stateObj->state === 'av_search_tag' && $text) {
             [$reply, $markup] = $this->buildTagSearchResult($bot, $chatId, $text);
             $this->sendMessage($bot->token, $chatId, $reply, $markup);
@@ -127,6 +159,7 @@ class AvBotHandler
         return [
             'keyboard' => [
                 [['text' => '🎬 今日新片'], ['text' => '⭐ 喜好設定']],
+                [['text' => '🏷 tag搜片']],
             ],
             'resize_keyboard' => true,
             'persistent'      => true,
@@ -166,7 +199,64 @@ class AvBotHandler
         return [$text, ['inline_keyboard' => $rows]];
     }
 
-    private function buildTagSearchResult(TgBot $bot, int $chatId, string $keyword): array
+    private function buildTagBrowseMenu(int $chatId): array
+    {
+        $text = "🏷 <b>tag搜片</b>\n選擇標籤查看對應影片：";
+        $rows = [];
+        foreach (array_chunk($this->getAvTags(), 3) as $row) {
+            $btns = [];
+            foreach ($row as $tag) {
+                $btns[] = ['text' => $tag, 'callback_data' => 'avbt_' . $tag];
+            }
+            $rows[] = $btns;
+        }
+        $rows[] = [['text' => '🔍 搜尋更多標籤', 'callback_data' => 'avb_search']];
+        return [$text, ['inline_keyboard' => $rows]];
+    }
+
+    private function buildTagVideoList(string $tag, int $page): array
+    {
+        $perPage = 5;
+        $offset  = ($page - 1) * $perPage;
+
+        $total = AvVideo::whereJsonContains('tags', $tag)->count();
+        $videos = AvVideo::whereJsonContains('tags', $tag)
+            ->orderBy('release_date', 'desc')
+            ->orderBy('id', 'desc')
+            ->skip($offset)
+            ->take($perPage)
+            ->get();
+
+        if ($videos->isEmpty()) {
+            return ["🏷 <b>{$tag}</b>\n\n暫無相關影片。", ['inline_keyboard' => [[['text' => '⬅️ 返回', 'callback_data' => 'avb_menu']]]]];
+        }
+
+        $totalPages = (int) ceil($total / $perPage);
+        $lines = ["🏷 <b>{$tag}</b>（第 {$page}/{$totalPages} 頁，共 {$total} 部）\n"];
+
+        foreach ($videos as $v) {
+            $actress = $v->actresses ? implode(' / ', $v->actresses) : '-';
+            $lines[] = "📀 <b>{$v->code}</b>";
+            if ($v->title) $lines[] = "📝 " . mb_substr($v->title, 0, 40) . (mb_strlen($v->title) > 40 ? '…' : '');
+            $lines[] = "👤 {$actress}";
+            if ($v->release_date) $lines[] = "📅 " . $v->release_date->format('Y-m-d');
+            if ($v->source_url)   $lines[] = "🔗 {$v->source_url}";
+            $lines[] = '';
+        }
+
+        // 分頁按鈕
+        $navBtns = [];
+        if ($page > 1)          $navBtns[] = ['text' => '⬅️ 上一頁', 'callback_data' => "avbp_{$page-1}_{$tag}"];
+        if ($page < $totalPages) $navBtns[] = ['text' => '下一頁 ➡️', 'callback_data' => "avbp_{$page+1}_{$tag}"];
+
+        $rows = [];
+        if (!empty($navBtns)) $rows[] = $navBtns;
+        $rows[] = [['text' => '⬅️ 返回標籤選單', 'callback_data' => 'avb_menu']];
+
+        return [implode("\n", $lines), ['inline_keyboard' => $rows]];
+    }
+
+    private function buildTagSearchResult(TgBot $bot, int $chatId, string $keyword, string $mode = 'pref'): array
     {
         // 從所有影片 tags 中找含關鍵字的，取前 15 個
         $allTags = Cache::remember('av_all_tags', 3600, function () {
@@ -204,12 +294,17 @@ class AvBotHandler
         foreach (array_chunk(array_slice($matched, 0, 15), 3) as $row) {
             $btns = [];
             foreach ($row as $tag) {
-                $active = in_array($tag, $selected);
-                $btns[] = ['text' => ($active ? '✅ ' : '') . $tag, 'callback_data' => 'av_tag_' . $tag];
+                if ($mode === 'browse') {
+                    $btns[] = ['text' => $tag, 'callback_data' => 'avbt_' . $tag];
+                } else {
+                    $active = in_array($tag, $selected);
+                    $btns[] = ['text' => ($active ? '✅ ' : '') . $tag, 'callback_data' => 'av_tag_' . $tag];
+                }
             }
             $rows[] = $btns;
         }
-        $rows[] = [['text' => '⬅️ 返回設定', 'callback_data' => 'av_search_back']];
+        $backCallback = $mode === 'browse' ? 'avb_menu' : 'av_search_back';
+        $rows[] = [['text' => '⬅️ 返回', 'callback_data' => $backCallback]];
 
         $count = count($matched);
         $hint  = $count > 15 ? "（顯示前 15 筆，共 {$count} 筆）" : "（共 {$count} 筆）";
