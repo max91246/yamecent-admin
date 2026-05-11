@@ -8,6 +8,8 @@ services:
   mysql:
     ports:
       - "3306:3306"
+    volumes:
+      - /home/max91246/.laradock/data/mysql:/var/lib/mysql
 
   redis:
     ports:
