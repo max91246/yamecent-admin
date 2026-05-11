@@ -13,34 +13,25 @@
 
         {{-- 統計卡 --}}
         <div class="row">
-            <div class="col-md-3 stretch-card grid-margin">
+            <div class="col-md-4 stretch-card grid-margin">
                 <div class="card bg-gradient-danger card-img-holder text-white">
                     <div class="card-body">
                         <img src="/assets/images/dashboard/circle.svg" class="card-img-absolute" alt=""/>
-                        <h5 class="font-weight-normal mb-2">本月新增 <i class="mdi mdi-calendar-today mdi-24px float-right"></i></h5>
+                        <h5 class="font-weight-normal mb-2">今日新增 <i class="mdi mdi-calendar-today mdi-24px float-right"></i></h5>
+                        <h3 class="mb-1">{{ $stats['today'] }}</h3><small>位女優</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 stretch-card grid-margin">
+                <div class="card bg-gradient-warning card-img-holder text-white">
+                    <div class="card-body">
+                        <img src="/assets/images/dashboard/circle.svg" class="card-img-absolute" alt=""/>
+                        <h5 class="font-weight-normal mb-2">本月新增 <i class="mdi mdi-calendar mdi-24px float-right"></i></h5>
                         <h3 class="mb-1">{{ $stats['month'] }}</h3><small>位女優</small>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3 stretch-card grid-margin">
-                <div class="card bg-gradient-warning card-img-holder text-white">
-                    <div class="card-body">
-                        <img src="/assets/images/dashboard/circle.svg" class="card-img-absolute" alt=""/>
-                        <h5 class="font-weight-normal mb-2">本季新增 <i class="mdi mdi-calendar mdi-24px float-right"></i></h5>
-                        <h3 class="mb-1">{{ $stats['quarter'] }}</h3><small>位女優</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 stretch-card grid-margin">
-                <div class="card bg-gradient-info card-img-holder text-white">
-                    <div class="card-body">
-                        <img src="/assets/images/dashboard/circle.svg" class="card-img-absolute" alt=""/>
-                        <h5 class="font-weight-normal mb-2">{{ now()->year }} 出道 <i class="mdi mdi-star mdi-24px float-right"></i></h5>
-                        <h3 class="mb-1">{{ $stats['year'] }}</h3><small>位女優</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 stretch-card grid-margin">
+            <div class="col-md-4 stretch-card grid-margin">
                 <div class="card bg-gradient-primary card-img-holder text-white">
                     <div class="card-body">
                         <img src="/assets/images/dashboard/circle.svg" class="card-img-absolute" alt=""/>
@@ -58,7 +49,7 @@
                     <div class="card-body py-3">
                         {{-- 期間頁籤 --}}
                         <div class="d-flex flex-wrap mb-3" style="gap:6px;">
-                            @foreach(['' => '📋 全部', 'month' => '📅 本月', 'quarter' => '📊 本季', 'year' => '🗓 ' . now()->year . ' 年'] as $key => $label)
+                            @foreach(['' => '📋 全部', 'today' => '📅 今日', 'month' => '🗓 本月'] as $key => $label)
                                 <a href="{{ url('admin/av/actresses') }}?period={{ $key }}"
                                    class="btn btn-sm {{ $period === $key ? 'btn-primary' : 'btn-outline-secondary' }}">{{ $label }}</a>
                             @endforeach

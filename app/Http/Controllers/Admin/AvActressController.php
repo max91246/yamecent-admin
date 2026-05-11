@@ -48,14 +48,11 @@ class AvActressController extends Controller
 
         // 期間篩選（按爬取時間）
         switch ($period) {
+            case 'today':
+                $query->whereDate('created_at', $now->toDateString());
+                break;
             case 'month':
                 $query->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
-                break;
-            case 'quarter':
-                $query->where('created_at', '>=', $now->copy()->firstOfQuarter());
-                break;
-            case 'year':
-                $query->where('debut_year', $now->year);
                 break;
         }
 
@@ -63,10 +60,9 @@ class AvActressController extends Controller
 
         // 統計卡
         $stats = [
-            'month'   => AvActress::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->count(),
-            'quarter' => AvActress::where('created_at', '>=', $now->copy()->firstOfQuarter())->count(),
-            'year'    => AvActress::where('debut_year', $now->year)->count(),
-            'total'   => AvActress::count(),
+            'today' => AvActress::whereDate('created_at', $now->toDateString())->count(),
+            'month' => AvActress::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->count(),
+            'total' => AvActress::count(),
         ];
 
         return view('admin.av_actress_list', compact('list', 'period', 'stats'));
