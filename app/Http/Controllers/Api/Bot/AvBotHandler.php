@@ -245,9 +245,11 @@ class AvBotHandler
         }
 
         // 分頁按鈕
-        $navBtns = [];
-        if ($page > 1)          $navBtns[] = ['text' => '⬅️ 上一頁', 'callback_data' => "avbp_{$page-1}_{$tag}"];
-        if ($page < $totalPages) $navBtns[] = ['text' => '下一頁 ➡️', 'callback_data' => "avbp_{$page+1}_{$tag}"];
+        $prevPage = $page - 1;
+        $nextPage = $page + 1;
+        $navBtns  = [];
+        if ($page > 1)           $navBtns[] = ['text' => '⬅️ 上一頁', 'callback_data' => "avbp_{$prevPage}_{$tag}"];
+        if ($page < $totalPages) $navBtns[] = ['text' => '下一頁 ➡️', 'callback_data' => "avbp_{$nextPage}_{$tag}"];
 
         $rows = [];
         if (!empty($navBtns)) $rows[] = $navBtns;
