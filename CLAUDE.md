@@ -4,7 +4,7 @@
 
 - **後端**：Laravel (PHP) + MySQL + Redis
 - **前端**：H5 → `h5/` 目錄
-- **部署**：Docker (laradock)
+- **部署**：Docker（自建 docker-compose）+ GCP Compute Engine
 
 ## 資料庫
 
@@ -19,31 +19,42 @@
 ## 常用指令
 
 ```bash
-php artisan migrate        # 執行 migration
-php artisan cache:clear    # 清除快取
-php artisan route:list     # 列出所有路由
+# 本地（docker-compose.override.yml 自動套用）
+docker compose up -d
+docker compose exec php-fpm php artisan migrate
+docker compose exec php-fpm php artisan cache:clear
+
+# GCP（需指定 prod 設定）
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec php-fpm php artisan migrate --force
 ```
 
 ## GCP 升級部署指令
 
-GCP 專案目錄在 `/var/www`（非 `/var/www/yamecent-admin`）。
-`git pull` 在容器外執行，`php artisan` 需進入容器內執行，兩步驟分開：
+GCP 專案目錄在 `/home/max91246/www/yamecent-admin`。
+`git pull` 在容器外執行（需 sudo -u max91246），`php artisan` 進 php-fpm 容器執行。
 
 ```bash
 # Step 1：在 Host（容器外）拉取最新代碼
-cd ~/www/yamecent-admin && git pull
+sudo -u max91246 git -C /home/max91246/www/yamecent-admin pull
 
-# Step 2：進入 workspace 容器
-cd ~/laradock && docker compose exec -it workspace bash
-
-# Step 3：容器內執行 artisan 指令
-php artisan migrate --force
+# Step 2：在 php-fpm 容器內執行 artisan
+cd /home/max91246/www/yamecent-admin
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec php-fpm php artisan migrate --force
 
 # 若需清除快取（config / route / view）
-php artisan config:clear && php artisan route:clear && php artisan view:clear
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec php-fpm \
+  bash -c "php artisan config:clear && php artisan route:clear && php artisan view:clear"
 ```
 
 > **注意**：`php artisan migrate --force` 的 `--force` 是 production 環境必要參數（跳過互動確認）。
+
+## Docker Compose 檔案說明
+
+| 檔案 | 用途 |
+| --- | --- |
+| `docker-compose.yml` | 所有服務定義（無 ports，環境中立） |
+| `docker-compose.override.yml` | 本地自動套用：port 80/3306/6379、HTTP-only nginx、named volume |
+| `docker-compose.prod.yml` | GCP 手動指定：port 80/443/3306/6379、Let's Encrypt SSL、GCP 資料目錄 |
 
 ## 工作流程規範
 

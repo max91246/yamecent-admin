@@ -14,7 +14,7 @@
 |------|-----------|
 | 後端框架 | Laravel 9 |
 | 認證 | Session-based RBAC（後台）/ JWT（API） |
-| 部署環境 | Docker（Laradock）+ GCP Compute Engine |
+| 部署環境 | Docker（自建 docker-compose）+ GCP Compute Engine |
 | 資料庫 | MySQL 8（DB prefix: `ya_`） |
 | 快取/Queue | Redis（Predis） |
 | Web Server | Nginx + Let's Encrypt |
@@ -192,23 +192,56 @@ AV 管理
 ## GCP 部署
 
 ### 環境
-- GCP Compute Engine + Laradock（`~/laradock`）
-- 專案目錄：`/var/www`（Docker 容器內）
+
+- GCP Compute Engine（`34.122.76.154`）
+- 專案目錄：`/home/max91246/www/yamecent-admin`
+- Docker compose 設定：`docker-compose.yml` + `docker-compose.prod.yml`
+
+### 容器一覽
+
+| 容器 | Image | Port |
+| --- | --- | --- |
+| yamecent-nginx | nginx:1.25-alpine | 80 / 443 |
+| yamecent-php-fpm | yamecent-admin-php-fpm（自建） | 9000 |
+| yamecent-mysql | mysql:8.4 | 3306 |
+| yamecent-redis | redis:8-alpine | 6379 |
+| yamecent-flaresolverr | flaresolverr:latest | 8191 |
 
 ### 升級流程
 
 ```bash
-# 1. Host 拉取代碼
-cd ~/www/yamecent-admin && git pull
+# Step 1：Host 拉取最新代碼（容器外）
+sudo -u max91246 git -C /home/max91246/www/yamecent-admin pull
 
-# 2. 進入容器執行 artisan
-cd ~/laradock && docker compose exec -it workspace bash
-php artisan migrate --force
-php artisan config:clear && php artisan view:clear
+# Step 2：執行 artisan（php-fpm 容器內）
+cd /home/max91246/www/yamecent-admin
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec php-fpm php artisan migrate --force
+
+# 若需清除快取
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec php-fpm \
+  php artisan config:clear && php artisan route:clear && php artisan view:clear
 ```
 
 ### 排程（Crontab）
 
 ```bash
-* * * * * docker exec laradock-workspace-1 php /var/www/artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /home/max91246/www/yamecent-admin && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T php-fpm php artisan schedule:run >> /dev/null 2>&1
+```
+
+### 本地開發
+
+```bash
+# 啟動（自動套用 docker-compose.override.yml）
+docker compose up -d
+
+# 網址：http://yamecent-admin.local
+# MySQL port：3306  Redis port：6379
+```
+
+### 備份位置（GCP Host）
+
+```text
+/home/user/backups/
+  yamecent_YYYYMMDD_HHMMSS.sql   # MySQL dump
+  redis_db_YYYYMMDD_HHMMSS.rdb   # Redis RDB
 ```
