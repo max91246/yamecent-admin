@@ -225,7 +225,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml exec php-fpm \
 ### 排程（Crontab）
 
 ```bash
-* * * * * cd /home/max91246/www/yamecent-admin && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T php-fpm php artisan schedule:run >> /dev/null 2>&1
+* * * * * docker exec yamecent-php-fpm php artisan schedule:run >> /home/user/scheduler.log 2>&1
 ```
 
 ### 本地開發
