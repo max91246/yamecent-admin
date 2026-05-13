@@ -22,7 +22,26 @@
 
 ---
 
-## 後台選單結構
+## 後台架構
+
+### pure-admin 後台（yamecent-vue）
+
+新版後台使用 [yamecent-vue](https://github.com/max91246/yamecent-vue)（pure-admin v7）。  
+所有後台 API 走 `admin.auth` middleware（JWT），統一前綴 `/api/admin/`。
+
+| API 前綴 | Controller | 功能 |
+|----------|-----------|------|
+| `/api/admin/dashboard` | DashboardController | 首頁統計數據 |
+| `/api/admin/article` | ArticleController | 文章 + 留言 CRUD |
+| `/api/admin/member` | MemberController | 會員 CRUD + 餘額調整 + 會員資格 |
+| `/api/admin/av` | AvController | AV 影片 + 女優列表 |
+| `/api/admin/tg` | TgController | Bot 管理 + 訊息 + 持股 + 交易明細 |
+| `/api/admin/stock` | StockController | 處置股 + 油價 K線 |
+| `/api/admin/config` | ConfigController | 系統設定 CRUD |
+| `/api/admin/system` | Menu/Role/UserController | RBAC 管理 + 動態路由 |
+| `/api/admin/auth` | AdminAuthController | 登入 + Refresh Token |
+
+### 舊後台選單結構（Laravel Blade，已逐步遷移）
 
 ```
 控制台
