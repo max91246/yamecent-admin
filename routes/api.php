@@ -19,6 +19,12 @@ $router->get('/articles/{id}',              'Api\ArticleController@show');
 // 留言（公開讀取）
 $router->get('/articles/{id}/comments',     'Api\CommentController@index');
 
+// Log 查看
+$router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/logs'], function ($router) {
+    $router->get('/files',   'System\LogController@files');
+    $router->get('/entries', 'System\LogController@entries');
+});
+
 // 首頁統計
 $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/dashboard'], function ($router) {
     $router->get('/stats', 'System\DashboardController@stats');
