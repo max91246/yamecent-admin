@@ -56,5 +56,6 @@ class Kernel extends HttpKernel
         'session.check' => \App\Http\Middleware\CheckSession::class,
         'install.check' => \App\Http\Middleware\CheckInstall::class,
         'api.auth'      => \App\Http\Middleware\ApiAuth::class,
+        'admin.auth'    => \App\Http\Middleware\AdminAuth::class,
     ];
 }

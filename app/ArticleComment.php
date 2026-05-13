@@ -8,6 +8,8 @@ class ArticleComment extends Model
 {
     protected $fillable = ['article_id', 'member_id', 'content', 'is_visible', 'admin_reply', 'admin_replied_at'];
 
+    protected $casts = ['admin_replied_at' => 'datetime'];
+
     public function article()
     {
         return $this->belongsTo(Article::class);

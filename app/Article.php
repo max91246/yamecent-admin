@@ -11,6 +11,8 @@ class Article extends Model
         'source_post_id', 'source_member_id', 'source_published_at',
     ];
 
+    protected $casts = ['source_published_at' => 'datetime'];
+
     const TYPE_LABELS = [
         1 => '普通文章',
         4 => '玩股網',

@@ -18,6 +18,13 @@ class Controller extends BaseController
      * @return mixed
      * @description 接口返回数据格式
      */
+    protected function safeDate($date, string $format = 'Y-m-d H:i:s'): ?string
+    {
+        if (!$date) return null;
+        if ($date instanceof \Carbon\Carbon) return $date->format($format);
+        try { return \Carbon\Carbon::parse($date)->format($format); } catch (\Exception $e) { return null; }
+    }
+
     protected function json($code = 200, $msg = '', $data = [])
     {
         if ($data == []) {
