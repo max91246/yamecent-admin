@@ -59,7 +59,11 @@ $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/tg'], function 
 $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/stock'], function ($router) {
     $router->post('/disposals',        'System\StockController@disposals');
     $router->post('/oil-prices',       'System\StockController@oilPrices');
-    $router->get('/query',             'System\StockQueryController@query');
+    $router->get('/quote',             'System\StockQueryController@quote');
+    $router->get('/institutional',     'System\StockQueryController@institutional');
+    $router->get('/distribution',      'System\StockQueryController@distribution');
+    $router->get('/revenue',           'System\StockQueryController@revenue');
+    $router->get('/news',              'System\StockQueryController@news');
 });
 
 // 系統設定

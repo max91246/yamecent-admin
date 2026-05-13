@@ -4,48 +4,89 @@ namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 
 class StockQueryController extends Controller
 {
-    public function query(Request $request)
-    {
-        $code = strtoupper(trim($request->input('code', '')));
-        if (!$code || !preg_match('/^\d{4,6}$/', $code)) {
-            return response()->json(['success' => false, 'message' => '請輸入正確的股票代號（4~6位數字）']);
-        }
+    // ── 報價 + 日K（快速，約 1~2s）────────────────────────────────
 
-        $cacheKey = "stock_query_{$code}_" . now()->format('Ymd_H');
+    public function quote(Request $request)
+    {
+        $code = $this->validateCode($request);
+        if (!$code) return $this->badCode();
+
+        $cacheKey = "sq_quote_{$code}_" . now()->format('Ymd_H');
         $data = Cache::remember($cacheKey, 3600, function () use ($code) {
-            return $this->fetchAll($code);
+            $ticker = $code . '.TW';
+            $yData  = $this->fetchYahoo($ticker);
+            if (count($yData['history']) < 5) {
+                $ticker = $code . '.TWO';
+                $yData  = $this->fetchYahoo($ticker);
+            }
+            return ['ticker' => $ticker] + $yData;
         });
 
         return response()->json(['success' => true, 'data' => $data]);
     }
 
-    private function fetchAll(string $code): array
-    {
-        // 先試上市(.TW)，歷史資料少於5筆才判定為無效，改試上櫃(.TWO)
-        $ticker = $code . '.TW';
-        $yData  = $this->fetchYahoo($ticker);
-        if (count($yData['history']) < 5) {
-            $ticker = $code . '.TWO';
-            $yData  = $this->fetchYahoo($ticker);
-        }
+    // ── 三大法人（慢，TWSE 多日並行，約 3~5s）────────────────────
 
-        return [
-            'quote'         => $yData['quote'],
-            'history'       => $yData['history'],
-            'institutional' => $this->fetchInstitutional($code),
-            'distribution'  => $this->fetchDistribution($code),
-            'revenue'       => $this->fetchRevenue($code),
-            'news'          => $this->fetchNews($ticker),
-        ];
+    public function institutional(Request $request)
+    {
+        $code = $this->validateCode($request);
+        if (!$code) return $this->badCode();
+
+        $cacheKey = "sq_inst_{$code}_" . now()->format('Ymd');
+        $data = Cache::remember($cacheKey, 86400, fn() => $this->fetchInstitutional($code));
+
+        return response()->json(['success' => true, 'data' => $data]);
     }
 
-    // ── Yahoo Finance：報價 + 近3個月日K ──────────────────────────
+    // ── 大戶持股分散表（TDCC）────────────────────────────────────
+
+    public function distribution(Request $request)
+    {
+        $code = $this->validateCode($request);
+        if (!$code) return $this->badCode();
+
+        $cacheKey = "sq_dist_{$code}_" . now()->format('YW');
+        $data = Cache::remember($cacheKey, 7200, fn() => $this->fetchDistribution($code));
+
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
+    // ── 月營收（MOPS）────────────────────────────────────────────
+
+    public function revenue(Request $request)
+    {
+        $code = $this->validateCode($request);
+        if (!$code) return $this->badCode();
+
+        $cacheKey = "sq_rev_{$code}_" . now()->format('YmdH');
+        $data = Cache::remember($cacheKey, 3600, fn() => $this->fetchRevenue($code));
+
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
+    // ── 相關新聞（Yahoo Finance）──────────────────────────────────
+
+    public function news(Request $request)
+    {
+        $code = $this->validateCode($request);
+        if (!$code) return $this->badCode();
+
+        // ticker 由前端傳入（避免重複查一次 .TW/.TWO）
+        $ticker   = $request->input('ticker', $code . '.TW');
+        $cacheKey = "sq_news_{$code}_" . now()->format('YmdH');
+        $data = Cache::remember($cacheKey, 3600, fn() => $this->fetchNews($ticker));
+
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
+    // ── 私有：Yahoo Finance 報價 + 日K ───────────────────────────
 
     private function fetchYahoo(string $ticker): array
     {
@@ -60,18 +101,17 @@ class StockQueryController extends Controller
             if (!$res->ok()) return ['quote' => [], 'history' => []];
 
             $result     = $res->json('chart.result.0', []);
-            $meta       = $result['meta']                     ?? [];
-            $timestamps = $result['timestamp']                ?? [];
-            $ohlcv      = $result['indicators']['quote'][0]   ?? [];
+            $meta       = $result['meta']                   ?? [];
+            $timestamps = $result['timestamp']              ?? [];
+            $ohlcv      = $result['indicators']['quote'][0] ?? [];
 
             $price = (float)($meta['regularMarketPrice'] ?? 0);
 
             $quote = [
-                'name'   => $meta['longName'] ?? ($meta['shortName'] ?? $ticker),
-                'ticker' => $meta['symbol']   ?? $ticker,
-                'price'  => round($price, 2),
-                'volume' => (int)($meta['regularMarketVolume'] ?? 0),
-                // 漲跌先填0，等 $rows 建完後從最後兩筆算正確昨日收盤
+                'name'          => $meta['longName'] ?? ($meta['shortName'] ?? $ticker),
+                'ticker'        => $meta['symbol']   ?? $ticker,
+                'price'         => round($price, 2),
+                'volume'        => (int)($meta['regularMarketVolume'] ?? 0),
                 'previousClose' => 0,
                 'change'        => 0,
                 'changePct'     => 0,
@@ -98,13 +138,11 @@ class StockQueryController extends Controller
                 ];
             }
 
-            // 用最後兩筆日K算正確的昨日收盤與漲跌
+            // 用最後兩筆計算正確漲跌（避免用 chartPreviousClose 這個圖表起點價）
             $n = count($rows);
             if ($n >= 2) {
-                $todayClose    = $rows[$n - 1]['close'];
+                $latestPrice    = $price > 0 ? $price : $rows[$n - 1]['close'];
                 $yesterdayClose = $rows[$n - 2]['close'];
-                // 若今日收盤 = price（已收盤），用昨日收盤計算；否則用最新 price
-                $latestPrice = $price > 0 ? $price : $todayClose;
                 $quote['price']         = round($latestPrice, 2);
                 $quote['previousClose'] = round($yesterdayClose, 2);
                 $quote['change']        = round($latestPrice - $yesterdayClose, 2);
@@ -112,14 +150,13 @@ class StockQueryController extends Controller
                     ? round(($latestPrice - $yesterdayClose) / $yesterdayClose * 100, 2) : 0;
             }
 
-            // 最近22個交易日，最新在前
             return ['quote' => $quote, 'history' => array_reverse(array_slice($rows, -22))];
         } catch (\Exception $e) {
             return ['quote' => [], 'history' => []];
         }
     }
 
-    // ── TWSE T86：三大法人（近10個交易日）────────────────────────
+    // ── 私有：TWSE T86 並行（Http::pool）────────────────────────
 
     private function fetchInstitutional(string $code): array
     {
@@ -130,162 +167,168 @@ class StockQueryController extends Controller
             $date->subDay();
         }
 
-        $rows = [];
+        // 過濾掉已有快取的日期，只對缺失的發請求
+        $missing = [];
+        $cached  = [];
         foreach ($businessDays as $day) {
-            $row = Cache::remember("twse_t86_{$code}_{$day}", 86400, function () use ($code, $day) {
-                try {
-                    $res = Http::timeout(10)->withHeaders([
-                        'User-Agent' => 'Mozilla/5.0',
-                        'Referer'    => 'https://www.twse.com.tw/',
-                    ])->get('https://www.twse.com.tw/rwd/zh/fund/T86', [
-                        'date'     => $day,
-                        'stockNo'  => $code,
-                        'response' => 'json',
-                    ]);
+            $key = "twse_t86_{$code}_{$day}";
+            $val = Cache::get($key);
+            if ($val !== null) {
+                if ($val) $cached[$day] = $val;
+            } else {
+                $missing[] = $day;
+            }
+        }
 
-                    if (!$res->ok() || $res->json('stat') !== 'OK') return null;
-
-                    $data = $res->json('data', []);
-                    if (empty($data)) return null;
-
-                    $row = collect($data)->first(fn($r) => isset($r[0]) && trim($r[0]) === $code);
-                    if (!$row) $row = $data[0];
-                    if (!$row || count($row) < 17) return null;
-
-                    $clean = fn($v) => (int)str_replace([',', ' '], '', $v ?? '0');
-
-                    return [
-                        'date'    => Carbon::createFromFormat('Ymd', $day)->format('Y-m-d'),
-                        // T86欄位：[2][3][4]=外資買賣超股數, [8][9][10]=投信, [11][12][13]=自營自行, [14][15][16]=自營避險
-                        'foreign' => (int)round($clean($row[4])  / 1000),
-                        'trust'   => (int)round($clean($row[10]) / 1000),
-                        'dealer'  => (int)round(($clean($row[13]) + $clean($row[16])) / 1000),
-                    ];
-                } catch (\Exception $e) {
-                    return null;
-                }
+        // Http::pool 並行取所有缺失日期
+        if (!empty($missing)) {
+            $responses = Http::pool(function (Pool $pool) use ($missing, $code) {
+                return collect($missing)->map(fn($day) =>
+                    $pool->as($day)
+                        ->timeout(8)
+                        ->withHeaders(['User-Agent' => 'Mozilla/5.0', 'Referer' => 'https://www.twse.com.tw/'])
+                        ->get('https://www.twse.com.tw/rwd/zh/fund/T86', [
+                            'date'     => $day,
+                            'stockNo'  => $code,
+                            'response' => 'json',
+                        ])
+                )->all();
             });
 
-            if ($row) $rows[] = $row;
-            if (count($rows) >= 10) break;
+            foreach ($missing as $day) {
+                $res = $responses[$day] ?? null;
+                $row = null;
+
+                try {
+                    if ($res && $res->ok() && $res->json('stat') === 'OK') {
+                        $data = $res->json('data', []);
+                        if (!empty($data)) {
+                            $r     = collect($data)->first(fn($r) => isset($r[0]) && trim($r[0]) === $code) ?? $data[0];
+                            $clean = fn($v) => (int)str_replace([',', ' '], '', $v ?? '0');
+                            if ($r && count($r) >= 17) {
+                                $row = [
+                                    'date'    => Carbon::createFromFormat('Ymd', $day)->format('Y-m-d'),
+                                    'foreign' => (int)round($clean($r[4])  / 1000),
+                                    'trust'   => (int)round($clean($r[10]) / 1000),
+                                    'dealer'  => (int)round(($clean($r[13]) + $clean($r[16])) / 1000),
+                                ];
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {}
+
+                Cache::put("twse_t86_{$code}_{$day}", $row, 86400);
+                if ($row) $cached[$day] = $row;
+            }
+        }
+
+        // 依日期排序（最新在前），最多取10筆
+        krsort($cached);
+        return array_values(array_slice($cached, 0, 10));
+    }
+
+    // ── 私有：TDCC 大戶持股 ────────────────────────────────────
+
+    private function fetchDistribution(string $code): array
+    {
+        try {
+            $res = Http::timeout(15)->withHeaders([
+                'User-Agent' => 'Mozilla/5.0',
+                'Referer'    => 'https://www.tdcc.com.tw/',
+            ])->asForm()->post('https://www.tdcc.com.tw/smjh/getS04.do', [
+                'selectedJCEStkNo' => $code,
+                'scaDate'          => '',
+            ]);
+
+            if (!$res->ok()) return [];
+
+            $json = $res->json();
+            if (!is_array($json) || empty($json)) return [];
+
+            return collect($json)->take(10)->map(function ($item) {
+                $date = $item['SCADATE'] ?? $item['scaDate'] ?? ($item['DISTDATE'] ?? '');
+                if (strlen($date) === 8) {
+                    $date = substr($date, 0, 4) . '/' . substr($date, 4, 2) . '/' . substr($date, 6, 2);
+                }
+                return [
+                    'date'          => $date,
+                    'totalHolders'  => (int)($item['STKHLDCNT']        ?? 0),
+                    'avgShares'     => (float)($item['STKHLDAVGSHRCNT'] ?? 0),
+                    'over400count'  => (int)($item['OVR400CNT']         ?? 0),
+                    'over400pct'    => (float)($item['OVR400SHRCNT']    ?? 0),
+                    'b400to600'     => (int)($item['B400T600']           ?? $item['BAND400TO600'] ?? 0),
+                    'b600to800'     => (int)($item['B600T800']           ?? $item['BAND600TO800'] ?? 0),
+                    'b800to1000'    => (int)($item['B800T1000']          ?? $item['BAND800TO1000'] ?? 0),
+                    'over1000count' => (int)($item['OVR1000CNT']         ?? 0),
+                    'over1000pct'   => (float)($item['OVR1000SHRCNT']   ?? 0),
+                    'closePrice'    => (float)($item['CLOSEPRICE']       ?? 0),
+                ];
+            })->values()->toArray();
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    // ── 私有：MOPS 月營收 ─────────────────────────────────────────
+
+    private function fetchRevenue(string $code): array
+    {
+        $now  = now('Asia/Taipei');
+        $rows = [];
+
+        for ($i = 1; $i <= 6; $i++) {
+            $target = $now->copy()->subMonths($i);
+            $year   = $target->year - 1911;
+            $month  = $target->month;
+
+            try {
+                $res = Http::timeout(10)->withHeaders(['User-Agent' => 'Mozilla/5.0'])
+                    ->asForm()->post('https://mops.twse.com.tw/mops/web/ajax_t05st10_1', [
+                        'encodeURIComponent' => '1',
+                        'step'               => '1',
+                        'firstin'            => '1',
+                        'off'                => '1',
+                        'TYPEK'              => 'sii',
+                        'co_id'              => $code,
+                        'year'               => $year,
+                        'month'              => str_pad($month, 2, '0', STR_PAD_LEFT),
+                    ]);
+
+                if (!$res->ok()) continue;
+
+                $html = $res->body();
+                if (preg_match_all('/<td[^>]*align="right"[^>]*>\s*([-\d,\.]+%?)\s*<\/td>/i', $html, $m)) {
+                    $vals = $m[1];
+                    if (count($vals) >= 5) {
+                        $rows[] = [
+                            'month'   => sprintf('%02d/%02d', $target->year % 100, $month),
+                            'revenue' => (int)str_replace(',', '', $vals[0] ?? '0'),
+                            'momPct'  => $vals[3] ?? null,
+                            'yoyPct'  => $vals[4] ?? null,
+                        ];
+                    }
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
         }
 
         return $rows;
     }
 
-    // ── TDCC：近10週大戶持股分散表 ───────────────────────────────
-
-    private function fetchDistribution(string $code): array
-    {
-        try {
-            return Cache::remember("tdcc_dist_{$code}_" . now()->format('YW'), 7200, function () use ($code) {
-                $res = Http::timeout(15)->withHeaders([
-                    'User-Agent' => 'Mozilla/5.0',
-                    'Referer'    => 'https://www.tdcc.com.tw/',
-                ])->asForm()->post('https://www.tdcc.com.tw/smjh/getS04.do', [
-                    'selectedJCEStkNo' => $code,
-                    'scaDate'          => '',
-                ]);
-
-                if (!$res->ok()) return [];
-
-                $json = $res->json();
-                if (!is_array($json) || empty($json)) return [];
-
-                return collect($json)->take(10)->map(function ($item) {
-                    $date = $item['SCADATE'] ?? $item['scaDate'] ?? ($item['DISTDATE'] ?? '');
-                    if (strlen($date) === 8) {
-                        $date = substr($date, 0, 4) . '/' . substr($date, 4, 2) . '/' . substr($date, 6, 2);
-                    }
-                    return [
-                        'date'          => $date,
-                        'totalHolders'  => (int)($item['STKHLDCNT']        ?? $item['totalHoldersCnt'] ?? 0),
-                        'avgShares'     => (float)($item['STKHLDAVGSHRCNT'] ?? 0),
-                        'over400count'  => (int)($item['OVR400CNT']         ?? 0),
-                        'over400pct'    => (float)($item['OVR400SHRCNT']    ?? 0),
-                        'b400to600'     => (int)($item['B400T600']           ?? $item['BAND400TO600'] ?? 0),
-                        'b600to800'     => (int)($item['B600T800']           ?? $item['BAND600TO800'] ?? 0),
-                        'b800to1000'    => (int)($item['B800T1000']          ?? $item['BAND800TO1000'] ?? 0),
-                        'over1000count' => (int)($item['OVR1000CNT']         ?? 0),
-                        'over1000pct'   => (float)($item['OVR1000SHRCNT']   ?? 0),
-                        'closePrice'    => (float)($item['CLOSEPRICE']       ?? 0),
-                    ];
-                })->values()->toArray();
-            });
-        } catch (\Exception $e) {
-            return [];
-        }
-    }
-
-    // ── MOPS：月營收（近6個月）────────────────────────────────────
-
-    private function fetchRevenue(string $code): array
-    {
-        try {
-            return Cache::remember("mops_rev_{$code}_" . now()->format('YmdH'), 3600, function () use ($code) {
-                $now  = now('Asia/Taipei');
-                $rows = [];
-
-                for ($i = 1; $i <= 6; $i++) {
-                    $target = $now->copy()->subMonths($i);
-                    $year   = $target->year - 1911;
-                    $month  = $target->month;
-
-                    try {
-                        $res = Http::timeout(10)->withHeaders([
-                            'User-Agent' => 'Mozilla/5.0',
-                        ])->asForm()->post('https://mops.twse.com.tw/mops/web/ajax_t05st10_1', [
-                            'encodeURIComponent' => '1',
-                            'step'               => '1',
-                            'firstin'            => '1',
-                            'off'                => '1',
-                            'TYPEK'              => 'sii',
-                            'co_id'              => $code,
-                            'year'               => $year,
-                            'month'              => str_pad($month, 2, '0', STR_PAD_LEFT),
-                        ]);
-
-                        if (!$res->ok()) continue;
-
-                        $html = $res->body();
-                        // 抓取表格中所有數字格
-                        if (preg_match_all('/<td[^>]*align="right"[^>]*>\s*([-\d,\.]+%?)\s*<\/td>/i', $html, $m)) {
-                            $vals = $m[1];
-                            if (count($vals) >= 5) {
-                                $rows[] = [
-                                    'month'   => sprintf('%02d/%02d', $target->year % 100, $month),
-                                    'revenue' => (int)str_replace(',', '', $vals[0] ?? '0'),
-                                    'momPct'  => $vals[3] ?? null,
-                                    'yoyPct'  => $vals[4] ?? null,
-                                ];
-                            }
-                        }
-                    } catch (\Exception $e) {
-                        continue;
-                    }
-                }
-
-                return $rows;
-            });
-        } catch (\Exception $e) {
-            return [];
-        }
-    }
-
-    // ── Yahoo Finance：相關新聞 ───────────────────────────────────
+    // ── 私有：Yahoo Finance 新聞 ──────────────────────────────────
 
     private function fetchNews(string $ticker): array
     {
         try {
-            $res = Http::timeout(10)->withHeaders([
-                'User-Agent' => 'Mozilla/5.0',
-            ])->get('https://query2.finance.yahoo.com/v1/finance/search', [
-                'q'                => $ticker,
-                'quotesCount'      => 0,
-                'newsCount'        => 10,
-                'enableFuzzyQuery' => 'false',
-                'newsQueryId'      => 'news_cie_vespa',
-            ]);
+            $res = Http::timeout(10)->withHeaders(['User-Agent' => 'Mozilla/5.0'])
+                ->get('https://query2.finance.yahoo.com/v1/finance/search', [
+                    'q'                => $ticker,
+                    'quotesCount'      => 0,
+                    'newsCount'        => 10,
+                    'enableFuzzyQuery' => 'false',
+                    'newsQueryId'      => 'news_cie_vespa',
+                ]);
 
             if (!$res->ok()) return [];
 
@@ -300,5 +343,16 @@ class StockQueryController extends Controller
         } catch (\Exception $e) {
             return [];
         }
+    }
+
+    private function validateCode(Request $request): ?string
+    {
+        $code = strtoupper(trim($request->input('code', '')));
+        return ($code && preg_match('/^\d{4,6}$/', $code)) ? $code : null;
+    }
+
+    private function badCode()
+    {
+        return response()->json(['success' => false, 'message' => '請輸入正確的股票代號']);
     }
 }
