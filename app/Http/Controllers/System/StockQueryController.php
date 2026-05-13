@@ -27,10 +27,10 @@ class StockQueryController extends Controller
 
     private function fetchAll(string $code): array
     {
-        // 先試上市(.TW)，若無資料再試上櫃(.TWO)
-        $ticker  = $code . '.TW';
-        $yData   = $this->fetchYahoo($ticker);
-        if (empty($yData['quote']['price'])) {
+        // 先試上市(.TW)，歷史資料少於5筆才判定為無效，改試上櫃(.TWO)
+        $ticker = $code . '.TW';
+        $yData  = $this->fetchYahoo($ticker);
+        if (count($yData['history']) < 5) {
             $ticker = $code . '.TWO';
             $yData  = $this->fetchYahoo($ticker);
         }
@@ -64,17 +64,17 @@ class StockQueryController extends Controller
             $timestamps = $result['timestamp']                ?? [];
             $ohlcv      = $result['indicators']['quote'][0]   ?? [];
 
-            $price     = (float)($meta['regularMarketPrice']  ?? 0);
-            $prevClose = (float)($meta['chartPreviousClose']   ?? 0);
+            $price = (float)($meta['regularMarketPrice'] ?? 0);
 
             $quote = [
-                'name'          => $meta['longName'] ?? ($meta['shortName'] ?? $ticker),
-                'ticker'        => $ticker,
-                'price'         => round($price, 2),
-                'previousClose' => round($prevClose, 2),
-                'change'        => round($price - $prevClose, 2),
-                'changePct'     => $prevClose > 0 ? round(($price - $prevClose) / $prevClose * 100, 2) : 0,
-                'volume'        => (int)($meta['regularMarketVolume'] ?? 0),
+                'name'   => $meta['longName'] ?? ($meta['shortName'] ?? $ticker),
+                'ticker' => $meta['symbol']   ?? $ticker,
+                'price'  => round($price, 2),
+                'volume' => (int)($meta['regularMarketVolume'] ?? 0),
+                // 漲跌先填0，等 $rows 建完後從最後兩筆算正確昨日收盤
+                'previousClose' => 0,
+                'change'        => 0,
+                'changePct'     => 0,
             ];
 
             $rows = [];
@@ -96,6 +96,20 @@ class StockQueryController extends Controller
                     'change'    => $change,
                     'changePct' => $changePct,
                 ];
+            }
+
+            // 用最後兩筆日K算正確的昨日收盤與漲跌
+            $n = count($rows);
+            if ($n >= 2) {
+                $todayClose    = $rows[$n - 1]['close'];
+                $yesterdayClose = $rows[$n - 2]['close'];
+                // 若今日收盤 = price（已收盤），用昨日收盤計算；否則用最新 price
+                $latestPrice = $price > 0 ? $price : $todayClose;
+                $quote['price']         = round($latestPrice, 2);
+                $quote['previousClose'] = round($yesterdayClose, 2);
+                $quote['change']        = round($latestPrice - $yesterdayClose, 2);
+                $quote['changePct']     = $yesterdayClose > 0
+                    ? round(($latestPrice - $yesterdayClose) / $yesterdayClose * 100, 2) : 0;
             }
 
             // 最近22個交易日，最新在前
