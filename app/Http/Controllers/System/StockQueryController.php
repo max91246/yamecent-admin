@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
+use App\Services\ShareholderService;
 use Carbon\Carbon;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Request;
@@ -11,127 +12,176 @@ use Illuminate\Support\Facades\Http;
 
 class StockQueryController extends Controller
 {
-    // ── 報價 + 日K（快速，約 1~2s）────────────────────────────────
+    // Yahoo Finance TW 版 headers（與舊 admin 相同）
+    private function twHeaders(string $symbol = ''): array
+    {
+        return [
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Referer'    => $symbol ? "https://tw.stock.yahoo.com/quote/{$symbol}" : 'https://tw.stock.yahoo.com/',
+            'Accept'     => 'application/json, text/plain, */*',
+        ];
+    }
+
+    private function twQuery(): array
+    {
+        return ['intl' => 'tw', 'lang' => 'zh-Hant-TW', 'region' => 'TW', 'site' => 'finance'];
+    }
+
+    // ── 報價 + 日K ────────────────────────────────────────────────
 
     public function quote(Request $request)
     {
         $code = $this->validateCode($request);
         if (!$code) return $this->badCode();
 
-        $cacheKey = "sq_quote_{$code}_" . now()->format('Ymd_H');
-        $data = Cache::remember($cacheKey, 3600, function () use ($code) {
-            // 先試上市(.TW)，只有完全找不到股票名稱才 fallback 到 .TWO（上櫃）
-            $ticker = $code . '.TW';
-            $yData  = $this->fetchYahoo($ticker);
-
-            $hasData = !empty($yData['quote']['name']) && $yData['quote']['name'] !== $ticker;
-            if (!$hasData) {
-                $ticker = $code . '.TWO';
-                $yData  = $this->fetchYahoo($ticker);
-            }
-
-            // 強制用我們實際查的後綴，不信任 Yahoo meta.symbol（可能回錯後綴）
-            if (!empty($yData['quote'])) {
-                $yData['quote']['ticker'] = $ticker;
-            }
-
-            return ['ticker' => $ticker] + $yData;
-        });
+        $cacheKey = "sq2_quote_{$code}_" . now()->format('Ymd_H');
+        $data = Cache::remember($cacheKey, 3600, fn() => $this->fetchQuoteAndHistory($code));
 
         return response()->json(['success' => true, 'data' => $data]);
     }
 
-    // ── 三大法人（慢，TWSE 多日並行，約 3~5s）────────────────────
+    // ── 三大法人 ──────────────────────────────────────────────────
 
     public function institutional(Request $request)
     {
         $code = $this->validateCode($request);
         if (!$code) return $this->badCode();
 
-        $cacheKey = "sq_inst_{$code}_" . now()->format('Ymd');
+        $cacheKey = "sq2_inst_{$code}_" . now()->format('Ymd');
         $data = Cache::remember($cacheKey, 86400, fn() => $this->fetchInstitutional($code));
 
         return response()->json(['success' => true, 'data' => $data]);
     }
 
-    // ── 大戶持股分散表（TDCC）────────────────────────────────────
+    // ── 大戶持股分散表（FlareSolverr → norway.twsthr.info）────────
 
     public function distribution(Request $request)
     {
         $code = $this->validateCode($request);
         if (!$code) return $this->badCode();
 
-        $cacheKey = "sq_dist_{$code}_" . now()->format('YW');
-        $data = Cache::remember($cacheKey, 7200, fn() => $this->fetchDistribution($code));
+        // ShareholderService 自帶 Redis cache（TTL 1天）
+        $data = ShareholderService::fetch($code) ?? [];
 
         return response()->json(['success' => true, 'data' => $data]);
     }
 
-    // ── 月營收（MOPS）────────────────────────────────────────────
+    // ── 月營收 ────────────────────────────────────────────────────
 
     public function revenue(Request $request)
     {
         $code = $this->validateCode($request);
         if (!$code) return $this->badCode();
 
-        $cacheKey = "sq_rev_{$code}_" . now()->format('YmdH');
-        $data = Cache::remember($cacheKey, 3600, fn() => $this->fetchRevenue($code));
+        $cacheKey = "sq2_rev_{$code}_" . now()->format('Ym');
+        $data = Cache::remember($cacheKey, 86400, fn() => $this->fetchRevenue($code));
 
         return response()->json(['success' => true, 'data' => $data]);
     }
 
-    // ── 相關新聞（Yahoo Finance）──────────────────────────────────
+    // ── 相關新聞（Yahoo TW RSS）──────────────────────────────────
 
     public function news(Request $request)
     {
         $code = $this->validateCode($request);
         if (!$code) return $this->badCode();
 
-        // ticker 由前端傳入（避免重複查一次 .TW/.TWO）
-        $ticker   = $request->input('ticker', $code . '.TW');
-        $cacheKey = "sq_news_{$code}_" . now()->format('YmdH');
-        $data = Cache::remember($cacheKey, 3600, fn() => $this->fetchNews($ticker));
+        $cacheKey = "sq2_news_{$code}_" . now()->format('YmdH');
+        $data = Cache::remember($cacheKey, 3600, fn() => $this->fetchNews($code));
 
         return response()->json(['success' => true, 'data' => $data]);
     }
 
-    // ── 私有：Yahoo Finance 報價 + 日K ───────────────────────────
+    // ── 私有：報價（Yahoo TW版）+ 日K（query2，同舊admin）──────────
 
-    private function fetchYahoo(string $ticker): array
+    private function fetchQuoteAndHistory(string $code): array
+    {
+        $symbol    = $code . '.TW';
+        $quote     = $this->fetchQuoteTw($code, $symbol);
+        $history   = $this->fetchHistory($code);
+
+        return [
+            'ticker'  => $symbol,
+            'quote'   => $quote,
+            'history' => $history,
+        ];
+    }
+
+    private function fetchQuoteTw(string $code, string $symbol): array
     {
         try {
-            $res = Http::timeout(15)->withHeaders([
-                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            ])->get("https://query1.finance.yahoo.com/v8/finance/chart/{$ticker}", [
-                'interval' => '1d',
-                'range'    => '3mo',
-            ]);
+            $symbolsEnc = rawurlencode(json_encode([$symbol]));
+            $base       = 'https://tw.stock.yahoo.com/_td-stock/api/resource/FinanceChartService.ApacLibraCharts';
+            $url        = "{$base};period=d;symbols={$symbolsEnc}";
 
-            if (!$res->ok()) return ['quote' => [], 'history' => []];
+            $res = Http::timeout(10)
+                ->withHeaders($this->twHeaders($symbol))
+                ->get($url, array_merge($this->twQuery(), ['returnMeta' => 'true']));
 
+            if (!$res->ok()) return [];
+
+            $chart = $res->json('data.0.chart', []);
+            $q     = $chart['quote'] ?? [];
+            $meta  = $chart['meta']  ?? [];
+
+            $price     = (float)($q['price']                ?? 0);
+            $prevClose = (float)($q['previousClose']        ?? 0);
+            $change    = (float)($q['priceChange']          ?? $q['change'] ?? 0);
+            $changePct = (float)($q['priceChangePercent']   ?? $q['changePercent'] ?? 0);
+
+            return [
+                'name'          => $meta['name'] ?? $meta['longName'] ?? $meta['shortName'] ?? $q['name'] ?? $code,
+                'ticker'        => $symbol,
+                'price'         => round($price, 2),
+                'previousClose' => round($prevClose ?: ($price - $change), 2),
+                'change'        => round($change, 2),
+                'changePct'     => round($changePct, 2),
+                'volume'        => (int)($q['volume'] ?? 0),
+            ];
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    private function fetchHistory(string $code): array
+    {
+        // 同舊admin：query2，先試 .TW，失敗才試 .TWO
+        $headers = array_merge($this->twHeaders(), [
+            'Accept' => 'application/json, text/plain, */*',
+        ]);
+        $query = ['interval' => '1d', 'range' => '3mo'];
+
+        $symbol = null;
+        foreach ([$code . '.TW', $code . '.TWO'] as $try) {
+            try {
+                $res  = Http::timeout(10)->withHeaders($headers)
+                    ->get("https://query2.finance.yahoo.com/v8/finance/chart/{$try}", $query);
+                $data = $res->json('chart.result.0', []);
+                if (!empty($data['timestamp'])) {
+                    $symbol = $try;
+                    break;
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+
+        if (!$symbol) return [];
+
+        try {
+            $res        = Http::timeout(10)->withHeaders($headers)
+                ->get("https://query2.finance.yahoo.com/v8/finance/chart/{$symbol}", $query);
             $result     = $res->json('chart.result.0', []);
-            $meta       = $result['meta']                   ?? [];
             $timestamps = $result['timestamp']              ?? [];
             $ohlcv      = $result['indicators']['quote'][0] ?? [];
-
-            $price = (float)($meta['regularMarketPrice'] ?? 0);
-
-            $quote = [
-                'name'          => $meta['longName'] ?? ($meta['shortName'] ?? $ticker),
-                'ticker'        => $ticker,  // 用傳入的 ticker，不信任 meta.symbol
-                'price'         => round($price, 2),
-                'volume'        => (int)($meta['regularMarketVolume'] ?? 0),
-                'previousClose' => 0,
-                'change'        => 0,
-                'changePct'     => 0,
-            ];
+            $closes     = $ohlcv['close']  ?? [];
 
             $rows = [];
             foreach ($timestamps as $i => $ts) {
-                $close = $ohlcv['close'][$i] ?? null;
+                $close = $closes[$i] ?? null;
                 if (!$close) continue;
 
-                $prevC     = $i > 0 ? ($ohlcv['close'][$i - 1] ?? null) : null;
+                $prevC     = $i > 0 ? ($closes[$i - 1] ?? null) : null;
                 $change    = $prevC ? round($close - $prevC, 2) : null;
                 $changePct = ($prevC && $prevC > 0) ? round(($close - $prevC) / $prevC * 100, 2) : null;
 
@@ -141,214 +191,102 @@ class StockQueryController extends Controller
                     'high'      => round($ohlcv['high'][$i]   ?? 0, 2),
                     'low'       => round($ohlcv['low'][$i]    ?? 0, 2),
                     'close'     => round($close, 2),
-                    'volume'    => (int)($ohlcv['volume'][$i] ?? 0),
+                    'volume'    => (int)round(($ohlcv['volume'][$i] ?? 0) / 1000), // 張
                     'change'    => $change,
                     'changePct' => $changePct,
                 ];
             }
 
-            // 用最後兩筆計算正確漲跌（避免用 chartPreviousClose 這個圖表起點價）
-            $n = count($rows);
-            if ($n >= 2) {
-                $latestPrice    = $price > 0 ? $price : $rows[$n - 1]['close'];
-                $yesterdayClose = $rows[$n - 2]['close'];
-                $quote['price']         = round($latestPrice, 2);
-                $quote['previousClose'] = round($yesterdayClose, 2);
-                $quote['change']        = round($latestPrice - $yesterdayClose, 2);
-                $quote['changePct']     = $yesterdayClose > 0
-                    ? round(($latestPrice - $yesterdayClose) / $yesterdayClose * 100, 2) : 0;
-            }
-
-            return ['quote' => $quote, 'history' => array_reverse(array_slice($rows, -22))];
-        } catch (\Exception $e) {
-            return ['quote' => [], 'history' => []];
-        }
-    }
-
-    // ── 私有：TWSE T86 並行（Http::pool）────────────────────────
-
-    private function fetchInstitutional(string $code): array
-    {
-        $businessDays = [];
-        $date = now('Asia/Taipei')->subDay();
-        while (count($businessDays) < 14) {
-            if ($date->isWeekday()) $businessDays[] = $date->format('Ymd');
-            $date->subDay();
-        }
-
-        // 過濾掉已有快取的日期，只對缺失的發請求
-        $missing = [];
-        $cached  = [];
-        foreach ($businessDays as $day) {
-            $key = "twse_t86_{$code}_{$day}";
-            $val = Cache::get($key);
-            if ($val !== null) {
-                if ($val) $cached[$day] = $val;
-            } else {
-                $missing[] = $day;
-            }
-        }
-
-        // Http::pool 並行取所有缺失日期
-        if (!empty($missing)) {
-            $responses = Http::pool(function (Pool $pool) use ($missing, $code) {
-                return collect($missing)->map(fn($day) =>
-                    $pool->as($day)
-                        ->timeout(8)
-                        ->withHeaders(['User-Agent' => 'Mozilla/5.0', 'Referer' => 'https://www.twse.com.tw/'])
-                        ->get('https://www.twse.com.tw/rwd/zh/fund/T86', [
-                            'date'     => $day,
-                            'stockNo'  => $code,
-                            'response' => 'json',
-                        ])
-                )->all();
-            });
-
-            foreach ($missing as $day) {
-                $res = $responses[$day] ?? null;
-                $row = null;
-
-                try {
-                    if ($res && $res->ok() && $res->json('stat') === 'OK') {
-                        $data = $res->json('data', []);
-                        if (!empty($data)) {
-                            $r     = collect($data)->first(fn($r) => isset($r[0]) && trim($r[0]) === $code) ?? $data[0];
-                            $clean = fn($v) => (int)str_replace([',', ' '], '', $v ?? '0');
-                            if ($r && count($r) >= 17) {
-                                $row = [
-                                    'date'    => Carbon::createFromFormat('Ymd', $day)->format('Y-m-d'),
-                                    'foreign' => (int)round($clean($r[4])  / 1000),
-                                    'trust'   => (int)round($clean($r[10]) / 1000),
-                                    'dealer'  => (int)round(($clean($r[13]) + $clean($r[16])) / 1000),
-                                ];
-                            }
-                        }
-                    }
-                } catch (\Exception $e) {}
-
-                Cache::put("twse_t86_{$code}_{$day}", $row, 86400);
-                if ($row) $cached[$day] = $row;
-            }
-        }
-
-        // 依日期排序（最新在前），最多取10筆
-        krsort($cached);
-        return array_values(array_slice($cached, 0, 10));
-    }
-
-    // ── 私有：TDCC 大戶持股 ────────────────────────────────────
-
-    private function fetchDistribution(string $code): array
-    {
-        try {
-            $res = Http::timeout(15)->withHeaders([
-                'User-Agent' => 'Mozilla/5.0',
-                'Referer'    => 'https://www.tdcc.com.tw/',
-            ])->asForm()->post('https://www.tdcc.com.tw/smjh/getS04.do', [
-                'selectedJCEStkNo' => $code,
-                'scaDate'          => '',
-            ]);
-
-            if (!$res->ok()) return [];
-
-            $json = $res->json();
-            if (!is_array($json) || empty($json)) return [];
-
-            return collect($json)->take(10)->map(function ($item) {
-                $date = $item['SCADATE'] ?? $item['scaDate'] ?? ($item['DISTDATE'] ?? '');
-                if (strlen($date) === 8) {
-                    $date = substr($date, 0, 4) . '/' . substr($date, 4, 2) . '/' . substr($date, 6, 2);
-                }
-                return [
-                    'date'          => $date,
-                    'totalHolders'  => (int)($item['STKHLDCNT']        ?? 0),
-                    'avgShares'     => (float)($item['STKHLDAVGSHRCNT'] ?? 0),
-                    'over400count'  => (int)($item['OVR400CNT']         ?? 0),
-                    'over400pct'    => (float)($item['OVR400SHRCNT']    ?? 0),
-                    'b400to600'     => (int)($item['B400T600']           ?? $item['BAND400TO600'] ?? 0),
-                    'b600to800'     => (int)($item['B600T800']           ?? $item['BAND600TO800'] ?? 0),
-                    'b800to1000'    => (int)($item['B800T1000']          ?? $item['BAND800TO1000'] ?? 0),
-                    'over1000count' => (int)($item['OVR1000CNT']         ?? 0),
-                    'over1000pct'   => (float)($item['OVR1000SHRCNT']   ?? 0),
-                    'closePrice'    => (float)($item['CLOSEPRICE']       ?? 0),
-                ];
-            })->values()->toArray();
+            return array_reverse(array_slice($rows, -22));
         } catch (\Exception $e) {
             return [];
         }
     }
 
-    // ── 私有：MOPS 月營收 ─────────────────────────────────────────
+    // ── 私有：三大法人（Yahoo TW版）──────────────────────────────
 
-    private function fetchRevenue(string $code): array
-    {
-        $now  = now('Asia/Taipei');
-        $rows = [];
-
-        for ($i = 1; $i <= 6; $i++) {
-            $target = $now->copy()->subMonths($i);
-            $year   = $target->year - 1911;
-            $month  = $target->month;
-
-            try {
-                $res = Http::timeout(10)->withHeaders(['User-Agent' => 'Mozilla/5.0'])
-                    ->asForm()->post('https://mops.twse.com.tw/mops/web/ajax_t05st10_1', [
-                        'encodeURIComponent' => '1',
-                        'step'               => '1',
-                        'firstin'            => '1',
-                        'off'                => '1',
-                        'TYPEK'              => 'sii',
-                        'co_id'              => $code,
-                        'year'               => $year,
-                        'month'              => str_pad($month, 2, '0', STR_PAD_LEFT),
-                    ]);
-
-                if (!$res->ok()) continue;
-
-                $html = $res->body();
-                if (preg_match_all('/<td[^>]*align="right"[^>]*>\s*([-\d,\.]+%?)\s*<\/td>/i', $html, $m)) {
-                    $vals = $m[1];
-                    if (count($vals) >= 5) {
-                        $rows[] = [
-                            'month'   => sprintf('%02d/%02d', $target->year % 100, $month),
-                            'revenue' => (int)str_replace(',', '', $vals[0] ?? '0'),
-                            'momPct'  => $vals[3] ?? null,
-                            'yoyPct'  => $vals[4] ?? null,
-                        ];
-                    }
-                }
-            } catch (\Exception $e) {
-                continue;
-            }
-        }
-
-        return $rows;
-    }
-
-    // ── 私有：Yahoo Finance 新聞 ──────────────────────────────────
-
-    private function fetchNews(string $ticker): array
+    private function fetchInstitutional(string $code): array
     {
         try {
-            $res = Http::timeout(10)->withHeaders(['User-Agent' => 'Mozilla/5.0'])
-                ->get('https://query2.finance.yahoo.com/v1/finance/search', [
-                    'q'                => $ticker,
-                    'quotesCount'      => 0,
-                    'newsCount'        => 10,
-                    'enableFuzzyQuery' => 'false',
-                    'newsQueryId'      => 'news_cie_vespa',
-                ]);
+            $symbol = $code . '.TW';
+            $base   = 'https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.tradesWithQuoteStats';
+            $url    = "{$base};limit=10;period=day;symbol={$symbol}";
+
+            $res = Http::timeout(10)
+                ->withHeaders($this->twHeaders($symbol))
+                ->get($url, $this->twQuery());
 
             if (!$res->ok()) return [];
 
-            return collect($res->json('news', []))->take(8)->map(fn($n) => [
-                'title'       => $n['title']     ?? '',
-                'url'         => $n['link']      ?? '',
-                'source'      => $n['publisher'] ?? '',
-                'publishedAt' => isset($n['providerPublishTime'])
-                    ? Carbon::createFromTimestamp($n['providerPublishTime'], 'Asia/Taipei')->format('m/d H:i')
-                    : '',
-            ])->values()->toArray();
+            $list = $res->json('list', []);
+            if (empty($list)) return [];
+
+            return array_map(fn($row) => [
+                'date'    => $row['formattedDate'] ?? substr($row['date'] ?? '', 0, 10),
+                'foreign' => isset($row['foreignDiffVolK'])         ? (int)$row['foreignDiffVolK']         : 0,
+                'trust'   => isset($row['investmentTrustDiffVolK']) ? (int)$row['investmentTrustDiffVolK'] : 0,
+                'dealer'  => isset($row['dealerDiffVolK'])          ? (int)$row['dealerDiffVolK']          : 0,
+            ], $list);
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    // ── 私有：月營收（Yahoo TW版）────────────────────────────────
+
+    private function fetchRevenue(string $code): array
+    {
+        try {
+            $symbol = $code . '.TW';
+            $base   = 'https://tw.stock.yahoo.com/_td-stock/api/resource/StockServices.revenues';
+            $url    = "{$base};period=month;symbol={$symbol}";
+
+            $res = Http::timeout(10)
+                ->withHeaders($this->twHeaders($symbol))
+                ->get($url, $this->twQuery());
+
+            if (!$res->ok()) return [];
+
+            $revenues = $res->json('data.result.revenues', []);
+            if (empty($revenues)) return [];
+
+            return array_map(fn($r) => [
+                'month'   => $r['yearMonth']          ?? ($r['date'] ?? ''),
+                'revenue' => (int)($r['revenue']      ?? $r['amount'] ?? 0),
+                'momPct'  => isset($r['momChangePercent'])  ? round((float)$r['momChangePercent'], 2) . '%' : null,
+                'yoyPct'  => isset($r['yoyChangePercent'])  ? round((float)$r['yoyChangePercent'], 2) . '%' : null,
+            ], array_slice($revenues, 0, 6));
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    // ── 私有：新聞（Yahoo TW RSS）────────────────────────────────
+
+    private function fetchNews(string $code): array
+    {
+        try {
+            $res = Http::timeout(8)
+                ->withHeaders(['User-Agent' => 'Mozilla/5.0'])
+                ->get("https://tw.stock.yahoo.com/rss", ['s' => $code]);
+
+            if (!$res->ok()) return [];
+
+            $xml = simplexml_load_string($res->body());
+            if (!$xml || !isset($xml->channel->item)) return [];
+
+            $items = [];
+            foreach ($xml->channel->item as $item) {
+                if (count($items) >= 8) break;
+                $link     = !empty((string)$item->link) ? trim((string)$item->link) : trim((string)$item->guid);
+                $items[] = [
+                    'title'       => html_entity_decode(strip_tags((string)$item->title), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                    'url'         => $link,
+                    'source'      => 'Yahoo 財經',
+                    'publishedAt' => isset($item->pubDate) ? date('m/d H:i', strtotime((string)$item->pubDate)) : '',
+                ];
+            }
+            return $items;
         } catch (\Exception $e) {
             return [];
         }
