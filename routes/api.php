@@ -32,6 +32,7 @@ $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/dashboard'], fu
 
 // AV 影片
 $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/av'], function ($router) {
+    $router->get('/popular-tags',       'System\AvController@popularTags');
     $router->post('/videos',           'System\AvController@videos');
     $router->put('/videos/{id}',       'System\AvController@updateVideo');
     $router->delete('/videos/{id}',    'System\AvController@destroyVideo');

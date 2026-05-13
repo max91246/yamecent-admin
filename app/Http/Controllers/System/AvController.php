@@ -11,6 +11,22 @@ class AvController extends Controller
 {
     // ── 影片 ──────────────────────────────────────────────────
 
+    public function popularTags()
+    {
+        $rows  = AvVideo::whereNotNull('tags')->pluck('tags');
+        $count = [];
+        foreach ($rows as $tagArr) {
+            if (!is_array($tagArr)) continue;
+            foreach ($tagArr as $tag) {
+                $t = trim($tag);
+                if ($t && mb_strlen($t) <= 10) $count[$t] = ($count[$t] ?? 0) + 1;
+            }
+        }
+        arsort($count);
+        $tags = array_keys(array_slice($count, 0, 60, true));
+        return response()->json(['success' => true, 'data' => $tags]);
+    }
+
     public function videos(Request $request)
     {
         $query = AvVideo::query();
@@ -18,6 +34,11 @@ class AvController extends Controller
         if ($actress = $request->input('actress')) $query->where('actresses', 'like', "%{$actress}%");
         if ($studio  = $request->input('studio'))  $query->where('studio', 'like', "%{$studio}%");
         if ($request->filled('is_uncensored'))     $query->where('is_uncensored', $request->input('is_uncensored'));
+        if ($tags = array_filter((array) $request->input('tags', []))) {
+            foreach ($tags as $tag) {
+                $query->whereJsonContains('tags', $tag);
+            }
+        }
 
         $pageSize    = (int)$request->input('pageSize', 20);
         $currentPage = (int)$request->input('currentPage', 1);
