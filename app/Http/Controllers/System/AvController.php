@@ -74,8 +74,16 @@ class AvController extends Controller
     public function actresses(Request $request)
     {
         $query = AvActress::withCount('videos');
-        if ($name = $request->input('name')) $query->where('name', 'like', "%{$name}%");
-        if ($request->filled('is_active'))   $query->where('is_active', $request->input('is_active'));
+        if ($name = $request->input('name'))           $query->where('name', 'like', "%{$name}%");
+        if ($request->filled('is_active'))             $query->where('is_active', $request->input('is_active'));
+        if ($debutYear = $request->input('debut_year')) $query->where('debut_year', $debutYear);
+        if ($bust = $request->input('bust'))           $query->where('bust', 'like', "%{$bust}%");
+        if ($heightMin = $request->input('height_min')) $query->where('height', '>=', (int)$heightMin);
+        if ($heightMax = $request->input('height_max')) $query->where('height', '<=', (int)$heightMax);
+        if ($request->filled('has_image')) {
+            if ($request->input('has_image') == 1) $query->whereNotNull('image_url')->where('image_url', '!=', '');
+            else $query->where(fn($q) => $q->whereNull('image_url')->orWhere('image_url', ''));
+        }
 
         $pageSize    = (int)$request->input('pageSize', 20);
         $currentPage = (int)$request->input('currentPage', 1);
