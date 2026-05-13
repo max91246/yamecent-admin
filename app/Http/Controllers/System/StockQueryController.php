@@ -20,12 +20,21 @@ class StockQueryController extends Controller
 
         $cacheKey = "sq_quote_{$code}_" . now()->format('Ymd_H');
         $data = Cache::remember($cacheKey, 3600, function () use ($code) {
+            // 先試上市(.TW)，只有完全找不到股票名稱才 fallback 到 .TWO（上櫃）
             $ticker = $code . '.TW';
             $yData  = $this->fetchYahoo($ticker);
-            if (count($yData['history']) < 5) {
+
+            $hasData = !empty($yData['quote']['name']) && $yData['quote']['name'] !== $ticker;
+            if (!$hasData) {
                 $ticker = $code . '.TWO';
                 $yData  = $this->fetchYahoo($ticker);
             }
+
+            // 強制用我們實際查的後綴，不信任 Yahoo meta.symbol（可能回錯後綴）
+            if (!empty($yData['quote'])) {
+                $yData['quote']['ticker'] = $ticker;
+            }
+
             return ['ticker' => $ticker] + $yData;
         });
 
@@ -109,7 +118,7 @@ class StockQueryController extends Controller
 
             $quote = [
                 'name'          => $meta['longName'] ?? ($meta['shortName'] ?? $ticker),
-                'ticker'        => $meta['symbol']   ?? $ticker,
+                'ticker'        => $ticker,  // 用傳入的 ticker，不信任 meta.symbol
                 'price'         => round($price, 2),
                 'volume'        => (int)($meta['regularMarketVolume'] ?? 0),
                 'previousClose' => 0,
