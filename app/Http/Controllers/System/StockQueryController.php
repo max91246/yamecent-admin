@@ -250,12 +250,19 @@ class StockQueryController extends Controller
             $revenues = $res->json('data.result.revenues', []);
             if (empty($revenues)) return [];
 
-            return array_map(fn($r) => [
-                'month'   => $r['yearMonth']          ?? ($r['date'] ?? ''),
-                'revenue' => (int)($r['revenue']      ?? $r['amount'] ?? 0),
-                'momPct'  => isset($r['momChangePercent'])  ? round((float)$r['momChangePercent'], 2) . '%' : null,
-                'yoyPct'  => isset($r['yoyChangePercent'])  ? round((float)$r['yoyChangePercent'], 2) . '%' : null,
-            ], array_slice($revenues, 0, 6));
+            return array_map(function ($r) {
+                // date 是 ISO format: 2026-04-01T00:00:00+08:00
+                $dateStr = $r['date'] ?? '';
+                $month   = $dateStr ? date('y/m', strtotime($dateStr)) : '';
+                // revenue 單位是元，÷1000 = 千元
+                $revenue = (int)round((float)($r['revenue'] ?? 0) / 1000);
+                return [
+                    'month'   => $month,
+                    'revenue' => $revenue,
+                    'momPct'  => isset($r['revenueMoM']) ? round((float)$r['revenueMoM'], 1) . '%' : null,
+                    'yoyPct'  => isset($r['revenueYoY']) ? round((float)$r['revenueYoY'], 1) . '%' : null,
+                ];
+            }, array_slice($revenues, 0, 6));
         } catch (\Exception $e) {
             return [];
         }
