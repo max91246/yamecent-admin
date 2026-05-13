@@ -88,7 +88,7 @@ class UserController extends Controller
     public function roleIds(Request $request)
     {
         $user = SysUser::findOrFail($request->input('userId'));
-        $ids  = $user->roles()->pluck('ya_sys_roles.id');
+        $ids  = $user->roles()->pluck('sys_roles.id');
         return response()->json(['success' => true, 'data' => $ids]);
     }
 

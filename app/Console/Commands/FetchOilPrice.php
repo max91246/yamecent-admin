@@ -241,10 +241,14 @@ class FetchOilPrice extends Command
             $candleAt = date('Y-m-d H:i:s', (int) (floor(time() / 300) * 300));
         }
 
-        OilPrice::updateOrCreate(
-            ['ticker' => self::GOLD_TICKER, 'candle_at' => $candleAt],
-            ['timeframe' => 'i5', 'close' => $price]
-        );
+        try {
+            OilPrice::updateOrCreate(
+                ['ticker' => self::GOLD_TICKER, 'candle_at' => $candleAt],
+                ['timeframe' => 'i5', 'close' => $price]
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->errorInfo[1] !== 1062) throw $e;
+        }
     }
 
     // ────────────────────────────────────────────────────────────
@@ -259,10 +263,14 @@ class FetchOilPrice extends Command
             $candleAt = date('Y-m-d H:i:s', (int) (floor(time() / 300) * 300));
         }
 
-        OilPrice::updateOrCreate(
-            ['ticker' => self::VIX_TICKER, 'candle_at' => $candleAt],
-            ['timeframe' => 'i5', 'close' => $price]
-        );
+        try {
+            OilPrice::updateOrCreate(
+                ['ticker' => self::VIX_TICKER, 'candle_at' => $candleAt],
+                ['timeframe' => 'i5', 'close' => $price]
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->errorInfo[1] !== 1062) throw $e;
+        }
     }
 
     // ────────────────────────────────────────────────────────────
@@ -410,10 +418,14 @@ class FetchOilPrice extends Command
             $candleAt = date('Y-m-d H:i:s', (int) (floor(time() / 300) * 300));
         }
 
-        OilPrice::updateOrCreate(
-            ['ticker' => self::TW_TICKER, 'candle_at' => $candleAt],
-            ['timeframe' => 'i5', 'close' => $price]
-        );
+        try {
+            OilPrice::updateOrCreate(
+                ['ticker' => self::TW_TICKER, 'candle_at' => $candleAt],
+                ['timeframe' => 'i5', 'close' => $price]
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->errorInfo[1] !== 1062) throw $e;
+        }
     }
 
     // ────────────────────────────────────────────────────────────

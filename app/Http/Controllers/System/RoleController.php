@@ -93,7 +93,7 @@ class RoleController extends Controller
     public function menuIds(Request $request)
     {
         $role = SysRole::findOrFail($request->input('id'));
-        $ids  = $role->menus()->pluck('ya_sys_menus.id');
+        $ids  = $role->menus()->pluck('sys_menus.id');
         return response()->json(['success' => true, 'data' => $ids]);
     }
 
