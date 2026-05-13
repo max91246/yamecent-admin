@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\System;
 
+use App\DisposalStock;
 use App\TgBot;
 use App\TgHolding;
 use App\TgHoldingTrade;
@@ -190,7 +191,7 @@ class TgController extends Controller
             ->get()
             ->groupBy(fn($h) => $h->stock_code . '_' . $h->is_margin)
             ->map(function ($group) {
-                $first      = $group->first();
+                $first       = $group->first();
                 $totalShares = $group->sum('shares');
                 $totalCost   = $group->sum('total_cost');
                 $avgPrice    = $totalShares > 0
@@ -203,24 +204,40 @@ class TgController extends Controller
                     'isMargin'   => $first->is_margin,
                     'buyPrice'   => $avgPrice,
                     'totalCost'  => $totalCost,
-                    'createdAt'  => $first->created_at?->format('Y-m-d H:i:s'),
+                    'createdAt'  => $first->created_at?->format('m/d H:i'),
+                    'isDisposal' => false, // 下面批次填入
                 ];
             })->values();
+
+        // 批次查詢哪些持股是處置股（避免 N+1）
+        $holdingCodes  = $holdings->pluck('stockCode')->unique()->toArray();
+        $disposalCodes = DisposalStock::whereIn('stock_code', $holdingCodes)
+            ->where('end_date', '>=', now()->toDateString())
+            ->pluck('stock_code')->flip()->toArray();
+        $holdings = $holdings->map(function ($h) use ($disposalCodes) {
+            $h['isDisposal'] = isset($disposalCodes[$h['stockCode']]);
+            return $h;
+        })->values();
 
         $trades = TgHoldingTrade::where('tg_chat_id', $chatId)
             ->when($botId, fn($q) => $q->where('bot_id', $botId))
             ->orderBy('created_at', 'desc')
             ->get()
-            ->map(fn($t) => [
-                'stockCode'  => $t->stock_code,
-                'stockName'  => $t->stock_name,
-                'sellShares' => $t->sell_shares,
-                'buyPrice'   => $t->buy_price,
-                'sellPrice'  => $t->sell_price,
-                'isMargin'   => $t->is_margin,
-                'profit'     => $t->profit,
-                'createdAt'  => $t->created_at?->format('Y-m-d H:i:s'),
-            ]);
+            ->map(function ($t) {
+                $buyVal     = (float)$t->buy_price * (int)$t->sell_shares;
+                $profitPct  = ($buyVal > 0) ? round((float)$t->profit / $buyVal * 100, 2) : null;
+                return [
+                    'stockCode'  => $t->stock_code,
+                    'stockName'  => $t->stock_name,
+                    'sellShares' => $t->sell_shares,
+                    'buyPrice'   => $t->buy_price,
+                    'sellPrice'  => $t->sell_price,
+                    'isMargin'   => $t->is_margin,
+                    'profit'     => $t->profit,
+                    'profitPct'  => $profitPct,
+                    'createdAt'  => $t->created_at?->format('m/d H:i'),
+                ];
+            });
 
         $settlements = TgSettlement::where('tg_chat_id', $chatId)
             ->when($botId, fn($q) => $q->where('bot_id', $botId))
