@@ -226,19 +226,46 @@ AV 管理
 | yamecent-redis | redis:8-alpine | 6379 |
 | yamecent-flaresolverr | flaresolverr:latest | 8191 |
 
-### 升級流程
+### CI/CD 升級流程
+
+升級由開發者在本地 `git push` 後，**手動前往 GitHub Actions 觸發**，不自動部署。
+
+#### 開發者工作流
+
+```
+1. 本地修改 → pnpm build（若有前端）
+2. git commit + git push origin main
+3. 前往 GitHub Actions 手動觸發部署
+   https://github.com/max91246/yamecent-admin/actions
+   → Deploy Admin → Run workflow
+4. 等候 Telegram 通知確認結果
+```
+
+#### GitHub Actions 部署步驟（自動執行）
 
 ```bash
-# Step 1：Host 拉取最新代碼（容器外）
+git pull origin main
+composer dump-autoload --optimize
+php artisan migrate --force
+php artisan cache:clear
+```
+
+#### 手動 SSH 操作（臨時修復用）
+
+```bash
+# 進入 GCP
+ssh user@34.122.76.154
+
+# 拉代碼
 sudo -u max91246 git -C /home/max91246/www/yamecent-admin pull
 
-# Step 2：執行 artisan（php-fpm 容器內）
-cd /home/max91246/www/yamecent-admin
-docker compose -f docker-compose.yml -f docker-compose.prod.yml exec php-fpm php artisan migrate --force
+# 執行 artisan（php-fpm 容器內）
+docker exec yamecent-php-fpm composer dump-autoload --optimize
+docker exec yamecent-php-fpm php artisan migrate --force
+docker exec yamecent-php-fpm php artisan cache:clear
 
-# 若需清除快取
-docker compose -f docker-compose.yml -f docker-compose.prod.yml exec php-fpm \
-  php artisan config:clear && php artisan route:clear && php artisan view:clear
+# 若需跑特定 Seeder
+docker exec yamecent-php-fpm php artisan db:seed --class=XxxSeeder --force
 ```
 
 ### 排程（Crontab）
