@@ -1,0 +1,59 @@
+name: Deploy Admin
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: '手動部署原因'
+        required: false
+        default: '手動觸發'
+
+jobs:
+  deploy:
+    name: Deploy to GCP
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: SSH Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USER }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            set -e
+            echo "▶ 開始部署 yamecent-admin..."
+            cd /home/max91246/www/yamecent-admin
+            sudo -u max91246 git pull origin main
+            docker exec yamecent-php-fpm php artisan cache:clear
+            echo "✅ 部署完成"
+
+      - name: Notify Telegram (Success)
+        if: success()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TG_CHAT_ID }}
+          token: ${{ secrets.TG_BOT_TOKEN }}
+          message: |
+            ✅ *Admin 部署成功*
+            📦 Repo: yamecent-admin
+            🌿 Branch: main
+            💬 Commit: `${{ github.sha }}`
+            📝 ${{ github.event.head_commit.message || github.event.inputs.reason }}
+            👤 By: ${{ github.actor }}
+
+      - name: Notify Telegram (Failure)
+        if: failure()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TG_CHAT_ID }}
+          token: ${{ secrets.TG_BOT_TOKEN }}
+          message: |
+            ❌ *Admin 部署失敗*
+            📦 Repo: yamecent-admin
+            💬 Commit: `${{ github.sha }}`
+            👤 By: ${{ github.actor }}
+            🔗 ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
