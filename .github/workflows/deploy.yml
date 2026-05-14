@@ -17,19 +17,23 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: SSH Deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.GCP_HOST }}
-          username: ${{ secrets.GCP_USER }}
-          key: ${{ secrets.GCP_SSH_KEY }}
-          script: |
-            set -e
-            echo "▶ 開始部署 yamecent-admin..."
-            cd /home/max91246/www/yamecent-admin
-            sudo -u max91246 git pull origin main
-            docker exec yamecent-php-fpm php artisan cache:clear
-            echo "✅ 部署完成"
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.GCP_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            ${{ secrets.GCP_USER }}@${{ secrets.GCP_HOST }} \
+            "set -e
+             echo '▶ 開始部署 yamecent-admin...'
+             cd /home/max91246/www/yamecent-admin
+             sudo -u max91246 git pull origin main
+             docker exec yamecent-php-fpm php artisan cache:clear
+             echo '✅ 部署完成'"
 
       - name: Notify Telegram (Success)
         if: success()
@@ -39,11 +43,10 @@ jobs:
           token: ${{ secrets.TG_BOT_TOKEN }}
           message: |
             ✅ *Admin 部署成功*
-            📦 Repo: yamecent-admin
-            🌿 Branch: main
-            💬 Commit: `${{ github.sha }}`
+            📦 yamecent-admin
+            💬 `${{ github.sha }}`
             📝 ${{ github.event.head_commit.message || github.event.inputs.reason }}
-            👤 By: ${{ github.actor }}
+            👤 ${{ github.actor }}
 
       - name: Notify Telegram (Failure)
         if: failure()
@@ -53,7 +56,7 @@ jobs:
           token: ${{ secrets.TG_BOT_TOKEN }}
           message: |
             ❌ *Admin 部署失敗*
-            📦 Repo: yamecent-admin
-            💬 Commit: `${{ github.sha }}`
-            👤 By: ${{ github.actor }}
+            📦 yamecent-admin
+            💬 `${{ github.sha }}`
+            👤 ${{ github.actor }}
             🔗 ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
