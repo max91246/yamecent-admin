@@ -30,6 +30,8 @@ jobs:
              echo '▶ 開始部署 yamecent-admin...'
              cd /home/max91246/www/yamecent-admin
              sudo -u max91246 git pull origin main
+             docker exec yamecent-php-fpm composer dump-autoload --optimize
+             docker exec yamecent-php-fpm php artisan migrate --force
              docker exec yamecent-php-fpm php artisan cache:clear
              echo '✅ 部署完成'"
 
