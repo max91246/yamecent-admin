@@ -202,10 +202,14 @@ class FetchTwIndex extends Command
         $ts       = $refreshedAt ? strtotime($refreshedAt) : time();
         $candleAt = date('Y-m-d H:i:s', (int) (floor($ts / 60) * 60));
 
-        OilPrice::updateOrCreate(
-            ['ticker' => self::TW_TICKER, 'candle_at' => $candleAt],
-            ['timeframe' => 'i1', 'close' => $price]
-        );
+        try {
+            OilPrice::updateOrCreate(
+                ['ticker' => self::TW_TICKER, 'candle_at' => $candleAt],
+                ['timeframe' => 'i1', 'close' => $price]
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (($e->errorInfo[1] ?? null) !== 1062) throw $e;
+        }
     }
 
     // ─── 抓取 VIX（Yahoo Finance）──────────────────────────────
@@ -250,10 +254,14 @@ class FetchTwIndex extends Command
         $ts       = $refreshedAt ? strtotime($refreshedAt) : time();
         $candleAt = date('Y-m-d H:i:s', (int) (floor($ts / 300) * 300));
 
-        OilPrice::updateOrCreate(
-            ['ticker' => self::VIX_TICKER, 'candle_at' => $candleAt],
-            ['timeframe' => 'i5', 'close' => $price]
-        );
+        try {
+            OilPrice::updateOrCreate(
+                ['ticker' => self::VIX_TICKER, 'candle_at' => $candleAt],
+                ['timeframe' => 'i5', 'close' => $price]
+            );
+        } catch (\Illuminate\Database\QueryException $e) {
+            if (($e->errorInfo[1] ?? null) !== 1062) throw $e;
+        }
     }
 
     // ─── VIX 附帶區塊 ────────────────────────────────────────
