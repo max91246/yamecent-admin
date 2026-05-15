@@ -54,6 +54,24 @@ class MezastarController extends Controller
         return response()->json(['success' => true, 'data' => $all]);
     }
 
+    /** 切換極巨化標記 */
+    public function toggleGigantamax(Request $request, $id)
+    {
+        $card = MezastarPokemon::findOrFail($id);
+        $card->is_gigantamax = $request->input('is_gigantamax', 0) ? 1 : 0;
+        $card->save();
+        return response()->json(['success' => true, 'data' => $card->is_gigantamax]);
+    }
+
+    /** 切換超級進化標記 */
+    public function toggleMega(Request $request, $id)
+    {
+        $card = MezastarPokemon::findOrFail($id);
+        $card->is_mega = $request->input('is_mega', 0) ? 1 : 0;
+        $card->save();
+        return response()->json(['success' => true, 'data' => $card->is_mega]);
+    }
+
     /** TG 手牌列表（管理用） */
     public function hands(Request $request)
     {

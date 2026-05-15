@@ -9,7 +9,8 @@ class MezastarPokemonSeeder extends Seeder
 {
     public function run(): void
     {
-        DB::table('mezastar_pokemons')->truncate();
+        DB::table('tg_mezastar_hands')->delete();
+        DB::table('mezastar_pokemons')->delete();
 
         $data = [
             // ── 星塵第1彈 ─────────────────────────────────────────

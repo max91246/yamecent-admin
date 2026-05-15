@@ -68,10 +68,12 @@ $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/stock'], functi
 
 // Mezastar 寶可夢卡牌
 $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/mezastar'], function ($router) {
-    $router->post('/cards',   'System\MezastarController@cards');
-    $router->get('/series',   'System\MezastarController@series');
-    $router->get('/types',    'System\MezastarController@types');
-    $router->post('/hands',   'System\MezastarController@hands');
+    $router->post('/cards',              'System\MezastarController@cards');
+    $router->get('/series',              'System\MezastarController@series');
+    $router->get('/types',               'System\MezastarController@types');
+    $router->post('/hands',              'System\MezastarController@hands');
+    $router->put('/cards/{id}/gigantamax','System\MezastarController@toggleGigantamax');
+    $router->put('/cards/{id}/mega',      'System\MezastarController@toggleMega');
 });
 
 // 系統設定
