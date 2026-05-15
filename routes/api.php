@@ -66,6 +66,14 @@ $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/stock'], functi
     $router->get('/news',              'System\StockQueryController@news');
 });
 
+// Mezastar 寶可夢卡牌
+$router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/mezastar'], function ($router) {
+    $router->post('/cards',   'System\MezastarController@cards');
+    $router->get('/series',   'System\MezastarController@series');
+    $router->get('/types',    'System\MezastarController@types');
+    $router->post('/hands',   'System\MezastarController@hands');
+});
+
 // 系統設定
 $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/config'], function ($router) {
     $router->post('/',                 'System\ConfigController@index');

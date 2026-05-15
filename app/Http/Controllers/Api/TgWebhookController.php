@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\TgBot;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Bot\AvBotHandler;
+use App\Http\Controllers\Api\Bot\MezastarBotHandler;
 use App\Http\Controllers\Api\Bot\StockBotHandler;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -41,6 +42,10 @@ class TgWebhookController extends Controller
 
         if ($bot->type == 2) {
             return (new AvBotHandler)->handle($bot, $update);
+        }
+
+        if ($bot->type == 3) {
+            return (new MezastarBotHandler)->handle($bot, $update);
         }
 
         return (new StockBotHandler)->handle($bot, $update);
