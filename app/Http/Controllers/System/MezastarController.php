@@ -12,19 +12,25 @@ class MezastarController extends Controller
     /** 卡牌列表（支援彈數/屬性/弱點篩選） */
     public function cards(Request $request)
     {
-        $series    = $request->input('series', '');
-        $type      = $request->input('type', '');
-        $weakness  = $request->input('weakness', '');
-        $name      = $request->input('name', '');
-        $pageSize  = (int) $request->input('pageSize', 50);
-        $page      = (int) $request->input('page', 1);
+        $series       = $request->input('series', '');
+        $type         = $request->input('type', '');
+        $weakness     = $request->input('weakness', '');
+        $name         = $request->input('name', '');
+        $grade        = $request->input('grade', '');
+        $isGigantamax = $request->input('is_gigantamax', '');
+        $isMega       = $request->input('is_mega', '');
+        $pageSize     = (int) $request->input('pageSize', 50);
+        $page         = (int) $request->input('page', 1);
 
         $q = MezastarPokemon::query();
 
-        if ($series)   $q->where('series', $series);
-        if ($type)     $q->where(fn($w) => $w->where('type1', $type)->orWhere('type2', $type));
-        if ($weakness) $q->whereJsonContains('weakness', $weakness);
-        if ($name)     $q->where('name', 'like', "%{$name}%");
+        if ($series)           $q->where('series', $series);
+        if ($type)             $q->where(fn($w) => $w->where('type1', $type)->orWhere('type2', $type));
+        if ($weakness)         $q->whereJsonContains('weakness', $weakness);
+        if ($name)             $q->where('name', 'like', "%{$name}%");
+        if ($grade !== '')     $q->where('grade', (int) $grade);
+        if ($isGigantamax !== '') $q->where('is_gigantamax', (int) $isGigantamax);
+        if ($isMega !== '')    $q->where('is_mega', (int) $isMega);
 
         $total = $q->count();
         $list  = $q->orderBy('series')->orderBy('grade', 'desc')->orderBy('id')
