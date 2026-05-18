@@ -294,8 +294,8 @@ class MezastarBotHandler
     }
 
     /**
-     * 模糊搜尋寶可夢（回傳全部符合的）
-     * 優先順序：完全匹配 > 名稱包含關鍵字 > 關鍵字包含名稱
+     * 模糊搜尋寶可夢（回傳全部符合的，完全符合排最前）
+     * 例：搜「超夢」→「超夢（星塵1彈）」+「超夢 (極巨化)（銀河1彈）」都列出
      */
     private function searchPokemon(string $keyword): Collection
     {
@@ -303,16 +303,15 @@ class MezastarBotHandler
             return MezastarPokemon::all();
         });
 
-        // 完全匹配
-        $exact = $all->filter(fn($p) => $p->name === $keyword);
-        if ($exact->isNotEmpty()) return $exact->values();
-
-        // 模糊：名稱包含關鍵字
-        $fuzzy = $all->filter(fn($p) =>
+        // 找所有名稱含關鍵字的記錄（含完全符合）
+        $matched = $all->filter(fn($p) =>
             str_contains($p->name, $keyword) || str_contains($keyword, $p->name)
         );
 
-        return $fuzzy->values()->take(8); // 最多顯示 8 個選項
+        // 完全符合排前面，其餘依原順序
+        $sorted = $matched->sortBy(fn($p) => $p->name === $keyword ? 0 : 1);
+
+        return $sorted->values()->take(8);
     }
 
     /**
