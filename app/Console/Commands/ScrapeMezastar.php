@@ -53,23 +53,10 @@ class ScrapeMezastar extends Command
                 $this->line("  {$card['card_no']}  {$card['name']}");
 
                 if (!$dryRun) {
-                    $existing = MezastarPokemon::where('card_no', $card['card_no'])->first();
-                    if ($existing) {
-                        // 有屬性資料的卡名由 Excel seeder 決定，不覆蓋；只更新圖片
-                        $existing->image_url = $card['image_url'];
-                        if (!$existing->type1) {
-                            $existing->name   = $card['name'];
-                            $existing->series = $series;
-                        }
-                        $existing->save();
-                    } else {
-                        MezastarPokemon::create([
-                            'card_no'   => $card['card_no'],
-                            'name'      => $card['name'],
-                            'series'    => $series,
-                            'image_url' => $card['image_url'],
-                        ]);
-                    }
+                    // 爬蟲只負責更新圖片，不新增資料（資料來源為 Excel seeder）
+                    MezastarPokemon::where('card_no', $card['card_no'])
+                        ->whereNotNull('card_no')
+                        ->update(['image_url' => $card['image_url']]);
                 }
             }
 
