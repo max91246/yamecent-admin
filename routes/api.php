@@ -76,6 +76,7 @@ $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/mezastar'], fun
     $router->put('/cards/{id}/mega',             'System\MezastarController@toggleMega');
     $router->put('/cards/{id}/ultra-gigantamax', 'System\MezastarController@toggleUltraGigantamax');
     $router->put('/cards/{id}/dual-move',        'System\MezastarController@toggleDualMove');
+    $router->put('/cards/{id}/z-move',           'System\MezastarController@toggleZMove');
 });
 
 // 系統設定

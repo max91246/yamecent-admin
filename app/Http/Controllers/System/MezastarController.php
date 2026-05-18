@@ -19,6 +19,7 @@ class MezastarController extends Controller
         $grade        = $request->input('grade', '');
         $isGigantamax = $request->input('is_gigantamax', '');
         $isMega       = $request->input('is_mega', '');
+        $isZMove      = $request->input('is_z_move', '');
         $pageSize     = (int) $request->input('pageSize', 50);
         $page         = (int) $request->input('page', 1);
 
@@ -36,6 +37,7 @@ class MezastarController extends Controller
         if (is_numeric($isGigantamax))       $q->where('is_gigantamax', (int) $isGigantamax);
         if (is_numeric($isUltraGigantamax))  $q->where('is_ultra_gigantamax', (int) $isUltraGigantamax);
         if (is_numeric($isDualMove))         $q->where('is_dual_move', (int) $isDualMove);
+        if (is_numeric($isZMove))            $q->where('is_z_move', (int) $isZMove);
 
         $total = $q->count();
         $list  = $q->orderBy('series')->orderBy('grade', 'desc')->orderBy('id')
@@ -99,6 +101,15 @@ class MezastarController extends Controller
         $card->is_dual_move = $request->input('is_dual_move', 0) ? 1 : 0;
         $card->save();
         return response()->json(['success' => true, 'data' => $card->is_dual_move]);
+    }
+
+    /** 切換 Z招式標記 */
+    public function toggleZMove(Request $request, $id)
+    {
+        $card = MezastarPokemon::findOrFail($id);
+        $card->is_z_move = $request->input('is_z_move', 0) ? 1 : 0;
+        $card->save();
+        return response()->json(['success' => true, 'data' => $card->is_z_move]);
     }
 
     /** TG 手牌列表（管理用） */

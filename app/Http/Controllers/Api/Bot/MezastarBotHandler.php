@@ -541,6 +541,7 @@ class MezastarBotHandler
         if ($p->is_gigantamax)        $badges[] = '[極巨化]';
         if ($p->is_ultra_gigantamax)  $badges[] = '[超極巨化]';
         if ($p->is_dual_move)         $badges[] = '[雙重招式]';
+        if ($p->is_z_move)            $badges[] = '[Z招式]';
         return $badges ? ' ' . implode('', $badges) : '';
     }
 
@@ -552,6 +553,7 @@ class MezastarBotHandler
         if ($p->is_gigantamax)       $badges[] = '極巨';
         if ($p->is_ultra_gigantamax) $badges[] = '超極';
         if ($p->is_dual_move)        $badges[] = '雙招';
+        if ($p->is_z_move)           $badges[] = 'Z招';
         return $badges ? '[' . implode('/', $badges) . ']' : '';
     }
 }
