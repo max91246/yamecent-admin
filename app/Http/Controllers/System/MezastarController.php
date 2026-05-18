@@ -28,9 +28,9 @@ class MezastarController extends Controller
         if ($type)             $q->where(fn($w) => $w->where('type1', $type)->orWhere('type2', $type));
         if ($weakness)         $q->whereJsonContains('weakness', $weakness);
         if ($name)             $q->where('name', 'like', "%{$name}%");
-        if ($grade !== '')     $q->where('grade', (int) $grade);
-        if ($isGigantamax !== '') $q->where('is_gigantamax', (int) $isGigantamax);
-        if ($isMega !== '')    $q->where('is_mega', (int) $isMega);
+        if (is_numeric($grade))        $q->where('grade', (int) $grade);
+        if (is_numeric($isGigantamax)) $q->where('is_gigantamax', (int) $isGigantamax);
+        if (is_numeric($isMega))       $q->where('is_mega', (int) $isMega);
 
         $total = $q->count();
         $list  = $q->orderBy('series')->orderBy('grade', 'desc')->orderBy('id')
