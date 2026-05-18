@@ -9,7 +9,8 @@ class MezastarPokemon extends Model
     protected $table = 'mezastar_pokemons';
 
     protected $fillable = [
-        'card_no', 'name', 'series', 'type1', 'type2', 'move_type', 'weakness', 'grade', 'image_url',
+        'card_no', 'name', 'series', 'type1', 'type2', 'move_type', 'weakness', 'grade',
+        'is_mega', 'is_gigantamax', 'is_ultra_gigantamax', 'is_dual_move', 'image_url',
     ];
 
     protected $casts = [

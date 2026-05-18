@@ -28,9 +28,14 @@ class MezastarController extends Controller
         if ($type)             $q->where(fn($w) => $w->where('type1', $type)->orWhere('type2', $type));
         if ($weakness)         $q->whereJsonContains('weakness', $weakness);
         if ($name)             $q->where('name', 'like', "%{$name}%");
-        if (is_numeric($grade))        $q->where('grade', (int) $grade);
-        if (is_numeric($isGigantamax)) $q->where('is_gigantamax', (int) $isGigantamax);
-        if (is_numeric($isMega))       $q->where('is_mega', (int) $isMega);
+        $isUltraGigantamax = $request->input('is_ultra_gigantamax', '');
+        $isDualMove        = $request->input('is_dual_move', '');
+
+        if (is_numeric($grade))              $q->where('grade', (int) $grade);
+        if (is_numeric($isMega))             $q->where('is_mega', (int) $isMega);
+        if (is_numeric($isGigantamax))       $q->where('is_gigantamax', (int) $isGigantamax);
+        if (is_numeric($isUltraGigantamax))  $q->where('is_ultra_gigantamax', (int) $isUltraGigantamax);
+        if (is_numeric($isDualMove))         $q->where('is_dual_move', (int) $isDualMove);
 
         $total = $q->count();
         $list  = $q->orderBy('series')->orderBy('grade', 'desc')->orderBy('id')
@@ -76,6 +81,24 @@ class MezastarController extends Controller
         $card->is_mega = $request->input('is_mega', 0) ? 1 : 0;
         $card->save();
         return response()->json(['success' => true, 'data' => $card->is_mega]);
+    }
+
+    /** 切換超極巨化標記 */
+    public function toggleUltraGigantamax(Request $request, $id)
+    {
+        $card = MezastarPokemon::findOrFail($id);
+        $card->is_ultra_gigantamax = $request->input('is_ultra_gigantamax', 0) ? 1 : 0;
+        $card->save();
+        return response()->json(['success' => true, 'data' => $card->is_ultra_gigantamax]);
+    }
+
+    /** 切換雙重招式標記 */
+    public function toggleDualMove(Request $request, $id)
+    {
+        $card = MezastarPokemon::findOrFail($id);
+        $card->is_dual_move = $request->input('is_dual_move', 0) ? 1 : 0;
+        $card->save();
+        return response()->json(['success' => true, 'data' => $card->is_dual_move]);
     }
 
     /** TG 手牌列表（管理用） */

@@ -167,8 +167,9 @@ class MezastarBotHandler
 
         $typeStr = $pokemon->type2 ? "{$pokemon->type1}/{$pokemon->type2}" : ($pokemon->type1 ?? '?');
         $stars   = $pokemon->grade ? str_repeat('⭐', $pokemon->grade) : '';
+        $badges  = $this->formatBadges($pokemon);
         $this->sendMessage($bot->token, $chatId,
-            "✅ 已記錄！\n🎴 {$pokemon->name}（{$pokemon->series}）\n屬性：{$typeStr}　招式：{$pokemon->move_type}\n星級：{$stars}\n\n繼續輸入下一隻，或點選其他選單："
+            "✅ 已記錄！\n🎴 {$pokemon->name}（{$pokemon->series}）{$badges}\n屬性：{$typeStr}　招式：{$pokemon->move_type}\n星級：{$stars}\n\n繼續輸入下一隻，或點選其他選單："
         );
     }
 
@@ -239,10 +240,11 @@ class MezastarBotHandler
             $reply .= "弱點：{$weakStr}\n\n";
             $reply .= "✅ 你的手牌剋制：\n";
             foreach ($counters as $h) {
-                $p     = $h->pokemon;
-                $type  = $p->type2 ? "{$p->type1}/{$p->type2}" : ($p->type1 ?? '?');
-                $stars = $p->grade ? str_repeat('⭐', $p->grade) : '';
-                $reply .= "  🎴 <b>{$p->name}</b>（{$p->series}）{$type} 招式:{$p->move_type} {$stars}\n";
+                $p      = $h->pokemon;
+                $type   = $p->type2 ? "{$p->type1}/{$p->type2}" : ($p->type1 ?? '?');
+                $stars  = $p->grade ? str_repeat('⭐', $p->grade) : '';
+                $badges = $this->formatBadges($p);
+                $reply .= "  🎴 <b>{$p->name}</b>{$badges}（{$p->series}）{$type} 招式:{$p->move_type} {$stars}\n";
             }
         }
 
@@ -262,10 +264,11 @@ class MezastarBotHandler
 
         $text = "📋 <b>我的手牌</b>（{$hand->count()} 隻）\n\n";
         foreach ($hand as $h) {
-            $p     = $h->pokemon;
-            $type  = $p->type2 ? "{$p->type1}/{$p->type2}" : ($p->type1 ?? '?');
-            $stars = $p->grade ? str_repeat('⭐', $p->grade) : '';
-            $text .= "🎴 <b>{$p->name}</b>（{$p->series}）\n";
+            $p      = $h->pokemon;
+            $type   = $p->type2 ? "{$p->type1}/{$p->type2}" : ($p->type1 ?? '?');
+            $stars  = $p->grade ? str_repeat('⭐', $p->grade) : '';
+            $badges = $this->formatBadges($p);
+            $text .= "🎴 <b>{$p->name}</b>（{$p->series}）{$badges}\n";
             $text .= "   屬性:{$type}　招式:{$p->move_type}　{$stars}\n";
         }
 
@@ -351,5 +354,16 @@ class MezastarBotHandler
     {
         Cache::forget("mezastar_hand:{$botId}:{$chatId}");
         Cache::forget('mezastar_pokemon:all_list');
+    }
+
+    /** 產生形態徽章字串 */
+    private function formatBadges(MezastarPokemon $p): string
+    {
+        $badges = [];
+        if ($p->is_mega)              $badges[] = '[超級進化]';
+        if ($p->is_gigantamax)        $badges[] = '[極巨化]';
+        if ($p->is_ultra_gigantamax)  $badges[] = '[超極巨化]';
+        if ($p->is_dual_move)         $badges[] = '[雙重招式]';
+        return $badges ? ' ' . implode('', $badges) : '';
     }
 }
