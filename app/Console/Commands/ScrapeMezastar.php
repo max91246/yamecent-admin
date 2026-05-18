@@ -52,11 +52,23 @@ class ScrapeMezastar extends Command
             foreach ($cards as $card) {
                 $this->line("  {$card['card_no']}  {$card['name']}");
 
-                if (!$dryRun) {
-                    // 爬蟲只負責更新圖片，不新增資料（資料來源為 Excel seeder）
-                    MezastarPokemon::where('card_no', $card['card_no'])
-                        ->whereNotNull('card_no')
-                        ->update(['image_url' => $card['image_url']]);
+                if (!$dryRun && $card['image_url']) {
+                    // 用名稱對應（官網 alt text 可能是簡短名，Excel 可能有完整名如「超級妙蛙花」）
+                    // 策略：找同系列中「DB 名稱包含官網名稱」或「完全相符」的記錄
+                    $altName = $card['name'];
+
+                    $matched = MezastarPokemon::where('series', $series)
+                        ->where(function ($q) use ($altName) {
+                            $q->where('name', $altName)                          // 完全相符
+                              ->orWhere('name', 'like', "%{$altName}%");         // DB 名稱含官網名
+                        })
+                        ->orderByRaw("CASE WHEN name = ? THEN 0 ELSE 1 END", [$altName]) // 完全符合優先
+                        ->first();
+
+                    if ($matched) {
+                        $matched->image_url = $card['image_url'];
+                        $matched->save();
+                    }
                 }
             }
 
