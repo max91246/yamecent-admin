@@ -162,11 +162,11 @@ class MezastarBotHandler
             return;
         }
 
-        $weaknesses = $opponent->weakness; // array
+        $weaknesses = $opponent->weakness ?? []; // 確保是 array
         $hand       = $this->getHand($bot->id, $chatId);
 
         // 找出手牌中能克制對手的寶可夢
-        $counters = $hand->filter(fn($h) => in_array($h->pokemon->move_type, $weaknesses));
+        $counters = $hand->filter(fn($h) => !empty($weaknesses) && in_array($h->pokemon->move_type, $weaknesses));
 
         $opponentType = $opponent->type2
             ? "{$opponent->type1}/{$opponent->type2}"

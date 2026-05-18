@@ -606,7 +606,7 @@ class FetchOilPrice extends Command
             ]);
         } catch (\Exception $e) {
             $this->line('[ERROR] HTTP 請求失敗：' . $e->getMessage());
-            return [null, []];
+            return [null, [], []];
         }
 
         $body = (string) $res->getBody();
@@ -619,7 +619,7 @@ class FetchOilPrice extends Command
 
         if (!is_array($data)) {
             $this->line('[ERROR] 回應非 JSON：' . mb_substr($body, 0, 200));
-            return [null, []];
+            return [null, [], []];
         }
 
         return $this->parseAllCandles($data);
