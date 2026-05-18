@@ -13,8 +13,11 @@ class MezastarBotHandler
 {
     use TelegramHelpers;
 
-    const HAND_TTL    = 86400;
-    const POKEMON_TTL = 86400;
+    const HAND_TTL         = 86400;
+    const POKEMON_TTL      = 86400;
+    const POKEDEX_PER_PAGE = 10;
+
+    const SERIES_LIST = ['星塵1彈', '星塵2彈', '星塵3彈', '星塵4彈', '銀河1彈'];
 
     public function handle(TgBot $bot, array $update): \Illuminate\Http\JsonResponse
     {
@@ -90,6 +93,23 @@ class MezastarBotHandler
         } elseif (str_starts_with($data, 'mz_pokedex_')) {
             $pokemonId = (int) substr($data, 11);
             $this->showPokedexCard($bot, $chatId, $pokemonId);
+
+        } elseif ($data === 'mz_pdx_menu') {
+            $this->showPokedexMenu($bot, $chatId);
+
+        } elseif ($data === 'mz_pdx_kw') {
+            $this->setState($bot->id, $chatId, 'mezastar_pokedex');
+            $this->sendMessage($bot->token, $chatId, "🔍 請輸入寶可夢名稱關鍵字：");
+
+        } elseif (str_starts_with($data, 'mz_pdx_s_')) {
+            // mz_pdx_s_{seriesIdx}_{page}
+            $parts     = explode('_', substr($data, 9));
+            $seriesIdx = (int) ($parts[0] ?? 0);
+            $page      = (int) ($parts[1] ?? 0);
+            $this->showSeriesList($bot, $chatId, $seriesIdx, $page);
+
+        } elseif ($data === 'mz_noop') {
+            // 頁碼顯示按鈕，不做任何事
 
         } elseif ($data === 'mz_clear_hand') {
             $this->clearHand($bot, $chatId);
@@ -301,8 +321,66 @@ class MezastarBotHandler
     // ── 寶可夢小幫手 ─────────────────────────────────────────────
     private function startPokedex(TgBot $bot, int $chatId): void
     {
-        $this->setState($bot->id, $chatId, 'mezastar_pokedex');
-        $this->sendMessage($bot->token, $chatId, "🔍 請輸入寶可夢名稱關鍵字：");
+        $this->showPokedexMenu($bot, $chatId);
+    }
+
+    private function showPokedexMenu(TgBot $bot, int $chatId): void
+    {
+        $seriesButtons = [];
+        foreach (self::SERIES_LIST as $idx => $name) {
+            $seriesButtons[] = ['text' => $name, 'callback_data' => "mz_pdx_s_{$idx}_0"];
+        }
+
+        // 每列 2 個彈數按鈕
+        $rows = [];
+        foreach (array_chunk($seriesButtons, 2) as $chunk) {
+            $rows[] = $chunk;
+        }
+        $rows[] = [['text' => '🔍 關鍵名稱查詢', 'callback_data' => 'mz_pdx_kw']];
+
+        $this->sendMessage($bot->token, $chatId,
+            "🔍 寶可夢小幫手\n請選擇查詢方式：",
+            ['inline_keyboard' => $rows]
+        );
+    }
+
+    private function showSeriesList(TgBot $bot, int $chatId, int $seriesIdx, int $page): void
+    {
+        $series = self::SERIES_LIST[$seriesIdx] ?? null;
+        if ($series === null) return;
+
+        $all      = Cache::remember('mezastar_pokemon:all_list', self::POKEMON_TTL, fn() => MezastarPokemon::all());
+        $filtered = $all->where('series', $series)->values();
+        $total    = $filtered->count();
+        $perPage  = self::POKEDEX_PER_PAGE;
+        $totalPages = (int) ceil($total / $perPage) ?: 1;
+        $page       = max(0, min($page, $totalPages - 1));
+        $items      = $filtered->slice($page * $perPage, $perPage)->values();
+
+        $buttons = [];
+        foreach ($items as $p) {
+            $stars  = $p->grade ? str_repeat('★', $p->grade) : '';
+            $badges = $this->formatBadgesShort($p);
+            $label  = "{$p->card_no} {$p->name}{$badges} {$stars}";
+            $buttons[] = [['text' => $label, 'callback_data' => 'mz_pokedex_' . $p->id]];
+        }
+
+        // 分頁列
+        $navRow = [];
+        if ($page > 0) {
+            $navRow[] = ['text' => '⬅️ 上頁', 'callback_data' => "mz_pdx_s_{$seriesIdx}_" . ($page - 1)];
+        }
+        $navRow[] = ['text' => ($page + 1) . '/' . $totalPages, 'callback_data' => 'mz_noop'];
+        if ($page < $totalPages - 1) {
+            $navRow[] = ['text' => '下頁 ➡️', 'callback_data' => "mz_pdx_s_{$seriesIdx}_" . ($page + 1)];
+        }
+        $buttons[] = $navRow;
+        $buttons[] = [['text' => '🔙 返回', 'callback_data' => 'mz_pdx_menu']];
+
+        $this->sendMessage($bot->token, $chatId,
+            "📦 {$series}（第 " . ($page + 1) . " / {$totalPages} 頁，共 {$total} 隻）\n點選寶可夢查看詳細資料：",
+            ['inline_keyboard' => $buttons]
+        );
     }
 
     private function handlePokedex(TgBot $bot, int $chatId, string $keyword): void
@@ -322,8 +400,9 @@ class MezastarBotHandler
             return;
         }
 
+        $this->clearState($bot->id, $chatId);
+
         if ($matches->count() === 1) {
-            $this->clearState($bot->id, $chatId);
             $this->showPokedexCard($bot, $chatId, $matches->first()->id);
             return;
         }
@@ -454,7 +533,7 @@ class MezastarBotHandler
         Cache::forget('mezastar_pokemon:all_list');
     }
 
-    /** 產生形態徽章字串 */
+    /** 產生形態徽章字串（完整版） */
     private function formatBadges(MezastarPokemon $p): string
     {
         $badges = [];
@@ -463,5 +542,16 @@ class MezastarBotHandler
         if ($p->is_ultra_gigantamax)  $badges[] = '[超極巨化]';
         if ($p->is_dual_move)         $badges[] = '[雙重招式]';
         return $badges ? ' ' . implode('', $badges) : '';
+    }
+
+    /** 產生形態徽章字串（按鈕用簡短版） */
+    private function formatBadgesShort(MezastarPokemon $p): string
+    {
+        $badges = [];
+        if ($p->is_mega)             $badges[] = '超進';
+        if ($p->is_gigantamax)       $badges[] = '極巨';
+        if ($p->is_ultra_gigantamax) $badges[] = '超極';
+        if ($p->is_dual_move)        $badges[] = '雙招';
+        return $badges ? '[' . implode('/', $badges) . ']' : '';
     }
 }
