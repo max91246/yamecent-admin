@@ -28,15 +28,21 @@ class FetchOilPrice extends Command
 
     public function handle()
     {
+        // ICE Brent 週末休市（UTC 週六 22:00 ~ 週日 23:00），靜默跳過
+        if ($this->isOilMarketClosed()) {
+            $this->line('  [油價] 週末休市，略過');
+            return 0;
+        }
+
         Log::channel('oil_price')->info('開始獲取布蘭特原油（' . self::TICKER . '）5分K');
         $this->info('正在獲取布蘭特原油（' . self::TICKER . '）最新價格...');
 
         [$price, $lastCandle, $allCandles] = $this->fetchPrice();
 
         if ($price === null) {
-            $this->line('[ERROR] 無法解析價格，請加 --debug 查看原始回應。');
-            Log::channel('oil_price')->error('無法解析價格');
-            return 1;
+            $this->line('[WARN] 無法解析價格（可能休市或 API 暫時無資料）');
+            Log::channel('oil_price')->warning('無法解析價格（API 無資料）');
+            return 0;
         }
 
         $candleAt = isset($lastCandle['t'])
@@ -574,6 +580,19 @@ class FetchOilPrice extends Command
     }
 
     // ────────────────────────────────────────────────────────────
+    //  油市週末休市判斷（UTC）
+    // ────────────────────────────────────────────────────────────
+    private function isOilMarketClosed(): bool
+    {
+        $utcNow  = new \DateTime('now', new \DateTimeZone('UTC'));
+        $dow     = (int) $utcNow->format('N'); // 1=Mon 7=Sun
+        $hour    = (int) $utcNow->format('G');
+
+        // 週六 22:00 UTC 之後，或週日 23:00 UTC 之前 → 休市
+        return ($dow === 6 && $hour >= 22)
+            || ($dow === 7 && $hour < 23);
+    }
+
     //  抓取 finviz API
     // ────────────────────────────────────────────────────────────
     private function fetchPrice(): array
