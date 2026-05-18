@@ -6,14 +6,15 @@ use App\MezastarPokemon;
 use App\TgBot;
 use App\TgMezastarHand;
 use App\Http\Controllers\Api\Bot\Concerns\TelegramHelpers;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
 class MezastarBotHandler
 {
     use TelegramHelpers;
 
-    const HAND_TTL    = 86400; // 24h
-    const POKEMON_TTL = 86400; // 24h
+    const HAND_TTL    = 86400;
+    const POKEMON_TTL = 86400;
 
     public function handle(TgBot $bot, array $update): \Illuminate\Http\JsonResponse
     {
@@ -32,14 +33,12 @@ class MezastarBotHandler
         $chatId = (int) $message['chat']['id'];
         $text   = trim($message['text'] ?? '');
 
-        // 主選單指令
         if (in_array($text, ['/start', '/menu'])) {
             $this->clearState($bot->id, $chatId);
             $this->sendMessage($bot->token, $chatId, "🎮 寶可夢 Mezastar 機台助手", $this->getMainKeyboard());
             return response()->json(['ok' => true]);
         }
 
-        // 狀態機
         $stateObj = $this->getState($bot->id, $chatId);
         $state    = $stateObj->state ?? null;
 
@@ -48,13 +47,12 @@ class MezastarBotHandler
         } elseif ($state === 'mezastar_battling') {
             $this->handleBattle($bot, $chatId, $text);
         } else {
-            // 主選單文字按鈕
             match (true) {
                 str_contains($text, '記錄寶可夢') => $this->startRecording($bot, $chatId),
                 str_contains($text, '對戰寶可夢') => $this->startBattle($bot, $chatId),
                 str_contains($text, '清空手卡')   => $this->clearHand($bot, $chatId),
                 str_contains($text, '我的手牌')   => $this->showHand($bot, $chatId),
-                default                           => $this->sendMessage($bot->token, $chatId, "請使用下方選單操作", $this->getMainKeyboard()),
+                default => $this->sendMessage($bot->token, $chatId, "請使用下方選單操作", $this->getMainKeyboard()),
             };
         }
 
@@ -67,13 +65,25 @@ class MezastarBotHandler
         if ($data === 'mz_menu') {
             $this->clearState($bot->id, $chatId);
             $this->sendMessage($bot->token, $chatId, "🎮 主選單", $this->getMainKeyboard());
+
         } elseif ($data === 'mz_hand') {
             $this->showHand($bot, $chatId);
+
         } elseif (str_starts_with($data, 'mz_remove_')) {
             $handId = (int) substr($data, 10);
             TgMezastarHand::where('id', $handId)->where('tg_chat_id', $chatId)->delete();
             $this->invalidateHandCache($bot->id, $chatId);
             $this->sendMessage($bot->token, $chatId, "✅ 已移除手卡", $this->getMainKeyboard());
+
+        } elseif (str_starts_with($data, 'mz_record_')) {
+            // 用戶從搜尋結果中選擇要記錄的寶可夢
+            $pokemonId = (int) substr($data, 10);
+            $this->doRecord($bot, $chatId, $pokemonId);
+
+        } elseif (str_starts_with($data, 'mz_battle_')) {
+            // 用戶從搜尋結果中選擇要對戰的對手
+            $pokemonId = (int) substr($data, 10);
+            $this->doBattleResult($bot, $chatId, $pokemonId);
         }
     }
 
@@ -105,32 +115,58 @@ class MezastarBotHandler
             return;
         }
 
-        $pokemon = $this->findPokemon($name);
-        if (!$pokemon) {
-            $this->sendMessage($bot->token, $chatId, "❌ 找不到「{$name}」\n請確認名稱正確（如：皮卡丘、超夢、雷公），或輸入其他名稱繼續記錄：");
+        $matches = $this->searchPokemon($name);
+
+        if ($matches->isEmpty()) {
+            $this->sendMessage($bot->token, $chatId,
+                "❌ 查無「{$name}」相關的寶可夢\n請確認名稱（如：皮卡丘、超夢、噴火龍），或繼續輸入其他名稱："
+            );
             return;
         }
 
-        // 避免重複新增同一隻
+        if ($matches->count() === 1) {
+            // 唯一結果，直接記錄
+            $this->doRecord($bot, $chatId, $matches->first()->id);
+            return;
+        }
+
+        // 多個結果，讓用戶選擇
+        $markup = $this->buildPokemonButtons($matches, 'mz_record_');
+        $this->sendMessage($bot->token, $chatId,
+            "🔍 找到 {$matches->count()} 隻相關寶可夢，請選擇要記錄的：",
+            $markup
+        );
+    }
+
+    private function doRecord(TgBot $bot, int $chatId, int $pokemonId): void
+    {
+        $pokemon = MezastarPokemon::find($pokemonId);
+        if (!$pokemon) {
+            $this->sendMessage($bot->token, $chatId, "❌ 找不到此寶可夢，請重試。");
+            return;
+        }
+
         $exists = TgMezastarHand::where('bot_id', $bot->id)
             ->where('tg_chat_id', $chatId)
-            ->where('pokemon_id', $pokemon->id)
+            ->where('pokemon_id', $pokemonId)
             ->exists();
 
         if ($exists) {
-            $this->sendMessage($bot->token, $chatId, "⚠️ 手牌中已有「{$pokemon->name}」（{$pokemon->series}），繼續輸入其他名稱：");
+            $this->sendMessage($bot->token, $chatId,
+                "⚠️ 手牌中已有「{$pokemon->name}」（{$pokemon->series}），繼續輸入其他名稱："
+            );
             return;
         }
 
         TgMezastarHand::create([
             'bot_id'     => $bot->id,
             'tg_chat_id' => $chatId,
-            'pokemon_id' => $pokemon->id,
+            'pokemon_id' => $pokemonId,
         ]);
         $this->invalidateHandCache($bot->id, $chatId);
 
-        $typeStr = $pokemon->type2 ? "{$pokemon->type1}/{$pokemon->type2}" : $pokemon->type1;
-        $stars   = str_repeat('⭐', $pokemon->grade);
+        $typeStr = $pokemon->type2 ? "{$pokemon->type1}/{$pokemon->type2}" : ($pokemon->type1 ?? '?');
+        $stars   = $pokemon->grade ? str_repeat('⭐', $pokemon->grade) : '';
         $this->sendMessage($bot->token, $chatId,
             "✅ 已記錄！\n🎴 {$pokemon->name}（{$pokemon->series}）\n屬性：{$typeStr}　招式：{$pokemon->move_type}\n星級：{$stars}\n\n繼續輸入下一隻，或點選其他選單："
         );
@@ -156,36 +192,56 @@ class MezastarBotHandler
             return;
         }
 
-        $opponent = $this->findPokemon($name);
-        if (!$opponent) {
-            $this->sendMessage($bot->token, $chatId, "❌ 找不到對手「{$name}」，請重新輸入：");
+        $matches = $this->searchPokemon($name);
+
+        if ($matches->isEmpty()) {
+            $this->sendMessage($bot->token, $chatId,
+                "❌ 查無「{$name}」相關的寶可夢\n請確認名稱正確後重新輸入："
+            );
             return;
         }
 
-        $weaknesses = $opponent->weakness ?? []; // 確保是 array
-        $hand       = $this->getHand($bot->id, $chatId);
+        if ($matches->count() === 1) {
+            // 唯一結果，直接顯示克制
+            $this->clearState($bot->id, $chatId);
+            $this->doBattleResult($bot, $chatId, $matches->first()->id);
+            return;
+        }
 
-        // 找出手牌中能克制對手的寶可夢
-        $counters = $hand->filter(fn($h) => !empty($weaknesses) && in_array($h->pokemon->move_type, $weaknesses));
+        // 多個結果，讓用戶選擇對手
+        $markup = $this->buildPokemonButtons($matches, 'mz_battle_');
+        $this->sendMessage($bot->token, $chatId,
+            "🔍 找到 {$matches->count()} 隻相關寶可夢，請選擇對手：",
+            $markup
+        );
+    }
 
-        $opponentType = $opponent->type2
-            ? "{$opponent->type1}/{$opponent->type2}"
-            : $opponent->type1;
+    private function doBattleResult(TgBot $bot, int $chatId, int $pokemonId): void
+    {
+        $opponent = MezastarPokemon::find($pokemonId);
+        if (!$opponent) {
+            $this->sendMessage($bot->token, $chatId, "❌ 找不到此寶可夢，請重試。", $this->getMainKeyboard());
+            return;
+        }
 
-        $weakStr = implode('、', $weaknesses);
+        $weaknesses   = $opponent->weakness ?? [];
+        $hand         = $this->getHand($bot->id, $chatId);
+        $counters     = $hand->filter(fn($h) => !empty($weaknesses) && in_array($h->pokemon->move_type, $weaknesses));
+        $opponentType = $opponent->type2 ? "{$opponent->type1}/{$opponent->type2}" : ($opponent->type1 ?? '?');
+        $weakStr      = empty($weaknesses) ? '（資料待補）' : implode('、', $weaknesses);
 
         if ($counters->isEmpty()) {
-            $reply = "⚔️ 對手：<b>{$opponent->name}</b>（{$opponentType}）\n";
+            $reply  = "⚔️ 對手：<b>{$opponent->name}</b>（{$opponentType}）\n";
             $reply .= "弱點：{$weakStr}\n\n";
             $reply .= "😢 手牌中沒有能克制對方的寶可夢！";
         } else {
-            $reply = "⚔️ 對手：<b>{$opponent->name}</b>（{$opponentType}）\n";
+            $reply  = "⚔️ 對手：<b>{$opponent->name}</b>（{$opponentType}）\n";
             $reply .= "弱點：{$weakStr}\n\n";
             $reply .= "✅ 你的手牌剋制：\n";
             foreach ($counters as $h) {
                 $p     = $h->pokemon;
-                $type  = $p->type2 ? "{$p->type1}/{$p->type2}" : $p->type1;
-                $stars = str_repeat('⭐', $p->grade);
+                $type  = $p->type2 ? "{$p->type1}/{$p->type2}" : ($p->type1 ?? '?');
+                $stars = $p->grade ? str_repeat('⭐', $p->grade) : '';
                 $reply .= "  🎴 <b>{$p->name}</b>（{$p->series}）{$type} 招式:{$p->move_type} {$stars}\n";
             }
         }
@@ -207,8 +263,8 @@ class MezastarBotHandler
         $text = "📋 <b>我的手牌</b>（{$hand->count()} 隻）\n\n";
         foreach ($hand as $h) {
             $p     = $h->pokemon;
-            $type  = $p->type2 ? "{$p->type1}/{$p->type2}" : $p->type1;
-            $stars = str_repeat('⭐', $p->grade);
+            $type  = $p->type2 ? "{$p->type1}/{$p->type2}" : ($p->type1 ?? '?');
+            $stars = $p->grade ? str_repeat('⭐', $p->grade) : '';
             $text .= "🎴 <b>{$p->name}</b>（{$p->series}）\n";
             $text .= "   屬性:{$type}　招式:{$p->move_type}　{$stars}\n";
         }
@@ -237,22 +293,50 @@ class MezastarBotHandler
         };
     }
 
-    /** 查寶可夢（名稱模糊比對，快取24h） */
-    private function findPokemon(string $name): ?MezastarPokemon
+    /**
+     * 模糊搜尋寶可夢（回傳全部符合的）
+     * 優先順序：完全匹配 > 名稱包含關鍵字 > 關鍵字包含名稱
+     */
+    private function searchPokemon(string $keyword): Collection
     {
-        $all = Cache::remember('mezastar_pokemon:all', self::POKEMON_TTL, function () {
-            return MezastarPokemon::all()->keyBy('name');
+        $all = Cache::remember('mezastar_pokemon:all_list', self::POKEMON_TTL, function () {
+            return MezastarPokemon::all();
         });
 
-        // 完全匹配優先
-        if ($all->has($name)) return $all->get($name);
+        // 完全匹配
+        $exact = $all->filter(fn($p) => $p->name === $keyword);
+        if ($exact->isNotEmpty()) return $exact->values();
 
-        // 模糊匹配
-        $found = $all->first(fn($p) => str_contains($p->name, $name) || str_contains($name, $p->name));
-        return $found ?: null;
+        // 模糊：名稱包含關鍵字
+        $fuzzy = $all->filter(fn($p) =>
+            str_contains($p->name, $keyword) || str_contains($keyword, $p->name)
+        );
+
+        return $fuzzy->values()->take(8); // 最多顯示 8 個選項
     }
 
-    /** 取得用戶手牌（快取24h） */
+    /**
+     * 建立 inline keyboard 讓用戶從搜尋結果中選擇
+     * $prefix: 'mz_record_' 或 'mz_battle_'
+     */
+    private function buildPokemonButtons(Collection $matches, string $prefix): array
+    {
+        $buttons = [];
+        $row     = [];
+
+        foreach ($matches as $i => $p) {
+            $stars = $p->grade ? str_repeat('★', $p->grade) : '';
+            $label = "{$p->name}（{$p->series} {$stars}）";
+            $row[] = ['text' => $label, 'callback_data' => $prefix . $p->id];
+
+            // 每行 1 個按鈕（名稱較長，避免截斷）
+            $buttons[] = $row;
+            $row = [];
+        }
+
+        return ['inline_keyboard' => $buttons];
+    }
+
     private function getHand(int $botId, int $chatId)
     {
         $key = "mezastar_hand:{$botId}:{$chatId}";
@@ -267,5 +351,6 @@ class MezastarBotHandler
     private function invalidateHandCache(int $botId, int $chatId): void
     {
         Cache::forget("mezastar_hand:{$botId}:{$chatId}");
+        Cache::forget('mezastar_pokemon:all_list');
     }
 }
