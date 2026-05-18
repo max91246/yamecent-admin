@@ -434,6 +434,12 @@ class MezastarBotHandler
         $caption .= "💥 弱點：{$weakness}\n";
         $caption .= "⭐ 星級：{$stars}";
 
+        if ($p->hp !== null) {
+            $caption .= "\n\n📊 <b>能力值</b>\n";
+            $caption .= "HP {$p->hp}　攻擊 {$p->attack}　防禦 {$p->defense}\n";
+            $caption .= "特攻 {$p->sp_attack}　特防 {$p->sp_defense}　速度 {$p->speed}";
+        }
+
         if ($p->image_url) {
             $this->sendPhoto($bot->token, $chatId, $p->image_url, $caption);
         } else {
