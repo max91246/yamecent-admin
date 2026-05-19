@@ -8,8 +8,8 @@ class AddPowerToMezastarPokemons extends Migration
 {
     public function up()
     {
-        if (!Schema::hasColumn('ya_mezastar_pokemons', 'power')) {
-            Schema::table('ya_mezastar_pokemons', function (Blueprint $table) {
+        if (!Schema::hasColumn('mezastar_pokemons', 'power')) {
+            Schema::table('mezastar_pokemons', function (Blueprint $table) {
                 $table->unsignedSmallInteger('power')->nullable()->after('image_url')->comment('寶可能量');
             });
         }
@@ -17,8 +17,8 @@ class AddPowerToMezastarPokemons extends Migration
 
     public function down()
     {
-        if (Schema::hasColumn('ya_mezastar_pokemons', 'power')) {
-            Schema::table('ya_mezastar_pokemons', function (Blueprint $table) {
+        if (Schema::hasColumn('mezastar_pokemons', 'power')) {
+            Schema::table('mezastar_pokemons', function (Blueprint $table) {
                 $table->dropColumn('power');
             });
         }
