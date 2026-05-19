@@ -21,6 +21,7 @@ class MezastarController extends Controller
         $isMega       = $request->input('is_mega', '');
         $isZMove      = $request->input('is_z_move', '');
         $isMythical   = $request->input('is_mythical', '');
+        $isDoubleRush = $request->input('is_double_rush', '');
         $pageSize     = (int) $request->input('pageSize', 50);
         $page         = (int) $request->input('page', 1);
 
@@ -40,6 +41,7 @@ class MezastarController extends Controller
         if (is_numeric($isDualMove))         $q->where('is_dual_move', (int) $isDualMove);
         if (is_numeric($isZMove))            $q->where('is_z_move', (int) $isZMove);
         if (is_numeric($isMythical))         $q->where('is_mythical', (int) $isMythical);
+        if (is_numeric($isDoubleRush))       $q->where('is_double_rush', (int) $isDoubleRush);
 
         $total = $q->count();
         $list  = $q->orderBy('series')->orderBy('grade', 'desc')->orderBy('id')
@@ -114,6 +116,15 @@ class MezastarController extends Controller
         return response()->json(['success' => true, 'data' => $card->is_z_move]);
     }
 
+    /** 切換雙重衝擊標記 */
+    public function toggleDoubleRush(Request $request, $id)
+    {
+        $card = MezastarPokemon::findOrFail($id);
+        $card->is_double_rush = $request->input('is_double_rush', 0) ? 1 : 0;
+        $card->save();
+        return response()->json(['success' => true, 'data' => $card->is_double_rush]);
+    }
+
     /** 切換幻之寶可夢標記 */
     public function toggleMythical(Request $request, $id)
     {
@@ -130,7 +141,7 @@ class MezastarController extends Controller
 
         $allowed = [
             'series', 'type1', 'type2', 'move_type', 'grade', 'weakness',
-            'is_mega', 'is_gigantamax', 'is_ultra_gigantamax', 'is_dual_move', 'is_z_move', 'is_mythical',
+            'is_mega', 'is_gigantamax', 'is_ultra_gigantamax', 'is_dual_move', 'is_z_move', 'is_mythical', 'is_double_rush',
             'power', 'hp', 'attack', 'defense', 'sp_attack', 'sp_defense', 'speed',
         ];
 

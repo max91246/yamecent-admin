@@ -78,6 +78,7 @@ $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/mezastar'], fun
     $router->put('/cards/{id}/dual-move',        'System\MezastarController@toggleDualMove');
     $router->put('/cards/{id}/z-move',           'System\MezastarController@toggleZMove');
     $router->put('/cards/{id}/mythical',         'System\MezastarController@toggleMythical');
+    $router->put('/cards/{id}/double-rush',      'System\MezastarController@toggleDoubleRush');
     $router->put('/cards/{id}',                  'System\MezastarController@update');
 });
 

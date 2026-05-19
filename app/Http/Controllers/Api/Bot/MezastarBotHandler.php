@@ -646,6 +646,7 @@ class MezastarBotHandler
         if ($p->is_dual_move)         $badges[] = '[雙重招式]';
         if ($p->is_z_move)            $badges[] = '[Z招式]';
         if ($p->is_mythical)          $badges[] = '[幻]';
+        if ($p->is_double_rush)       $badges[] = '[雙重衝擊]';
         return $badges ? ' ' . implode('', $badges) : '';
     }
 
