@@ -482,7 +482,6 @@ class MezastarBotHandler
     {
         $opponent = MezastarPokemon::find($pokemonId);
         if (!$opponent) {
-            $this->answerCallbackQuery($bot->token);
             return;
         }
 
@@ -521,7 +520,6 @@ class MezastarBotHandler
                 [['text' => '🔙 回寶可夢資料', 'callback_data' => "mz_pokedex_{$pokemonId}"]],
             ],
         ];
-        $this->answerCallbackQuery($bot->token);
         $this->sendMessage($bot->token, $chatId, $reply, $backMarkup, 'HTML');
     }
 
