@@ -112,6 +112,27 @@ class MezastarController extends Controller
         return response()->json(['success' => true, 'data' => $card->is_z_move]);
     }
 
+    /** 更新卡牌素值（名稱/卡號/圖片不可改） */
+    public function update(Request $request, $id)
+    {
+        $card = MezastarPokemon::findOrFail($id);
+
+        $allowed = [
+            'series', 'type1', 'type2', 'move_type', 'grade', 'weakness',
+            'is_mega', 'is_gigantamax', 'is_ultra_gigantamax', 'is_dual_move', 'is_z_move',
+            'power', 'hp', 'attack', 'defense', 'sp_attack', 'sp_defense', 'speed',
+        ];
+
+        foreach ($allowed as $field) {
+            if ($request->has($field)) {
+                $card->$field = $request->input($field);
+            }
+        }
+
+        $card->save();
+        return response()->json(['success' => true, 'data' => $card]);
+    }
+
     /** TG 手牌列表（管理用） */
     public function hands(Request $request)
     {
