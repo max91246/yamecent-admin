@@ -274,6 +274,14 @@ class MezastarBotHandler
                 $stars  = $p->grade ? str_repeat('⭐', $p->grade) : '';
                 $badges = $this->formatBadges($p);
                 $reply .= "  🎴 <b>{$p->name}</b>{$badges}（{$p->series}）{$type} 招式:{$p->move_type} {$stars}\n";
+                // 卡號 + 寶可能量
+                $line2 = "   📌 {$p->card_no}";
+                if ($p->power !== null) $line2 .= "　⚡<b>{$p->power}</b>";
+                $reply .= $line2 . "\n";
+                // 六項能力值
+                if ($p->hp !== null) {
+                    $reply .= "   ❤️{$p->hp} ⚔️{$p->attack} 🛡️{$p->defense} ✨{$p->sp_attack} 🔰{$p->sp_defense} 💨{$p->speed}\n";
+                }
             }
         }
 
@@ -299,6 +307,13 @@ class MezastarBotHandler
             $badges = $this->formatBadges($p);
             $text .= "🎴 <b>{$p->name}</b>（{$p->series}）{$badges}\n";
             $text .= "   屬性:{$type}　招式:{$p->move_type}　{$stars}\n";
+            $line3 = "   📌 {$p->card_no}";
+            if ($p->power !== null) $line3 .= "　⚡<b>{$p->power}</b>";
+            $text .= $line3 . "\n";
+            if ($p->hp !== null) {
+                $text .= "   ❤️{$p->hp} ⚔️{$p->attack} 🛡️{$p->defense} ✨{$p->sp_attack} 🔰{$p->sp_defense} 💨{$p->speed}\n";
+            }
+            $text .= "\n";
         }
 
         $inlineMarkup = [
