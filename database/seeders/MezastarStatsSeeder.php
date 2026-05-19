@@ -40,7 +40,7 @@ class MezastarStatsSeeder extends Seeder
 
         $ok = 0;
         foreach ($data as $cardNo => $v) {
-            $updated = DB::table('ya_mezastar_pokemons')
+            $updated = DB::table('mezastar_pokemons')
                 ->where('card_no', $cardNo)
                 ->update([
                     'hp'         => $v[0],
