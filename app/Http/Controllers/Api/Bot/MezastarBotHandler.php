@@ -74,6 +74,10 @@ class MezastarBotHandler
         } elseif ($data === 'mz_hand') {
             $this->showHand($bot, $chatId);
 
+        } elseif (str_starts_with($data, 'mz_hand_page_')) {
+            $page = (int) substr($data, 13);
+            $this->showHand($bot, $chatId, $page);
+
         } elseif (str_starts_with($data, 'mz_remove_')) {
             $handId = (int) substr($data, 10);
             TgMezastarHand::where('id', $handId)->where('tg_chat_id', $chatId)->delete();
@@ -293,8 +297,8 @@ class MezastarBotHandler
         $this->sendMessage($bot->token, $chatId, $reply, $this->getMainKeyboard(), 'HTML');
     }
 
-    // ── 顯示手牌 ─────────────────────────────────────────────────
-    private function showHand(TgBot $bot, int $chatId): void
+    // ── 顯示手牌（分頁）────────────────────────────────────────────
+    private function showHand(TgBot $bot, int $chatId, int $page = 1): void
     {
         $hand = $this->getHand($bot->id, $chatId);
 
@@ -303,8 +307,20 @@ class MezastarBotHandler
             return;
         }
 
-        $text = "📋 <b>我的手牌</b>（{$hand->count()} 隻）\n\n";
-        foreach ($hand as $h) {
+        // 依星級↓ 寶可能量↓ 排序
+        $sorted = $hand->sortBy([
+            fn($a, $b) => ($b->pokemon->grade ?? 0) <=> ($a->pokemon->grade ?? 0),
+            fn($a, $b) => ($b->pokemon->power ?? 0) <=> ($a->pokemon->power ?? 0),
+        ])->values();
+
+        $perPage   = 5;
+        $total     = $sorted->count();
+        $totalPage = (int) ceil($total / $perPage);
+        $page      = max(1, min($page, $totalPage));
+        $slice     = $sorted->slice(($page - 1) * $perPage, $perPage);
+
+        $text = "📋 <b>我的手牌</b>（{$total} 隻）　第 {$page}/{$totalPage} 頁\n\n";
+        foreach ($slice as $h) {
             $p      = $h->pokemon;
             $type   = $p->type2 ? "{$p->type1}/{$p->type2}" : ($p->type1 ?? '?');
             $stars  = $p->grade ? str_repeat('⭐', $p->grade) : '';
@@ -320,13 +336,16 @@ class MezastarBotHandler
             $text .= "\n";
         }
 
-        $inlineMarkup = [
-            'inline_keyboard' => [
-                [['text' => '🗑️ 清空手卡', 'callback_data' => 'mz_clear_hand']],
-            ],
-        ];
+        // 分頁按鈕
+        $navRow = [];
+        if ($page > 1)          $navRow[] = ['text' => '⬅️ 上一頁', 'callback_data' => "mz_hand_page_" . ($page - 1)];
+        if ($page < $totalPage) $navRow[] = ['text' => '下一頁 ➡️', 'callback_data' => "mz_hand_page_" . ($page + 1)];
 
-        $this->sendMessage($bot->token, $chatId, $text, $inlineMarkup, 'HTML');
+        $keyboard = [];
+        if (!empty($navRow)) $keyboard[] = $navRow;
+        $keyboard[] = [['text' => '🗑️ 清空手卡', 'callback_data' => 'mz_clear_hand']];
+
+        $this->sendMessage($bot->token, $chatId, $text, ['inline_keyboard' => $keyboard], 'HTML');
     }
 
     // ── 清空手牌 ─────────────────────────────────────────────────
