@@ -90,6 +90,10 @@ class MezastarBotHandler
             $pokemonId = (int) substr($data, 10);
             $this->doBattleResult($bot, $chatId, $pokemonId);
 
+        } elseif (str_starts_with($data, 'mz_pdx_battle_')) {
+            $pokemonId = (int) substr($data, 14);
+            $this->showPokedexBattleCheck($bot, $chatId, $pokemonId);
+
         } elseif (str_starts_with($data, 'mz_pokedex_')) {
             $pokemonId = (int) substr($data, 11);
             $this->showPokedexCard($bot, $chatId, $pokemonId);
@@ -460,29 +464,85 @@ class MezastarBotHandler
             $caption .= "💨 速度 <b>{$p->speed}</b>";
         }
 
+        $inlineMarkup = [
+            'inline_keyboard' => [
+                [['text' => '⚔️ 對戰分析（比對手牌）', 'callback_data' => "mz_pdx_battle_{$pokemonId}"]],
+                [['text' => '🔙 回選單', 'callback_data' => 'mz_pdx_menu']],
+            ],
+        ];
+
         if ($p->image_url) {
-            $this->sendPhoto($bot->token, $chatId, $p->image_url, $caption);
+            $this->sendPhoto($bot->token, $chatId, $p->image_url, $caption, $inlineMarkup);
         } else {
-            $this->sendMessage($bot->token, $chatId, $caption . "\n\n（無卡牌圖片）", $this->getMainKeyboard(), 'HTML');
+            $this->sendMessage($bot->token, $chatId, $caption . "\n\n（無卡牌圖片）", $inlineMarkup, 'HTML');
         }
     }
 
-    private function sendPhoto(string $token, int $chatId, string $photoUrl, string $caption): void
+    private function showPokedexBattleCheck(TgBot $bot, int $chatId, int $pokemonId): void
+    {
+        $opponent = MezastarPokemon::find($pokemonId);
+        if (!$opponent) {
+            $this->answerCallbackQuery($bot->token);
+            return;
+        }
+
+        $weaknesses   = $opponent->weakness ?? [];
+        $hand         = $this->getHand($bot->id, $chatId);
+        $counters     = $hand->filter(fn($h) => !empty($weaknesses) && in_array($h->pokemon->move_type, $weaknesses));
+        $opponentType = $opponent->type2 ? "{$opponent->type1}/{$opponent->type2}" : ($opponent->type1 ?? '?');
+        $weakStr      = empty($weaknesses) ? '（資料待補）' : implode('、', $weaknesses);
+
+        $reply  = "⚔️ 對手：<b>{$opponent->name}</b>（{$opponentType}）\n";
+        $reply .= "弱點：{$weakStr}\n\n";
+
+        if ($hand->isEmpty()) {
+            $reply .= "📋 手牌是空的，請先記錄寶可夢！";
+        } elseif ($counters->isEmpty()) {
+            $reply .= "😢 手牌中沒有能克制對方的寶可夢！";
+        } else {
+            $reply .= "✅ 你的手牌剋制：\n";
+            foreach ($counters as $h) {
+                $p      = $h->pokemon;
+                $type   = $p->type2 ? "{$p->type1}/{$p->type2}" : ($p->type1 ?? '?');
+                $stars  = $p->grade ? str_repeat('⭐', $p->grade) : '';
+                $badges = $this->formatBadges($p);
+                $reply .= "  🎴 <b>{$p->name}</b>{$badges}（{$p->series}）{$type} 招式:{$p->move_type} {$stars}\n";
+                $line2 = "   📌 {$p->card_no}";
+                if ($p->power !== null) $line2 .= "　⚡<b>{$p->power}</b>";
+                $reply .= $line2 . "\n";
+                if ($p->hp !== null) {
+                    $reply .= "   ❤️{$p->hp} ⚔️{$p->attack} 🛡️{$p->defense} ✨{$p->sp_attack} 🔰{$p->sp_defense} 💨{$p->speed}\n";
+                }
+            }
+        }
+
+        $backMarkup = [
+            'inline_keyboard' => [
+                [['text' => '🔙 回寶可夢資料', 'callback_data' => "mz_pokedex_{$pokemonId}"]],
+            ],
+        ];
+        $this->answerCallbackQuery($bot->token);
+        $this->sendMessage($bot->token, $chatId, $reply, $backMarkup, 'HTML');
+    }
+
+    private function sendPhoto(string $token, int $chatId, string $photoUrl, string $caption, ?array $replyMarkup = null): void
     {
         $url = "https://api.telegram.org/bot{$token}/sendPhoto";
         $client = new \GuzzleHttp\Client(['timeout' => 10]);
+        $payload = [
+            'chat_id'    => $chatId,
+            'photo'      => $photoUrl,
+            'caption'    => $caption,
+            'parse_mode' => 'HTML',
+        ];
+        if ($replyMarkup) {
+            $payload['reply_markup'] = $replyMarkup;
+        }
         try {
-            $client->post($url, [
-                'json' => [
-                    'chat_id'    => $chatId,
-                    'photo'      => $photoUrl,
-                    'caption'    => $caption,
-                    'parse_mode' => 'HTML',
-                ],
-            ]);
+            $client->post($url, ['json' => $payload]);
         } catch (\Exception $e) {
             // 圖片失敗時改送純文字
-            $this->sendMessage($token, $chatId, $caption, $this->getMainKeyboard(), 'HTML');
+            $this->sendMessage($token, $chatId, $caption, $replyMarkup ?? $this->getMainKeyboard(), 'HTML');
         }
     }
 
