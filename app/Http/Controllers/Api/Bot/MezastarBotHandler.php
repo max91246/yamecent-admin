@@ -429,15 +429,20 @@ class MezastarBotHandler
 
         $caption  = "🎴 <b>{$p->name}</b>{$badges}\n";
         $caption .= "📦 {$p->series}　卡號：{$p->card_no}\n";
+        if ($p->power !== null) {
+            $caption .= "⚡ 寶可能量：<b>{$p->power}</b>\n";
+        }
         $caption .= "🔷 屬性：{$type}\n";
-        $caption .= "⚡ 招式屬性：{$p->move_type}\n";
+        $caption .= "🥊 招式屬性：{$p->move_type}\n";
         $caption .= "💥 弱點：{$weakness}\n";
         $caption .= "⭐ 星級：{$stars}";
 
         if ($p->hp !== null) {
             $caption .= "\n\n📊 <b>能力值</b>\n";
-            $caption .= "HP {$p->hp}　攻擊 {$p->attack}　防禦 {$p->defense}\n";
-            $caption .= "特攻 {$p->sp_attack}　特防 {$p->sp_defense}　速度 {$p->speed}";
+            $caption .= "❤️ HP <b>{$p->hp}</b>\n";
+            $caption .= "⚔️ 攻擊 <b>{$p->attack}</b>　🛡️ 防禦 <b>{$p->defense}</b>\n";
+            $caption .= "✨ 特攻 <b>{$p->sp_attack}</b>　🔰 特防 <b>{$p->sp_defense}</b>\n";
+            $caption .= "💨 速度 <b>{$p->speed}</b>";
         }
 
         if ($p->image_url) {
