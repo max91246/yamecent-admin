@@ -21,7 +21,7 @@ class MezastarMenuSeeder extends Seeder
                 'name'        => 'MezastarHands',
                 'path'        => '/pokemon/mezastar/hands',
                 'component'   => 'mezastar/hands',
-                'redirect'    => null,
+                'redirect'    => '',
                 'icon'        => '',
                 'extra_icon'  => null,
                 'auths'       => null,
