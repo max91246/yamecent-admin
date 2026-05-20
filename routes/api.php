@@ -80,6 +80,8 @@ $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/mezastar'], fun
     $router->put('/cards/{id}/mythical',         'System\MezastarController@toggleMythical');
     $router->put('/cards/{id}/double-rush',      'System\MezastarController@toggleDoubleRush');
     $router->put('/cards/{id}',                  'System\MezastarController@update');
+    $router->get('/hand-users',                  'System\MezastarController@handUsers');
+    $router->get('/hands',                       'System\MezastarController@hands');
 });
 
 // 系統設定

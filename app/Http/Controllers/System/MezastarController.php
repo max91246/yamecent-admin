@@ -155,6 +155,18 @@ class MezastarController extends Controller
         return response()->json(['success' => true, 'data' => $card]);
     }
 
+    /** 有手牌的用戶列表 */
+    public function handUsers()
+    {
+        $users = TgMezastarHand::selectRaw('bot_id, tg_chat_id, COUNT(*) as card_count')
+            ->groupBy('bot_id', 'tg_chat_id')
+            ->orderBy('bot_id')
+            ->orderBy('tg_chat_id')
+            ->get();
+
+        return response()->json(['success' => true, 'data' => $users]);
+    }
+
     /** TG 手牌列表（管理用） */
     public function hands(Request $request)
     {
@@ -165,7 +177,7 @@ class MezastarController extends Controller
         if ($chatId) $q->where('tg_chat_id', $chatId);
         if ($botId)  $q->where('bot_id', $botId);
 
-        $list = $q->get();
+        $list = $q->orderBy('id')->get();
         return response()->json(['success' => true, 'data' => $list]);
     }
 }
