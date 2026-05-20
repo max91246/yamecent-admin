@@ -36,6 +36,7 @@
 | `/api/admin/member` | MemberController | 會員 CRUD + 餘額調整 + 會員資格 |
 | `/api/admin/av` | AvController | AV 影片 + 女優列表 |
 | `/api/admin/tg` | TgController | Bot 管理 + 訊息 + 持股 + 交易明細 |
+| `/api/admin/mezastar` | MezastarController | 寶可夢卡牌 CRUD + 屬性編輯 |
 | `/api/admin/stock` | StockController | 處置股 + 油價 K線 |
 | `/api/admin/config` | ConfigController | 系統設定 CRUD |
 | `/api/admin/system` | Menu/Role/UserController | RBAC 管理 + 動態路由 |
@@ -68,10 +69,11 @@ AV 管理
 
 ### 機器人類型
 
-| type | 說明 |
-|------|------|
-| 1（股票指數）| 股票行情查詢 + 持倉管理 |
-| 2（AV 查詢）| AV 新片速報 + 喜好推播 |
+| type        | 說明                       |
+|-------------|--------------------------|
+| 1（股票指數）  | 股票行情查詢 + 持倉管理        |
+| 2（AV 查詢）  | AV 新片速報 + 喜好推播        |
+| 3（Mezastar）| 寶可夢卡牌對戰輔助             |
 
 ### 股票機器人主選單
 
@@ -91,6 +93,25 @@ AV 管理
 - T+2 交割款追蹤
 - 帳戶資金設定（總資金 / 剩餘資金兩種模式）
 - 處置股自動標記（買進立即扣款，不走 T+2）
+
+### Mezastar 機器人（寶可夢卡牌對戰輔助）
+
+```
+🃏 記錄寶可夢  |  ⚔️ 對戰寶可夢
+📋 我的手牌    |  🔍 寶可夢小幫手
+```
+
+**記錄寶可夢**：輸入關鍵字搜尋卡牌，記錄到手牌（支援模糊搜尋，重複名稱列出選項）
+
+**對戰寶可夢**：輸入對手卡牌關鍵字，自動比對手牌中能剋制對方的寶可夢，顯示卡號、寶可能量、六項能力值
+
+**我的手牌**：分頁列表（每頁 5 隻），依星級↓ 寶可能量↓ 排序，含清空功能
+
+**寶可夢小幫手**：
+- 選擇彈數（星塵1-4彈、銀河1彈）或輸入關鍵字搜尋
+- 彈數列表分頁（10/頁）
+- 查看完整卡牌資料（圖片 + 屬性 + 能力值）
+- 「⚔️ 對戰分析」按鈕：把此卡當對手，比對手牌剋制關係
 
 ### AV 機器人主選單
 
@@ -161,7 +182,29 @@ AV 管理
 | `ya_disposal_stocks` | 處置股名單（市場 / 起訖日 / 原因） |
 | `ya_tw_market_holidays` | 台股休市日（主鍵為 date，每年12月自動匯入隔年資料） |
 
+### Mezastar 寶可夢卡牌
+
+| 表名 | 說明 |
+|------|------|
+| `ya_mezastar_pokemons` | 卡牌主表（卡號/名稱/彈數/屬性/弱點/星級/能力值/特殊標記） |
+| `ya_tg_mezastar_hands` | 用戶手牌（bot_id + tg_chat_id + pokemon_id） |
+
+**卡牌特殊標記欄位：**
+
+| 欄位 | 說明 |
+|------|------|
+| `is_mega` | 超級進化 |
+| `is_gigantamax` | 極巨化 |
+| `is_ultra_gigantamax` | 超極巨化 |
+| `is_dual_move` | 雙重招式 |
+| `is_z_move` | Z招式 |
+| `is_mythical` | 幻之寶可夢 |
+| `is_double_rush` | 雙重衝擊 |
+
+**能力值欄位：** `power`（寶可能量）、`hp`、`attack`、`defense`、`sp_attack`、`sp_defense`、`speed`
+
 ### AV 系統
+
 | 表名 | 說明 |
 |------|------|
 | `ya_av_videos` | AV 影片（番號 / 標題 / 封面 / 片商 / 演員 / 標籤） |
@@ -184,6 +227,8 @@ AV 管理
 | `av_pref_{bot}_{chat}` | 用戶喜好 tag | 10 分鐘 |
 | `tg_upd_{bot}_{updateId}` | TG update 去重 | 60 秒 |
 | `shareholder_dist:{code}` | 大戶持股分散表（近10週，來源：神秘金字塔） | 1 天 |
+| `mezastar_pokemon:all_list` | 全部寶可夢清單（小幫手搜尋用） | 10 分鐘 |
+| `mezastar_hand:{bot}:{chat}` | 用戶手牌 | 5 分鐘 |
 
 ---
 
