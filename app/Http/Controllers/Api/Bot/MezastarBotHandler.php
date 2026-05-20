@@ -22,10 +22,13 @@ class MezastarBotHandler
     public function handle(TgBot $bot, array $update): \Illuminate\Http\JsonResponse
     {
         if (isset($update['callback_query'])) {
-            $cq     = $update['callback_query'];
-            $chatId = (int) $cq['message']['chat']['id'];
-            $data   = $cq['data'];
+            $cq       = $update['callback_query'];
+            $chatId   = (int) $cq['message']['chat']['id'];
+            $data     = $cq['data'];
+            $userId   = (string) ($cq['from']['id'] ?? '');
+            $username = $cq['from']['username'] ?? null;
             $this->answerCallbackQuery($bot->token, $cq['id']);
+            $this->logMessage($bot->id, $userId, $username, $chatId, "[callback] {$data}", 1, 'callback');
             $this->handleCallback($bot, $chatId, $data);
             return response()->json(['ok' => true]);
         }
@@ -33,8 +36,14 @@ class MezastarBotHandler
         $message = $update['message'] ?? null;
         if (!$message) return response()->json(['ok' => true]);
 
-        $chatId = (int) $message['chat']['id'];
-        $text   = trim($message['text'] ?? '');
+        $chatId   = (int) $message['chat']['id'];
+        $userId   = (string) ($message['from']['id'] ?? '');
+        $username = $message['from']['username'] ?? null;
+        $text     = trim($message['text'] ?? '');
+
+        if ($text) {
+            $this->logMessage($bot->id, $userId, $username, $chatId, $text, 1, 'text');
+        }
 
         if (in_array($text, ['/start', '/menu'])) {
             $this->clearState($bot->id, $chatId);
