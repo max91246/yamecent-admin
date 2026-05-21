@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\System;
 
 use App\DisposalStock;
+use App\OilPrice;
 use App\TgBot;
+use App\TgFuturesPosition;
 use App\TgHolding;
 use App\TgHoldingTrade;
 use App\TgMessage;
@@ -296,6 +298,46 @@ class TgController extends Controller
             }
         } catch (\Exception $e) {}
         return false;
+    }
+
+    // ── 台指期貨持倉查詢 ──────────────────────────────────────
+
+    public function futuresPositions(Request $request)
+    {
+        $query = TgFuturesPosition::with('bot');
+        if ($botId  = $request->input('bot_id'))     $query->where('bot_id', $botId);
+        if ($chatId = $request->input('tg_chat_id')) $query->where('tg_chat_id', $chatId);
+        if ($request->filled('is_open'))             $query->where('is_open', $request->input('is_open'));
+
+        $pageSize    = (int)$request->input('pageSize', 20);
+        $currentPage = (int)$request->input('currentPage', 1);
+        $paginator   = $query->orderBy('created_at', 'desc')->paginate($pageSize, ['*'], 'page', $currentPage);
+
+        $wtxLatest    = OilPrice::where('ticker', 'WTX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
+        $currentPrice = $wtxLatest ? (int) $wtxLatest->close : null;
+
+        $list = collect($paginator->items())->map(fn($p) => [
+            'id'           => $p->id,
+            'botId'        => $p->bot_id,
+            'botName'      => $p->bot?->name,
+            'tgChatId'     => $p->tg_chat_id,
+            'tgUserId'     => $p->tg_user_id,
+            'entryPoint'   => $p->entry_point,
+            'contracts'    => $p->contracts,
+            'isOpen'       => $p->is_open,
+            'currentPrice' => $currentPrice,
+            'diffPoints'   => $currentPrice !== null ? $currentPrice - $p->entry_point : null,
+            'diffAmount'   => $currentPrice !== null ? ($currentPrice - $p->entry_point) * $p->contracts * 50 : null,
+            'createdAt'    => $p->created_at?->setTimezone('Asia/Taipei')->format('Y-m-d H:i'),
+        ]);
+
+        return response()->json(['success' => true, 'data' => [
+            'list'         => $list,
+            'total'        => $paginator->total(),
+            'pageSize'     => $pageSize,
+            'currentPage'  => $currentPage,
+            'currentPrice' => $currentPrice,
+        ]]);
     }
 
     private function formatBot(TgBot $b): array

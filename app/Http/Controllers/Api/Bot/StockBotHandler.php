@@ -6,6 +6,7 @@ use App\DisposalStock;
 use App\Member;
 use App\OilPrice;
 use App\TgBot;
+use App\TgFuturesPosition;
 use App\TgHolding;
 use App\TgHoldingTrade;
 use App\TgSettlement;
@@ -130,6 +131,11 @@ class StockBotHandler
                     ['text' => $this->t('lang_en',      $lang) . $mark('en'),      'callback_data' => 'lang_en'],
                 ]]];
 
+            // 新增台指期貨建倉
+            } elseif ($data === 'wtx_add') {
+                $this->setState($bot->id, $chatId, 'wtx_step1');
+                $replyText = $this->t('wtx_add_prompt', $lang);
+
             // 語系切換
             } elseif (str_starts_with($data, 'lang_')) {
                 $newLang = substr($data, 5); // lang_zh-Hant → zh-Hant
@@ -219,7 +225,7 @@ class StockBotHandler
         $lang = $this->getUserLang($userId);
 
         if ($this->matchesMenuKey($text, 'menu_wtx')) {
-            return [$this->buildWtxReply($lang), null];
+            return $this->buildWtxReply($bot->id, $chatId, $lang);
         }
         if ($this->matchesMenuKey($text, 'menu_hedge')) {
             return [$this->buildHedgeReply($lang), null];
@@ -267,6 +273,10 @@ class StockBotHandler
     {
         $lang = $this->getUserLang($userId);
         switch ($stateObj->state) {
+            case 'wtx_step1':
+                return $this->handleWtxStep1($bot, $chatId, $text, $stateObj, $lang);
+            case 'wtx_step2':
+                return $this->handleWtxStep2($bot, $chatId, $userId, $text, $stateObj, $lang);
             case 'stock_query':
                 return $this->handleStockQuery($bot, $chatId, $text, $lang);
             case 'holding_step1':
@@ -740,7 +750,7 @@ class StockBotHandler
     }
 
     // ─── 回覆組建：台指 ──────────────────────────────────────────
-    private function buildWtxReply(string $lang = 'zh-Hant'): string
+    private function buildWtxReply(int $botId, int $chatId, string $lang = 'zh-Hant'): array
     {
         // 撈最近 6 筆（5 根 K + 1 根用來算最舊那根的變化）
         $rows = OilPrice::where('ticker', 'WTX')
@@ -750,7 +760,7 @@ class StockBotHandler
             ->get();
 
         if ($rows->isEmpty()) {
-            return $this->t('wtx_no_data', $lang);
+            return [$this->t('wtx_no_data', $lang), null];
         }
 
         // 由舊到新排列
@@ -778,13 +788,98 @@ class StockBotHandler
             $lines[] = "🕐 {$time}　" . number_format($price, 0) . $changeStr;
         }
 
+        $currentPrice = (float) $display->last()->close;
+
         $vix    = OilPrice::where('ticker', 'VIX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
         $vixStr = $vix ? "\n\n" . $this->t('reply_vix_label', $lang) . "：" . number_format((float) $vix->close, 2) : '';
 
-        return $this->t('wtx_title', $lang) . "\n"
-             . "─────────────────\n"
-             . implode("\n", array_reverse($lines))
-             . $vixStr;
+        $text = $this->t('wtx_title', $lang) . "\n"
+              . "─────────────────\n"
+              . implode("\n", array_reverse($lines))
+              . $vixStr;
+
+        // 顯示使用者持倉
+        $positions = TgFuturesPosition::where('bot_id', $botId)
+            ->where('tg_chat_id', $chatId)
+            ->where('is_open', 1)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        if ($positions->isNotEmpty()) {
+            $text .= "\n\n" . $this->t('wtx_positions_title', $lang) . "\n";
+            foreach ($positions as $pos) {
+                $diff   = (int) $currentPrice - $pos->entry_point;
+                $sign   = $diff >= 0 ? '+' : '';
+                $arrow  = $diff >= 0 ? '▲' : '▼';
+                $amount = $diff * $pos->contracts * 50;
+                $text  .= "   {$arrow} " . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang)
+                        . "　{$sign}" . number_format($diff) . $this->t('wtx_points_unit', $lang)
+                        . " / {$sign}NT$" . number_format($amount) . "\n";
+            }
+            $text  = rtrim($text, "\n");
+            $text .= "\n" . $this->t('wtx_point_value_tip', $lang);
+        }
+
+        $markup = ['inline_keyboard' => [[
+            ['text' => $this->t('wtx_add_btn', $lang), 'callback_data' => 'wtx_add'],
+        ]]];
+
+        return [$text, $markup];
+    }
+
+    // ─── 台指建倉：step1 輸入建倉點位 ────────────────────────────
+    private function handleWtxStep1(TgBot $bot, int $chatId, string $text, TgState $stateObj, string $lang): array
+    {
+        $point = (int) preg_replace('/[^0-9]/', '', $text);
+        if ($point < 10000 || $point > 80000) {
+            return [$this->t('wtx_invalid_point', $lang), null];
+        }
+        $this->setState($bot->id, $chatId, 'wtx_step2', ['entry_point' => $point]);
+        return [$this->t('wtx_contracts_prompt', $lang, ['point' => number_format($point)]), null];
+    }
+
+    // ─── 台指建倉：step2 輸入口數 ────────────────────────────────
+    private function handleWtxStep2(TgBot $bot, int $chatId, string $userId, string $text, TgState $stateObj, string $lang): array
+    {
+        $contracts = (int) preg_replace('/[^0-9]/', '', $text);
+        if ($contracts <= 0 || $contracts > 100) {
+            return [$this->t('wtx_invalid_contracts', $lang), null];
+        }
+
+        $data       = $stateObj->state_data ?? [];
+        $entryPoint = (int) ($data['entry_point'] ?? 0);
+
+        TgFuturesPosition::create([
+            'bot_id'      => $bot->id,
+            'tg_chat_id'  => $chatId,
+            'tg_user_id'  => $userId,
+            'entry_point' => $entryPoint,
+            'contracts'   => $contracts,
+            'is_open'     => 1,
+        ]);
+
+        $this->clearState($bot->id, $chatId);
+
+        $latest = OilPrice::where('ticker', 'WTX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
+        $diffStr = '';
+        if ($latest) {
+            $currentPrice = (int) $latest->close;
+            $diff   = $currentPrice - $entryPoint;
+            $sign   = $diff >= 0 ? '+' : '';
+            $amount = $diff * $contracts * 50;
+            $diffStr = "\n\n📊 " . $this->t('wtx_current_label', $lang) . "：" . number_format($currentPrice)
+                     . "\n   " . $this->t('wtx_diff_points', $lang) . "：{$sign}" . number_format($diff) . $this->t('wtx_points_unit', $lang)
+                     . "\n   " . $this->t('wtx_diff_amount', $lang) . "：{$sign}NT$" . number_format($amount)
+                     . "\n\n" . $this->t('wtx_point_value_tip', $lang);
+        }
+
+        return [
+            $this->t('wtx_position_created', $lang, [
+                'point'     => number_format($entryPoint),
+                'contracts' => $contracts,
+            ]) . $diffStr,
+            null,
+        ];
     }
 
     // ─── 回覆組建：VIX ───────────────────────────────────────────
@@ -1380,6 +1475,33 @@ class StockBotHandler
         }
 
         $text = $this->t('portfolio_title', $lang) . "\n\n" . implode("\n\n", $lines) . $profitStr;
+
+        // 台指期貨持倉
+        $futures = TgFuturesPosition::where('bot_id', $botId)
+            ->where('tg_chat_id', $chatId)
+            ->where('is_open', 1)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        if ($futures->isNotEmpty()) {
+            $wtxLatest    = OilPrice::where('ticker', 'WTX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
+            $currentPrice = $wtxLatest ? (int) $wtxLatest->close : null;
+            $futuresText  = "\n\n" . $this->t('wtx_positions_title', $lang) . "\n";
+            foreach ($futures as $pos) {
+                if ($currentPrice) {
+                    $diff         = $currentPrice - $pos->entry_point;
+                    $sign         = $diff >= 0 ? '+' : '';
+                    $arrow        = $diff >= 0 ? '▲' : '▼';
+                    $amount       = $diff * $pos->contracts * 50;
+                    $futuresText .= "   {$arrow} " . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang)
+                                 . "　{$sign}" . number_format($diff) . $this->t('wtx_points_unit', $lang)
+                                 . " / {$sign}NT$" . number_format($amount) . "\n";
+                } else {
+                    $futuresText .= "   建倉：" . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang) . "\n";
+                }
+            }
+            $text .= rtrim($futuresText, "\n") . "\n" . $this->t('wtx_point_value_tip', $lang);
+        }
 
         // Inline keyboard：添加 + 設定資金 + 交割款查詢 + 賣出（每排最多2個）
         $settleQueryBtn = [['text' => $this->t('portfolio_btn_settle', $lang), 'callback_data' => 'view_settlements']];

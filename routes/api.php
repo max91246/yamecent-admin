@@ -53,6 +53,7 @@ $router->group(['middleware' => 'admin.auth', 'prefix' => 'admin/tg'], function 
     $router->post('/holdings',         'System\TgController@holdings');
     $router->post('/trades',           'System\TgController@trades');
     $router->get('/holdings/{chatId}', 'System\TgController@userDetail');
+    $router->post('/futures-positions','System\TgController@futuresPositions');
 });
 
 // 股票工具
