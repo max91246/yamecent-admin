@@ -136,6 +136,7 @@ return [
     'wtx_point_value_tip'    => '💡 1 mini point = NT$50',
     'wtx_positions_title'    => '📌 Open Positions',
     'wtx_maintain_rate'      => 'Margin Rate',
+    'wtx_total_pnl'          => '💰 Total P&L',
     'vix_title'              => '😨 VIX Index',
     'vix_no_data'            => 'No VIX data available.',
     'vix_current'            => 'Current',

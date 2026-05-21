@@ -808,6 +808,8 @@ class StockBotHandler
         if ($positions->isNotEmpty()) {
             $initialMargin = (int) (getConfig('wtx_margin_initial')  ?: 0);
             $maintMargin   = (int) (getConfig('wtx_margin_maintain') ?: 0);
+            $warnRate      = ($maintMargin > 0 && $initialMargin > 0) ? round($maintMargin / $initialMargin * 100, 1) : null;
+            $totalAmount   = 0;
 
             $text .= "\n\n" . $this->t('wtx_positions_title', $lang) . "\n";
             foreach ($positions as $pos) {
@@ -815,10 +817,10 @@ class StockBotHandler
                 $sign         = $diff >= 0 ? '+' : '';
                 $arrow        = $diff >= 0 ? '▲' : '▼';
                 $amount       = $diff * $pos->contracts * 50;
+                $totalAmount += $amount;
                 $totalInit    = $initialMargin > 0 ? $pos->contracts * $initialMargin : null;
                 $equity       = $totalInit !== null ? $totalInit + $amount : null;
                 $rate         = ($totalInit > 0 && $equity !== null) ? round($equity / $totalInit * 100, 1) : null;
-                $warnRate     = ($maintMargin > 0 && $initialMargin > 0) ? round($maintMargin / $initialMargin * 100, 1) : null;
                 $rateTag      = $rate !== null ? "　" . $this->t('wtx_maintain_rate', $lang) . "：{$rate}%" . ($warnRate && $rate < $warnRate ? ' ⚠️' : '') : '';
 
                 $text .= "   {$arrow} " . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang)
@@ -826,7 +828,10 @@ class StockBotHandler
                        . " / {$sign}NT$" . number_format($amount)
                        . $rateTag . "\n";
             }
-            $text  = rtrim($text, "\n");
+
+            $totalSign  = $totalAmount >= 0 ? '+' : '';
+            $totalArrow = $totalAmount >= 0 ? '📈' : '📉';
+            $text .= $this->t('wtx_total_pnl', $lang) . "：{$totalArrow} {$totalSign}NT$" . number_format($totalAmount);
             $text .= "\n" . $this->t('wtx_point_value_tip', $lang);
         }
 
@@ -1499,18 +1504,20 @@ class StockBotHandler
             $initialMargin = (int) (getConfig('wtx_margin_initial')  ?: 0);
             $maintMargin   = (int) (getConfig('wtx_margin_maintain') ?: 0);
             $warnRate      = ($maintMargin > 0 && $initialMargin > 0) ? round($maintMargin / $initialMargin * 100, 1) : null;
-            $futuresText   = "\n\n" . $this->t('wtx_positions_title', $lang) . "\n";
+            $futuresText = "\n\n" . $this->t('wtx_positions_title', $lang) . "\n";
+            $totalAmount = 0;
 
             foreach ($futures as $pos) {
                 if ($currentPrice) {
-                    $diff      = $currentPrice - $pos->entry_point;
-                    $sign      = $diff >= 0 ? '+' : '';
-                    $arrow     = $diff >= 0 ? '▲' : '▼';
-                    $amount    = $diff * $pos->contracts * 50;
-                    $totalInit = $initialMargin > 0 ? $pos->contracts * $initialMargin : null;
-                    $equity    = $totalInit !== null ? $totalInit + $amount : null;
-                    $rate      = ($totalInit > 0 && $equity !== null) ? round($equity / $totalInit * 100, 1) : null;
-                    $rateTag   = $rate !== null ? "　" . $this->t('wtx_maintain_rate', $lang) . "：{$rate}%" . ($warnRate && $rate < $warnRate ? ' ⚠️' : '') : '';
+                    $diff        = $currentPrice - $pos->entry_point;
+                    $sign        = $diff >= 0 ? '+' : '';
+                    $arrow       = $diff >= 0 ? '▲' : '▼';
+                    $amount      = $diff * $pos->contracts * 50;
+                    $totalAmount += $amount;
+                    $totalInit   = $initialMargin > 0 ? $pos->contracts * $initialMargin : null;
+                    $equity      = $totalInit !== null ? $totalInit + $amount : null;
+                    $rate        = ($totalInit > 0 && $equity !== null) ? round($equity / $totalInit * 100, 1) : null;
+                    $rateTag     = $rate !== null ? "　" . $this->t('wtx_maintain_rate', $lang) . "：{$rate}%" . ($warnRate && $rate < $warnRate ? ' ⚠️' : '') : '';
 
                     $futuresText .= "   {$arrow} " . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang)
                                  . "　{$sign}" . number_format($diff) . $this->t('wtx_points_unit', $lang)
@@ -1520,7 +1527,11 @@ class StockBotHandler
                     $futuresText .= "   建倉：" . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang) . "\n";
                 }
             }
-            $text .= rtrim($futuresText, "\n") . "\n" . $this->t('wtx_point_value_tip', $lang);
+
+            $totalSign  = $totalAmount >= 0 ? '+' : '';
+            $totalArrow = $totalAmount >= 0 ? '📈' : '📉';
+            $futuresText .= $this->t('wtx_total_pnl', $lang) . "：{$totalArrow} {$totalSign}NT$" . number_format($totalAmount);
+            $text .= $futuresText . "\n" . $this->t('wtx_point_value_tip', $lang);
         }
 
         // Inline keyboard：添加 + 設定資金 + 交割款查詢 + 賣出（每排最多2個）

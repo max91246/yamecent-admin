@@ -136,6 +136,7 @@ return [
     'wtx_point_value_tip'    => '💡 小台1點 = NT$50',
     'wtx_positions_title'    => '📌 台指持倉',
     'wtx_maintain_rate'      => '維持率',
+    'wtx_total_pnl'          => '💰 合計損益',
     'vix_title'              => '😨 VIX 恐慌指數',
     'vix_no_data'            => '暫無 VIX 資料',
     'vix_current'            => '當前',
