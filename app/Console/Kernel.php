@@ -51,6 +51,12 @@ class Kernel extends ConsoleKernel
                  ->dailyAt('14:00')
                  ->withoutOverlapping();
 
+        // 每小時檢查台指持倉維持率（command 內部判斷交易時段）
+        $schedule->command('check:wtx-margin-rate')
+                 ->hourly()
+                 ->withoutOverlapping()
+                 ->runInBackground();
+
         // 每日 14:00（台指收盤後）爬取小台保證金
         $schedule->command('fetch:wtx-margin')
                  ->timezone('Asia/Taipei')
