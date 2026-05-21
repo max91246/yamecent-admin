@@ -806,15 +806,25 @@ class StockBotHandler
             ->get();
 
         if ($positions->isNotEmpty()) {
+            $initialMargin = (int) (getConfig('wtx_margin_initial')  ?: 0);
+            $maintMargin   = (int) (getConfig('wtx_margin_maintain') ?: 0);
+
             $text .= "\n\n" . $this->t('wtx_positions_title', $lang) . "\n";
             foreach ($positions as $pos) {
-                $diff   = (int) $currentPrice - $pos->entry_point;
-                $sign   = $diff >= 0 ? '+' : '';
-                $arrow  = $diff >= 0 ? '▲' : '▼';
-                $amount = $diff * $pos->contracts * 50;
-                $text  .= "   {$arrow} " . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang)
-                        . "　{$sign}" . number_format($diff) . $this->t('wtx_points_unit', $lang)
-                        . " / {$sign}NT$" . number_format($amount) . "\n";
+                $diff         = (int) $currentPrice - $pos->entry_point;
+                $sign         = $diff >= 0 ? '+' : '';
+                $arrow        = $diff >= 0 ? '▲' : '▼';
+                $amount       = $diff * $pos->contracts * 50;
+                $totalInit    = $initialMargin > 0 ? $pos->contracts * $initialMargin : null;
+                $equity       = $totalInit !== null ? $totalInit + $amount : null;
+                $rate         = ($totalInit > 0 && $equity !== null) ? round($equity / $totalInit * 100, 1) : null;
+                $warnRate     = ($maintMargin > 0 && $initialMargin > 0) ? round($maintMargin / $initialMargin * 100, 1) : null;
+                $rateTag      = $rate !== null ? "　" . $this->t('wtx_maintain_rate', $lang) . "：{$rate}%" . ($warnRate && $rate < $warnRate ? ' ⚠️' : '') : '';
+
+                $text .= "   {$arrow} " . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang)
+                       . "　{$sign}" . number_format($diff) . $this->t('wtx_points_unit', $lang)
+                       . " / {$sign}NT$" . number_format($amount)
+                       . $rateTag . "\n";
             }
             $text  = rtrim($text, "\n");
             $text .= "\n" . $this->t('wtx_point_value_tip', $lang);
@@ -1484,18 +1494,28 @@ class StockBotHandler
             ->get();
 
         if ($futures->isNotEmpty()) {
-            $wtxLatest    = OilPrice::where('ticker', 'WTX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
-            $currentPrice = $wtxLatest ? (int) $wtxLatest->close : null;
-            $futuresText  = "\n\n" . $this->t('wtx_positions_title', $lang) . "\n";
+            $wtxLatest     = OilPrice::where('ticker', 'WTX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
+            $currentPrice  = $wtxLatest ? (int) $wtxLatest->close : null;
+            $initialMargin = (int) (getConfig('wtx_margin_initial')  ?: 0);
+            $maintMargin   = (int) (getConfig('wtx_margin_maintain') ?: 0);
+            $warnRate      = ($maintMargin > 0 && $initialMargin > 0) ? round($maintMargin / $initialMargin * 100, 1) : null;
+            $futuresText   = "\n\n" . $this->t('wtx_positions_title', $lang) . "\n";
+
             foreach ($futures as $pos) {
                 if ($currentPrice) {
-                    $diff         = $currentPrice - $pos->entry_point;
-                    $sign         = $diff >= 0 ? '+' : '';
-                    $arrow        = $diff >= 0 ? '▲' : '▼';
-                    $amount       = $diff * $pos->contracts * 50;
+                    $diff      = $currentPrice - $pos->entry_point;
+                    $sign      = $diff >= 0 ? '+' : '';
+                    $arrow     = $diff >= 0 ? '▲' : '▼';
+                    $amount    = $diff * $pos->contracts * 50;
+                    $totalInit = $initialMargin > 0 ? $pos->contracts * $initialMargin : null;
+                    $equity    = $totalInit !== null ? $totalInit + $amount : null;
+                    $rate      = ($totalInit > 0 && $equity !== null) ? round($equity / $totalInit * 100, 1) : null;
+                    $rateTag   = $rate !== null ? "　" . $this->t('wtx_maintain_rate', $lang) . "：{$rate}%" . ($warnRate && $rate < $warnRate ? ' ⚠️' : '') : '';
+
                     $futuresText .= "   {$arrow} " . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang)
                                  . "　{$sign}" . number_format($diff) . $this->t('wtx_points_unit', $lang)
-                                 . " / {$sign}NT$" . number_format($amount) . "\n";
+                                 . " / {$sign}NT$" . number_format($amount)
+                                 . $rateTag . "\n";
                 } else {
                     $futuresText .= "   建倉：" . number_format($pos->entry_point) . " × {$pos->contracts}" . $this->t('wtx_contracts_unit', $lang) . "\n";
                 }

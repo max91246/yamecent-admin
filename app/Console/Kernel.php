@@ -51,6 +51,12 @@ class Kernel extends ConsoleKernel
                  ->dailyAt('14:00')
                  ->withoutOverlapping();
 
+        // 每日 16:15（期交所收盤後）爬取小台保證金
+        $schedule->command('fetch:wtx-margin')
+                 ->timezone('Asia/Taipei')
+                 ->dailyAt('16:15')
+                 ->withoutOverlapping();
+
         // 每日 08:00 抓取 TPEX + TWSE 最新處置股名單
         $schedule->command('fetch:disposal-stocks')
                  ->timezone('Asia/Taipei')

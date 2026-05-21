@@ -316,27 +316,52 @@ class TgController extends Controller
         $wtxLatest    = OilPrice::where('ticker', 'WTX')->whereNotNull('close')->orderBy('candle_at', 'desc')->first();
         $currentPrice = $wtxLatest ? (int) $wtxLatest->close : null;
 
-        $list = collect($paginator->items())->map(fn($p) => [
-            'id'           => $p->id,
-            'botId'        => $p->bot_id,
-            'botName'      => $p->bot?->name,
-            'tgChatId'     => $p->tg_chat_id,
-            'tgUserId'     => $p->tg_user_id,
-            'entryPoint'   => $p->entry_point,
-            'contracts'    => $p->contracts,
-            'isOpen'       => $p->is_open,
-            'currentPrice' => $currentPrice,
-            'diffPoints'   => $currentPrice !== null ? $currentPrice - $p->entry_point : null,
-            'diffAmount'   => $currentPrice !== null ? ($currentPrice - $p->entry_point) * $p->contracts * 50 : null,
-            'createdAt'    => $p->created_at?->setTimezone('Asia/Taipei')->format('Y-m-d H:i'),
-        ]);
+        $initialMargin  = (int) (getConfig('wtx_margin_initial')  ?: 0);
+        $maintainMargin = (int) (getConfig('wtx_margin_maintain') ?: 0);
+
+        $list = collect($paginator->items())->map(function ($p) use ($currentPrice, $initialMargin, $maintainMargin) {
+            $diffPoints = $currentPrice !== null ? $currentPrice - $p->entry_point : null;
+            $diffAmount = $diffPoints !== null ? $diffPoints * $p->contracts * 50 : null;
+
+            // 維持率計算
+            $totalInitial    = $initialMargin > 0 ? $p->contracts * $initialMargin : null;
+            $equity          = ($totalInitial !== null && $diffAmount !== null) ? $totalInitial + $diffAmount : null;
+            $maintainRate    = ($totalInitial > 0 && $equity !== null) ? round($equity / $totalInitial * 100, 1) : null;
+            $maintainWarning = ($maintainMargin > 0 && $initialMargin > 0)
+                ? round($maintainMargin / $initialMargin * 100, 1)
+                : null;
+
+            return [
+                'id'              => $p->id,
+                'botId'           => $p->bot_id,
+                'botName'         => $p->bot?->name,
+                'tgChatId'        => $p->tg_chat_id,
+                'tgUserId'        => $p->tg_user_id,
+                'entryPoint'      => $p->entry_point,
+                'contracts'       => $p->contracts,
+                'isOpen'          => $p->is_open,
+                'currentPrice'    => $currentPrice,
+                'diffPoints'      => $diffPoints,
+                'diffAmount'      => $diffAmount,
+                'totalInitial'    => $totalInitial,
+                'equity'          => $equity,
+                'maintainRate'    => $maintainRate,
+                'maintainWarning' => $maintainWarning,
+                'createdAt'       => $p->created_at?->setTimezone('Asia/Taipei')->format('Y-m-d H:i'),
+            ];
+        });
 
         return response()->json(['success' => true, 'data' => [
-            'list'         => $list,
-            'total'        => $paginator->total(),
-            'pageSize'     => $pageSize,
-            'currentPage'  => $currentPage,
-            'currentPrice' => $currentPrice,
+            'list'            => $list,
+            'total'           => $paginator->total(),
+            'pageSize'        => $pageSize,
+            'currentPage'     => $currentPage,
+            'currentPrice'    => $currentPrice,
+            'initialMargin'   => $initialMargin ?: null,
+            'maintainMargin'  => $maintainMargin ?: null,
+            'maintainWarning' => ($maintainMargin > 0 && $initialMargin > 0)
+                ? round($maintainMargin / $initialMargin * 100, 1)
+                : null,
         ]]);
     }
 
